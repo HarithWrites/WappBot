@@ -16,7 +16,13 @@ async function setState(phone, data) {
          VALUES ($1,$2,$3,$4,$5)
          ON CONFLICT (phone)
          DO UPDATE SET state=$2, service_id=$3, date=$4, time=$5`,
-        [phone, data.state, data.service_id, data.date, data.time]
+        [
+            phone,
+            data.state,
+            data.service_id || null,
+            data.date || null,
+            data.time || null
+        ]
     );
 }
 
@@ -32,7 +38,6 @@ async function processMessage(phone, text) {
 
 1 Dental
 2 Skin`);
-
             await setState(phone, { state: "SERVICE_SELECTION" });
             break;
 
@@ -41,7 +46,6 @@ async function processMessage(phone, text) {
                 state: "DATE_SELECTION",
                 service_id: text
             });
-
             await sendMessage(phone, "Enter date (e.g. Tomorrow)");
             break;
 
@@ -51,7 +55,6 @@ async function processMessage(phone, text) {
                 state: "TIME_SELECTION",
                 date: text
             });
-
             await sendMessage(phone, "Enter time (e.g. 10 AM)");
             break;
 
@@ -61,11 +64,16 @@ async function processMessage(phone, text) {
                 state: "CONFIRMATION",
                 time: text
             });
-
             await sendMessage(phone, "Confirm booking? (yes/no)");
             break;
 
         case "CONFIRMATION":
+
+            if (text !== "yes" && text !== "no") {
+                await sendMessage(phone, "Please type yes or no");
+                return;
+            }
+
             if (text === "yes") {
                 await createBooking({
                     phone,
@@ -77,12 +85,18 @@ async function processMessage(phone, text) {
                 await sendMessage(phone,
 "Booking request sent. Waiting for confirmation.");
 
-                await setState(phone, { state: "START" });
-
             } else {
                 await sendMessage(phone, "Booking cancelled");
-                await setState(phone, { state: "START" });
             }
+
+            // 🔥 CRITICAL FIX
+            await setState(phone, {
+                state: "START",
+                service_id: null,
+                date: null,
+                time: null
+            });
+
             break;
 
         default:
