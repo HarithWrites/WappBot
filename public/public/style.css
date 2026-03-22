@@ -1,0 +1,69 @@
+body {
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  margin: 0;
+  background: #f4f6f8;
+}
+
+header {
+  background: #111;
+  color: white;
+  padding: 15px;
+  text-align: center;
+}
+
+.filters {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  padding: 10px;
+}
+
+.filters button {
+  margin: 5px;
+  padding: 8px 14px;
+  border-radius: 20px;
+  border: none;
+  background: #e0e0e0;
+  cursor: pointer;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 15px;
+  padding: 15px;
+}
+
+.card {
+  background: white;
+  border-radius: 12px;
+  padding: 15px;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+}
+
+.status {
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.pending { background: orange; color: white; }
+.confirmed { background: green; color: white; }
+.rejected { background: red; color: white; }
+
+.actions button {
+  margin-top: 10px;
+  margin-right: 5px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.approve { background: green; color: white; }
+.reject { background: red; color: white; }
+
+#loading {
+  text-align: center;
+  padding: 20px;
+}
