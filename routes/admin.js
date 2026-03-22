@@ -9,24 +9,24 @@ const controller = require("../controllers/adminController");
 router.get("/bookings", controller.getBookings);
 
 // ===============================
-// APPROVE (POST)
+// APPROVE (POST ONLY)
 // ===============================
 router.post("/approve", controller.approveBooking);
 
 // ===============================
-// REJECT (POST)
+// REJECT (POST ONLY)
 // ===============================
 router.post("/reject", controller.rejectBooking);
 
 // ===============================
-// OPTIONAL: Prevent GET error
+// OPTIONAL SAFETY (PREVENT CONFUSION)
 // ===============================
-router.get("/reject", (req, res) => {
-    res.send("Use POST method for reject");
+router.get("/approve", (req, res) => {
+    return res.status(405).send("Use POST method for approve");
 });
 
-router.get("/approve", (req, res) => {
-    res.send("Use POST method for approve");
+router.get("/reject", (req, res) => {
+    return res.status(405).send("Use POST method for reject");
 });
 
 module.exports = router;
