@@ -1,43 +1,193 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Admin Dashboard</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="style.css">
+    <title>Admin Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <style>
+    body {
+        font-family: Arial;
+        margin: 0;
+        background: linear-gradient(135deg, #eef2ff, #f8fafc);
+    }
+
+    .header {
+        background: linear-gradient(135deg, #4f46e5, #7c3aed);
+        color: white;
+        padding: 20px;
+        text-align: center;
+        font-size: 22px;
+        font-weight: bold;
+    }
+
+    .container {
+        padding: 20px;
+    }
+
+    .filters {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+        justify-content: center;
+    }
+
+    input {
+        padding: 10px;
+        border-radius: 6px;
+        border: 1px solid #ccc;
+    }
+
+    button {
+        padding: 10px 14px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: bold;
+    }
+
+    .primary {
+        background: #4f46e5;
+        color: white;
+    }
+
+    .approve {
+        background: #16a34a;
+        color: white;
+    }
+
+    .reject {
+        background: #dc2626;
+        color: white;
+    }
+
+    .card {
+        background: white;
+        border-radius: 12px;
+        padding: 15px;
+        margin-bottom: 12px;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+    }
+
+    .row {
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+    }
+
+    .status {
+        padding: 5px 10px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: bold;
+    }
+
+    .pending { background: orange; color: white; }
+    .confirmed { background: green; color: white; }
+    .rejected { background: red; color: white; }
+
+    .empty {
+        text-align: center;
+        padding: 20px;
+        color: #555;
+    }
+
+    @media(min-width: 768px) {
+        .card {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+    }
+    </style>
 </head>
 
 <body>
 
-<header>
-  <h1>📊 Booking Dashboard</h1>
-</header>
+<div class="header">📊 Booking Dashboard</div>
 
-<section class="filters">
-  <button onclick="filterBookings('all')">All</button>
-  <button onclick="filterBookings('pending')">Pending</button>
-  <button onclick="filterBookings('confirmed')">Confirmed</button>
-  <button onclick="filterBookings('rejected')">Rejected</button>
-</section>
+<div class="container">
 
-<section id="loading">Loading bookings...</section>
+<div class="filters">
+    <input type="text" id="tenantId" placeholder="Tenant ID">
+    <input type="date" id="dateFilter">
+    <input type="time" id="timeFilter">
+    <button class="primary" onclick="loadBookings()">Load</button>
+</div>
 
-<section id="empty" style="display:none;">
-  No bookings available
-</section>
+<div id="content"></div>
 
-<section id="list" class="grid"></section>
+</div>
 
 <script>
 
 // ===============================
-async function approveBooking(bookingId) {
+// LOAD BOOKINGS
+// ===============================
+async function loadBookings() {
+
+    const tenant = document.getElementById("tenantId").value;
+    const date = document.getElementById("dateFilter").value;
+    const time = document.getElementById("timeFilter").value;
+
+    if (!tenant) {
+        alert("Enter Tenant ID");
+        return;
+    }
+
+    let url = `/admin/bookings?tenant_id=${tenant}`;
+
+    if (date) url += `&date=${date}`;
+    if (time) url += `&time=${time}`;
+
+    const res = await fetch(url);
+    const data = await res.json();
+
+    const container = document.getElementById("content");
+    container.innerHTML = "";
+
+    if (!data.length) {
+        container.innerHTML = `<div class="empty">No bookings found</div>`;
+        return;
+    }
+
+    data.forEach(b => {
+
+        container.innerHTML += `
+        <div class="card">
+            <div>
+                <b>${b.service_name}</b><br>
+                📅 ${b.booking_date}<br>
+                ⏰ ${b.booking_time}
+            </div>
+
+            <div>
+                <span class="status ${b.status}">${b.status}</span><br><br>
+
+                <button type="button" class="approve" onclick="approveBooking('${b.id}')">
+                    Approve
+                </button>
+
+                <button type="button" class="reject" onclick="rejectBooking('${b.id}')">
+                    Reject
+                </button>
+            </div>
+        </div>
+        `;
+    });
+}
+
+// ===============================
+// APPROVE (POST)
+// ===============================
+async function approveBooking(id) {
 
     const res = await fetch("/admin/approve", {
         method: "POST",
         headers: {
             "Content-Type": "application/json"
         },
-        body: JSON.stringify({ bookingId })
+        body: JSON.stringify({ bookingId: id })
     });
 
     const data = await res.json();
@@ -52,14 +202,16 @@ async function approveBooking(bookingId) {
 }
 
 // ===============================
-async function rejectBooking(bookingId) {
+// REJECT (POST)
+// ===============================
+async function rejectBooking(id) {
 
     const res = await fetch("/admin/reject", {
         method: "POST",
         headers: {
             "Content-Type": "application/json"
         },
-        body: JSON.stringify({ bookingId })
+        body: JSON.stringify({ bookingId: id })
     });
 
     const data = await res.json();
