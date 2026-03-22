@@ -1,4 +1,4 @@
-const API = "https://wappbot-production.up.railway.app/"; // 🔥 replace
+const API = "https://wappbot-production.up.railway.app"; // 🔥 replace
 
 let allBookings = [];
 let currentFilter = "all";
