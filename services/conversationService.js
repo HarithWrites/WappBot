@@ -5,6 +5,8 @@ const { getServices } = require("./serviceService");
 const { parseDate, isValidTime } = require("../utils/validators");
 
 // ===============================
+// GET STATE
+// ===============================
 async function getState(phone, tenant_id) {
     const res = await db.query(
         "SELECT * FROM conversation_state WHERE phone=$1 AND tenant_id=$2",
@@ -14,13 +16,9 @@ async function getState(phone, tenant_id) {
 }
 
 // ===============================
+// STRICT STATE UPSERT (FIXED)
+// ===============================
 async function setState(phone, tenant_id, data) {
-    const existing = await db.query(
-        "SELECT * FROM conversation_state WHERE phone=$1 AND tenant_id=$2",
-        [phone, tenant_id]
-    );
-
-    const prev = existing.rows[0] || {};
 
     await db.query(
         `INSERT INTO conversation_state 
@@ -28,22 +26,24 @@ async function setState(phone, tenant_id, data) {
         VALUES ($1,$2,$3,$4,$5,$6)
         ON CONFLICT (phone, tenant_id)
         DO UPDATE SET 
-            state = EXCLUDED.state,
-            service_name = COALESCE(EXCLUDED.service_name, conversation_state.service_name),
-            date = COALESCE(EXCLUDED.date, conversation_state.date),
-            time = COALESCE(EXCLUDED.time, conversation_state.time)
+            state = $3,
+            service_name = $4,
+            date = $5,
+            time = $6
         `,
         [
             phone,
             tenant_id,
-            data.state || prev.state || "SERVICE_SELECTION",
-            data.service_name ?? prev.service_name ?? null,
-            data.date ?? prev.date ?? null,
-            data.time ?? prev.time ?? null
+            data.state || null,
+            data.service_name || null,
+            data.date || null,
+            data.time || null
         ]
     );
 }
 
+// ===============================
+// TIME CONVERSION
 // ===============================
 function convertTo24Hour(timeStr) {
     const [time, modifier] = timeStr.split(" ");
@@ -58,11 +58,14 @@ function convertTo24Hour(timeStr) {
 }
 
 // ===============================
+// MAIN FLOW
+// ===============================
 async function processMessage({ tenant, phone, text }) {
 
     const tenant_id = tenant.id;
+    text = text.trim().toLowerCase();
 
-    console.log("STATE INPUT:", { phone, text });
+    console.log("INPUT:", { phone, text });
 
     // ===============================
     // RESTART
@@ -90,16 +93,16 @@ async function processMessage({ tenant, phone, text }) {
     let stateData = await getState(phone, tenant_id);
     let state = stateData?.state || "SERVICE_SELECTION";
 
-    console.log("CURRENT STATE:", state);
+    console.log("STATE:", state, stateData);
 
     // ===============================
     switch (state) {
 
+        // ===============================
         case "SERVICE_SELECTION": {
 
             const services = await getServices(tenant_id);
 
-            // 🔥 FIX: strict validation
             if (!/^\d+$/.test(text)) {
                 return sendMessage({
                     tenant,
@@ -120,11 +123,11 @@ async function processMessage({ tenant, phone, text }) {
 
             const selectedService = services[index];
 
-            console.log("Selected service:", selectedService);
-
             await setState(phone, tenant_id, {
                 state: "DATE_SELECTION",
-                service_name: selectedService.name
+                service_name: selectedService.name,
+                date: null,
+                time: null
             });
 
             return sendMessage({
@@ -134,6 +137,7 @@ async function processMessage({ tenant, phone, text }) {
             });
         }
 
+        // ===============================
         case "DATE_SELECTION": {
 
             const date = parseDate(text);
@@ -148,7 +152,9 @@ async function processMessage({ tenant, phone, text }) {
 
             await setState(phone, tenant_id, {
                 state: "TIME_SELECTION",
-                date
+                service_name: stateData.service_name,
+                date,
+                time: null
             });
 
             return sendMessage({
@@ -158,6 +164,7 @@ async function processMessage({ tenant, phone, text }) {
             });
         }
 
+        // ===============================
         case "TIME_SELECTION": {
 
             if (!isValidTime(text)) {
@@ -172,6 +179,8 @@ async function processMessage({ tenant, phone, text }) {
 
             await setState(phone, tenant_id, {
                 state: "CONFIRMATION",
+                service_name: stateData.service_name,
+                date: stateData.date,
                 time: dbTime
             });
 
@@ -182,9 +191,11 @@ async function processMessage({ tenant, phone, text }) {
             });
         }
 
+        // ===============================
         case "CONFIRMATION": {
 
             if (text !== "yes") {
+
                 await sendMessage({
                     tenant,
                     to: phone,
@@ -215,6 +226,7 @@ async function processMessage({ tenant, phone, text }) {
                 text: `Booking confirmed ✅\nID: ${booking.id}`
             });
 
+            // CLEAN RESET
             await setState(phone, tenant_id, {
                 state: "SERVICE_SELECTION",
                 service_name: null,
@@ -225,9 +237,13 @@ async function processMessage({ tenant, phone, text }) {
             return;
         }
 
+        // ===============================
         default:
             await setState(phone, tenant_id, {
-                state: "SERVICE_SELECTION"
+                state: "SERVICE_SELECTION",
+                service_name: null,
+                date: null,
+                time: null
             });
 
             return sendMessage({
