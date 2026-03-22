@@ -5,8 +5,6 @@ const { getServices } = require("./serviceService");
 const { parseDate, isValidTime } = require("../utils/validators");
 
 // ===============================
-// GET STATE
-// ===============================
 async function getState(phone, tenant_id) {
     const res = await db.query(
         "SELECT * FROM conversation_state WHERE phone=$1 AND tenant_id=$2",
@@ -16,11 +14,7 @@ async function getState(phone, tenant_id) {
 }
 
 // ===============================
-// SAFE UPSERT STATE (FIXED)
-// ===============================
 async function setState(phone, tenant_id, data) {
-
-    // Get existing state
     const existing = await db.query(
         "SELECT * FROM conversation_state WHERE phone=$1 AND tenant_id=$2",
         [phone, tenant_id]
@@ -51,32 +45,24 @@ async function setState(phone, tenant_id, data) {
 }
 
 // ===============================
-// TIME CONVERSION (12hr → 24hr)
-// ===============================
 function convertTo24Hour(timeStr) {
     const [time, modifier] = timeStr.split(" ");
     let [hours, minutes] = time.split(":");
 
     hours = parseInt(hours);
 
-    if (modifier.toLowerCase() === "pm" && hours !== 12) {
-        hours += 12;
-    }
-
-    if (modifier.toLowerCase() === "am" && hours === 12) {
-        hours = 0;
-    }
+    if (modifier.toLowerCase() === "pm" && hours !== 12) hours += 12;
+    if (modifier.toLowerCase() === "am" && hours === 12) hours = 0;
 
     return `${String(hours).padStart(2, "0")}:${minutes}:00`;
 }
 
 // ===============================
-// MAIN PROCESS MESSAGE
-// ===============================
 async function processMessage({ tenant, phone, text }) {
 
     const tenant_id = tenant.id;
-    text = text.trim().toLowerCase();
+
+    console.log("STATE INPUT:", { phone, text });
 
     // ===============================
     // RESTART
@@ -98,25 +84,33 @@ async function processMessage({ tenant, phone, text }) {
             time: null
         });
 
-        await sendMessage({ tenant, to: phone, text: msg });
-        return;
+        return sendMessage({ tenant, to: phone, text: msg });
     }
 
     let stateData = await getState(phone, tenant_id);
     let state = stateData?.state || "SERVICE_SELECTION";
 
-    // ===============================
-    // STATE MACHINE
+    console.log("CURRENT STATE:", state);
+
     // ===============================
     switch (state) {
 
-        // ===============================
         case "SERVICE_SELECTION": {
 
             const services = await getServices(tenant_id);
+
+            // 🔥 FIX: strict validation
+            if (!/^\d+$/.test(text)) {
+                return sendMessage({
+                    tenant,
+                    to: phone,
+                    text: "Please enter a valid number ❌"
+                });
+            }
+
             const index = parseInt(text) - 1;
 
-            if (!services[index]) {
+            if (index < 0 || index >= services.length) {
                 return sendMessage({
                     tenant,
                     to: phone,
@@ -124,9 +118,13 @@ async function processMessage({ tenant, phone, text }) {
                 });
             }
 
+            const selectedService = services[index];
+
+            console.log("Selected service:", selectedService);
+
             await setState(phone, tenant_id, {
                 state: "DATE_SELECTION",
-                service_name: services[index].name
+                service_name: selectedService.name
             });
 
             return sendMessage({
@@ -136,7 +134,6 @@ async function processMessage({ tenant, phone, text }) {
             });
         }
 
-        // ===============================
         case "DATE_SELECTION": {
 
             const date = parseDate(text);
@@ -161,7 +158,6 @@ async function processMessage({ tenant, phone, text }) {
             });
         }
 
-        // ===============================
         case "TIME_SELECTION": {
 
             if (!isValidTime(text)) {
@@ -186,7 +182,6 @@ async function processMessage({ tenant, phone, text }) {
             });
         }
 
-        // ===============================
         case "CONFIRMATION": {
 
             if (text !== "yes") {
@@ -196,7 +191,6 @@ async function processMessage({ tenant, phone, text }) {
                     text: "Cancelled ❌"
                 });
 
-                // Proper reset
                 await setState(phone, tenant_id, {
                     state: "SERVICE_SELECTION",
                     service_name: null,
@@ -207,7 +201,6 @@ async function processMessage({ tenant, phone, text }) {
                 return;
             }
 
-            // 🔥 CREATE BOOKING
             const booking = await createBooking({
                 tenant_id,
                 phone,
@@ -219,11 +212,9 @@ async function processMessage({ tenant, phone, text }) {
             await sendMessage({
                 tenant,
                 to: phone,
-                text: `Booking confirmed ✅
-ID: ${booking.id}`
+                text: `Booking confirmed ✅\nID: ${booking.id}`
             });
 
-            // 🔥 CLEAN RESET (FIXED)
             await setState(phone, tenant_id, {
                 state: "SERVICE_SELECTION",
                 service_name: null,
@@ -234,7 +225,6 @@ ID: ${booking.id}`
             return;
         }
 
-        // ===============================
         default:
             await setState(phone, tenant_id, {
                 state: "SERVICE_SELECTION"
