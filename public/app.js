@@ -4,14 +4,22 @@ let allBookings = [];
 let currentFilter = "all";
 
 async function loadBookings() {
-  document.getElementById("loading").style.display = "block";
+  try {
+    console.log("Fetching bookings...");
 
-  const res = await fetch(API + "/admin/bookings");
-  allBookings = await res.json();
+    const res = await fetch(API + "/admin/bookings");
+    const data = await res.json();
 
-  document.getElementById("loading").style.display = "none";
+    console.log("DATA:", data);
 
-  render();
+    allBookings = data;
+
+    render();
+
+  } catch (err) {
+    console.error("ERROR:", err);
+    document.getElementById("loading").innerText = "Error loading data";
+  }
 }
 
 function filterBookings(type) {
