@@ -1,62 +1,65 @@
+// ===============================
+// IMPORTS
+// ===============================
 const express = require("express");
-const path = require("path");
-
-const webhookRoutes = require("./routes/webhook");
-const adminRoutes = require("./routes/admin");
-const db = require("./db");
-
 const app = express();
+
+require("dotenv").config();
+
+// ===============================
+// BASIC START LOG
+// ===============================
+console.log("🚀 SERVER BOOT STARTED");
+
+// ===============================
+// MIDDLEWARE
+// ===============================
 app.use(express.json());
 
 // ===============================
-// API ROUTES FIRST (IMPORTANT)
+// DB CONNECTION (SAFE)
 // ===============================
-app.use("/webhook", webhookRoutes);
-app.use("/admin", adminRoutes);
+const db = require("./db");
+
+db.connect()
+    .then(() => console.log("✅ DB Connected"))
+    .catch((err) => {
+        console.error("❌ DB Connection Failed:", err.message);
+    });
 
 // ===============================
-// STATIC FILES (DASHBOARD)
+// ROUTES
 // ===============================
-app.use(express.static(path.join(__dirname, "public")));
+app.use("/webhook", require("./routes/webhook"));
+app.use("/admin", require("./routes/admin"));
 
 // ===============================
-// HEALTH CHECK (SAFE)
+// HEALTH CHECK (IMPORTANT)
 // ===============================
+app.get("/", (req, res) => {
+    res.send("Enterprise Bot Running 🚀");
+});
+
 app.get("/health", (req, res) => {
     res.send("OK");
 });
 
 // ===============================
-// NO catch-all route for now ❌
+// GLOBAL ERROR HANDLING
 // ===============================
+process.on("uncaughtException", (err) => {
+    console.error("🔥 UNCAUGHT EXCEPTION:", err);
+});
+
+process.on("unhandledRejection", (err) => {
+    console.error("🔥 UNHANDLED REJECTION:", err);
+});
 
 // ===============================
-// DB TABLES
+// START SERVER
 // ===============================
-db.query(`
-CREATE TABLE IF NOT EXISTS bookings (
-    id SERIAL PRIMARY KEY,
-    phone TEXT,
-    service_id TEXT,
-    date TEXT,
-    time TEXT,
-    status TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-`);
-
-db.query(`
-CREATE TABLE IF NOT EXISTS conversation_state (
-    phone TEXT PRIMARY KEY,
-    state TEXT,
-    service_id TEXT,
-    date TEXT,
-    time TEXT
-);
-`);
-
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-    console.log("Server running on " + PORT);
+    console.log(`✅ SERVER RUNNING ON PORT ${PORT}`);
 });
