@@ -6,14 +6,27 @@ const db = require("./db");
 const app = express();
 app.use(express.json());
 
+// ===============================
+// HEALTH CHECK
+// ===============================
 app.get("/", (req, res) => {
     res.send("Enterprise Bot Running 🚀");
 });
 
+// ===============================
+// ROUTES
+// ===============================
 app.use("/webhook", webhookRoutes);
 app.use("/admin", adminRoutes);
 
-// DB tables
+// ===============================
+// SERVE DASHBOARD
+// ===============================
+app.use(express.static("public"));
+
+// ===============================
+// DB TABLES
+// ===============================
 db.query(`
 CREATE TABLE IF NOT EXISTS bookings (
     id SERIAL PRIMARY KEY,
