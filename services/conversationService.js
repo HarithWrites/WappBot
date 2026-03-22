@@ -1,168 +1,141 @@
 const db = require("../db");
 const { sendMessage } = require("./whatsappService");
 const { createBooking } = require("./bookingService");
+const { getServices } = require("./serviceService");
+const { parseDate, isValidTime } = require("../utils/validators");
 
-async function getState(phone) {
+async function getState(phone, tenant_id) {
     const res = await db.query(
-        "SELECT * FROM conversation_state WHERE phone=$1",
-        [phone]
+        "SELECT * FROM conversation_state WHERE phone=$1 AND tenant_id=$2",
+        [phone, tenant_id]
     );
     return res.rows[0];
 }
 
-async function setState(phone, data) {
+async function setState(phone, tenant_id, data) {
     await db.query(
-        `INSERT INTO conversation_state (phone, state, service_id, date, time)
-         VALUES ($1,$2,$3,$4,$5)
-         ON CONFLICT (phone)
-         DO UPDATE SET state=$2, service_id=$3, date=$4, time=$5`,
+        `INSERT INTO conversation_state 
+        (phone, tenant_id, state, service_name, date, time)
+        VALUES ($1,$2,$3,$4,$5,$6)
+        ON CONFLICT (phone, tenant_id)
+        DO UPDATE SET state=$3, service_name=$4, date=$5, time=$6`,
         [
             phone,
+            tenant_id,
             data.state,
-            data.service_id || null,
+            data.service_name || null,
             data.date || null,
             data.time || null
         ]
     );
 }
 
-async function processMessage(phone, text) {
+async function processMessage({ tenant, phone, text }) {
+    const tenant_id = tenant.id;
 
-    text = text.trim().toLowerCase();
-
-    // GLOBAL RESTART
     if (text === "hi") {
+        const services = await getServices(tenant_id);
 
-        await setState(phone, {
-            state: "SERVICE_SELECTION",
-            service_id: null,
-            date: null,
-            time: null
+        let msg = `${tenant.welcome_message}\n\n`;
+
+        services.forEach((s, i) => {
+            msg += `${i + 1}. ${s.name}\n`;
         });
 
-        await sendMessage(phone,
-`Welcome to ABC Clinic
+        await setState(phone, tenant_id, { state: "SERVICE_SELECTION" });
 
-1 Dental
-2 Skin
-
-(Type 'hi' to restart)`);
-
+        await sendMessage({ tenant, to: phone, text: msg });
         return;
     }
 
-    let stateData = await getState(phone);
+    let stateData = await getState(phone, tenant_id);
     let state = stateData?.state || "SERVICE_SELECTION";
 
     switch (state) {
 
-        case "SERVICE_SELECTION":
+        case "SERVICE_SELECTION": {
+            const services = await getServices(tenant_id);
+            const index = parseInt(text) - 1;
 
-            if (!["1", "2"].includes(text)) {
-                await sendMessage(phone,
-`Invalid input ❌
-
-Please choose:
-1 Dental
-2 Skin
-
-(Type 'hi' to restart)`);
-                return;
+            if (!services[index]) {
+                return sendMessage({ tenant, to: phone, text: "Invalid choice ❌" });
             }
 
-            await setState(phone, {
+            await setState(phone, tenant_id, {
                 state: "DATE_SELECTION",
-                service_id: text
+                service_name: services[index].name
             });
 
-            await sendMessage(phone, "Enter date (e.g. Tomorrow)");
-            break;
+            return sendMessage({
+                tenant,
+                to: phone,
+                text: "Enter date: Today / Tomorrow / DD/MM/YYYY"
+            });
+        }
 
-        case "DATE_SELECTION":
+        case "DATE_SELECTION": {
+            const date = parseDate(text);
 
-            if (text.length < 3) {
-                await sendMessage(phone,
-`Invalid date ❌
-
-(Type 'hi' to restart)`);
-                return;
+            if (!date) {
+                return sendMessage({ tenant, to: phone, text: "Invalid date ❌" });
             }
 
-            await setState(phone, {
+            await setState(phone, tenant_id, {
                 ...stateData,
                 state: "TIME_SELECTION",
-                date: text
+                date
             });
 
-            await sendMessage(phone, "Enter time (e.g. 10 AM)");
-            break;
+            return sendMessage({
+                tenant,
+                to: phone,
+                text: "Enter time (HH:MM AM/PM)"
+            });
+        }
 
-        case "TIME_SELECTION":
-
-            if (!text.match(/^[0-9]{1,2}\s?(am|pm)$/i)) {
-                await sendMessage(phone,
-`Invalid time ❌
-
-(Type 'hi' to restart)`);
-                return;
+        case "TIME_SELECTION": {
+            if (!isValidTime(text)) {
+                return sendMessage({ tenant, to: phone, text: "Invalid time ❌" });
             }
 
-            await setState(phone, {
+            await setState(phone, tenant_id, {
                 ...stateData,
                 state: "CONFIRMATION",
                 time: text
             });
 
-            await sendMessage(phone, "Confirm booking? (yes/no)");
-            break;
+            return sendMessage({
+                tenant,
+                to: phone,
+                text: "Confirm booking? (yes/no)"
+            });
+        }
 
-        case "CONFIRMATION":
-
-            if (!["yes", "no"].includes(text)) {
-                await sendMessage(phone,
-`Invalid input ❌
-
-(Type 'hi' to restart)`);
-                return;
+        case "CONFIRMATION": {
+            if (text !== "yes") {
+                return sendMessage({ tenant, to: phone, text: "Cancelled ❌" });
             }
 
-            if (text === "yes") {
-
-                const booking = await createBooking({
-                    phone,
-                    service_id: stateData.service_id,
-                    date: stateData.date,
-                    time: stateData.time
-                });
-
-                await sendMessage(phone,
-`Booking request sent ✅
-Booking ID: ${booking.id}
-Waiting for confirmation`);
-
-            } else {
-                await sendMessage(phone, "Booking cancelled ❌");
-            }
-
-            await setState(phone, {
-                state: "SERVICE_SELECTION",
-                service_id: null,
-                date: null,
-                time: null
+            const booking = await createBooking({
+                tenant_id,
+                phone,
+                service_name: stateData.service_name,
+                booking_date: stateData.date,
+                booking_time: stateData.time
             });
 
-            break;
+            await sendMessage({
+                tenant,
+                to: phone,
+                text: `Booking confirmed ID: ${booking.id}`
+            });
 
-        default:
-
-            await setState(phone, {
+            await setState(phone, tenant_id, {
                 state: "SERVICE_SELECTION"
             });
 
-            await sendMessage(phone,
-`Invalid input ❌
-
-(Type 'hi' to restart)`);
+            return;
+        }
     }
 }
 
