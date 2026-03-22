@@ -14,7 +14,7 @@ async function getState(phone) {
 }
 
 // ===============================
-// SET / UPSERT STATE
+// SET STATE
 // ===============================
 async function setState(phone, data) {
     await db.query(
@@ -37,11 +37,10 @@ async function setState(phone, data) {
 // ===============================
 async function processMessage(phone, text) {
 
-    // Normalize input
     text = text.trim().toLowerCase();
 
     // ===============================
-    // GLOBAL RESTART (WORKS EVERYWHERE)
+    // GLOBAL RESTART
     // ===============================
     if (text === "hi") {
 
@@ -58,13 +57,13 @@ async function processMessage(phone, text) {
 1 Dental
 2 Skin
 
-(Type 'hi' anytime to restart)`);
+(Type 'hi' to restart)`);
 
         return;
     }
 
     // ===============================
-    // GET CURRENT STATE
+    // GET STATE
     // ===============================
     let stateData = await getState(phone);
     let state = stateData?.state || "START";
@@ -75,8 +74,6 @@ async function processMessage(phone, text) {
     switch (state) {
 
         // ===============================
-        // START
-        // ===============================
         case "START":
 
             await sendMessage(phone,
@@ -85,13 +82,11 @@ async function processMessage(phone, text) {
 1 Dental
 2 Skin
 
-(Type 'hi' anytime to restart)`);
+(Type 'hi' to restart)`);
 
             await setState(phone, { state: "SERVICE_SELECTION" });
             break;
 
-        // ===============================
-        // SERVICE SELECTION
         // ===============================
         case "SERVICE_SELECTION":
 
@@ -104,7 +99,6 @@ Please choose:
 2 Skin
 
 (Type 'hi' to restart)`);
-
                 return;
             }
 
@@ -114,14 +108,10 @@ Please choose:
             });
 
             await sendMessage(phone,
-`Enter date (e.g. Tomorrow)
-
-(Type 'hi' to restart)`);
+`Enter date (e.g. Tomorrow)`);
 
             break;
 
-        // ===============================
-        // DATE SELECTION
         // ===============================
         case "DATE_SELECTION":
 
@@ -129,10 +119,9 @@ Please choose:
                 await sendMessage(phone,
 `Invalid date ❌
 
-Please enter a valid date (e.g. Tomorrow)
+Please enter valid date (e.g. Tomorrow)
 
 (Type 'hi' to restart)`);
-
                 return;
             }
 
@@ -143,14 +132,10 @@ Please enter a valid date (e.g. Tomorrow)
             });
 
             await sendMessage(phone,
-`Enter time (e.g. 10 AM)
-
-(Type 'hi' to restart)`);
+`Enter time (e.g. 10 AM)`);
 
             break;
 
-        // ===============================
-        // TIME SELECTION
         // ===============================
         case "TIME_SELECTION":
 
@@ -161,7 +146,6 @@ Please enter a valid date (e.g. Tomorrow)
 Example: 10 AM or 3 PM
 
 (Type 'hi' to restart)`);
-
                 return;
             }
 
@@ -172,14 +156,10 @@ Example: 10 AM or 3 PM
             });
 
             await sendMessage(phone,
-`Confirm booking? (yes/no)
-
-(Type 'hi' to restart)`);
+`Confirm booking? (yes/no)`);
 
             break;
 
-        // ===============================
-        // CONFIRMATION
         // ===============================
         case "CONFIRMATION":
 
@@ -190,12 +170,10 @@ Example: 10 AM or 3 PM
 Please type yes or no
 
 (Type 'hi' to restart)`);
-
                 return;
             }
 
             if (text === "yes") {
-
                 await createBooking({
                     phone,
                     service_id: stateData.service_id,
@@ -205,19 +183,14 @@ Please type yes or no
 
                 await sendMessage(phone,
 `Booking request sent ✅
-Waiting for confirmation
-
-(Type 'hi' to restart)`);
+Waiting for confirmation`);
 
             } else {
-
                 await sendMessage(phone,
-`Booking cancelled ❌
-
-(Type 'hi' to restart)`);
+`Booking cancelled ❌`);
             }
 
-            // 🔥 RESET STATE AFTER COMPLETION
+            // RESET STATE
             await setState(phone, {
                 state: "START",
                 service_id: null,
@@ -228,14 +201,13 @@ Waiting for confirmation
             break;
 
         // ===============================
-        // FALLBACK
-        // ===============================
         default:
 
             await sendMessage(phone,
-`Type 'hi' to start
+`Invalid input ❌
 
-(Type 'hi' anytime to restart)`);
+Type 'hi' to start
+(Type 'hi' to restart)`);
     }
 }
 
