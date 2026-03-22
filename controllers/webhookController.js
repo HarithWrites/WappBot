@@ -1,43 +1,133 @@
 const { processMessage } = require("../services/conversationService");
 const { getTenantByPhoneNumberId } = require("../services/tenantService");
 
-const processed = new Set();
+// ===============================
+// DEDUP STORE (PREVENT DUPLICATES)
+// ===============================
+const processedMessages = new Set();
 
+// Cleanup to avoid memory growth
+setInterval(() => {
+    if (processedMessages.size > 10000) {
+        processedMessages.clear();
+        console.log("Dedup cache cleared");
+    }
+}, 10 * 60 * 1000); // every 10 mins
+
+// ===============================
+// MAIN WEBHOOK HANDLER
+// ===============================
 exports.handleWebhook = async (req, res) => {
     try {
         const value = req.body?.entry?.[0]?.changes?.[0]?.value;
 
-        if (!value || value.statuses || !value.messages) {
+        // ===============================
+        // IGNORE INVALID EVENTS
+        // ===============================
+        if (!value) {
             return res.sendStatus(200);
         }
 
-        const msg = value.messages[0];
-
-        if (!msg.from || msg.type !== "text") {
+        // Ignore delivery/read receipts
+        if (value.statuses) {
             return res.sendStatus(200);
         }
 
-        if (processed.has(msg.id)) return res.sendStatus(200);
-        processed.add(msg.id);
+        // Ignore if no messages
+        if (!value.messages || !Array.isArray(value.messages)) {
+            return res.sendStatus(200);
+        }
 
-        setTimeout(() => processed.delete(msg.id), 300000);
+        const message = value.messages[0];
 
-        const tenant = await getTenantByPhoneNumberId(
-            value.metadata.phone_number_id
-        );
+        // ===============================
+        // HARD VALIDATION (CRITICAL)
+        // ===============================
+        if (!message) return res.sendStatus(200);
 
-        if (!tenant) return res.sendStatus(200);
+        // Ignore system/invalid messages
+        if (!message.from) return res.sendStatus(200);
 
-        await processMessage({
-            tenant,
-            phone: msg.from,
-            text: msg.text.body.toLowerCase()
+        // Only process text messages
+        if (message.type !== "text") {
+            return res.sendStatus(200);
+        }
+
+        // Safe text extraction
+        const rawText = message.text?.body;
+
+        if (!rawText || typeof rawText !== "string") {
+            return res.sendStatus(200);
+        }
+
+        const text = rawText.trim().toLowerCase();
+
+        if (!text) {
+            return res.sendStatus(200);
+        }
+
+        const messageId = message.id;
+        const phone = message.from;
+
+        // ===============================
+        // DEDUPLICATION (IMPORTANT)
+        // ===============================
+        if (processedMessages.has(messageId)) {
+            console.log("Duplicate ignored:", messageId);
+            return res.sendStatus(200);
+        }
+
+        processedMessages.add(messageId);
+
+        // Remove after 5 minutes
+        setTimeout(() => {
+            processedMessages.delete(messageId);
+        }, 5 * 60 * 1000);
+
+        // ===============================
+        // TENANT RESOLUTION (DYNAMIC)
+        // ===============================
+        const phoneNumberId = value.metadata?.phone_number_id;
+
+        if (!phoneNumberId) {
+            console.error("Missing phone_number_id");
+            return res.sendStatus(200);
+        }
+
+        const tenant = await getTenantByPhoneNumberId(phoneNumberId);
+
+        if (!tenant) {
+            console.error("Tenant not found for:", phoneNumberId);
+            return res.sendStatus(200);
+        }
+
+        // ===============================
+        // LOG VALID MESSAGE
+        // ===============================
+        console.log("Incoming message", {
+            tenant: tenant.id,
+            phone,
+            text
         });
 
+        // ===============================
+        // PROCESS BUSINESS LOGIC
+        // ===============================
+        await processMessage({
+            tenant,
+            phone,
+            text
+        });
+
+        // ===============================
+        // SUCCESS RESPONSE
+        // ===============================
         res.sendStatus(200);
 
     } catch (err) {
-        console.error(err);
+        console.error("Webhook error:", err);
+
+        // NEVER crash webhook
         res.sendStatus(500);
     }
 };
