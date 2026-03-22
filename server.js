@@ -1,13 +1,9 @@
-// ===============================
-// IMPORTS
-// ===============================
 const express = require("express");
 const app = express();
-
 require("dotenv").config();
 
 // ===============================
-// BASIC START LOG
+// START LOG
 // ===============================
 console.log("🚀 SERVER BOOT STARTED");
 
@@ -17,15 +13,18 @@ console.log("🚀 SERVER BOOT STARTED");
 app.use(express.json());
 
 // ===============================
-// DB CONNECTION (SAFE)
+// STATIC FILES (IMPORTANT FIX)
+// ===============================
+app.use(express.static("public"));
+
+// ===============================
+// DB
 // ===============================
 const db = require("./db");
 
 db.connect()
     .then(() => console.log("✅ DB Connected"))
-    .catch((err) => {
-        console.error("❌ DB Connection Failed:", err.message);
-    });
+    .catch(err => console.error("DB Error:", err.message));
 
 // ===============================
 // ROUTES
@@ -34,25 +33,21 @@ app.use("/webhook", require("./routes/webhook"));
 app.use("/admin", require("./routes/admin"));
 
 // ===============================
-// HEALTH CHECK (IMPORTANT)
+// HEALTH CHECK (MOVE FROM "/")
 // ===============================
-app.get("/", (req, res) => {
-    res.send("Enterprise Bot Running 🚀");
-});
-
 app.get("/health", (req, res) => {
     res.send("OK");
 });
 
 // ===============================
-// GLOBAL ERROR HANDLING
+// GLOBAL ERRORS
 // ===============================
 process.on("uncaughtException", (err) => {
-    console.error("🔥 UNCAUGHT EXCEPTION:", err);
+    console.error("UNCAUGHT:", err);
 });
 
 process.on("unhandledRejection", (err) => {
-    console.error("🔥 UNHANDLED REJECTION:", err);
+    console.error("UNHANDLED:", err);
 });
 
 // ===============================
