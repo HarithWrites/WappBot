@@ -1,4 +1,6 @@
 const express = require("express");
+const path = require("path");
+
 const webhookRoutes = require("./routes/webhook");
 const adminRoutes = require("./routes/admin");
 const db = require("./db");
@@ -7,22 +9,26 @@ const app = express();
 app.use(express.json());
 
 // ===============================
-// HEALTH CHECK
+// API ROUTES FIRST (IMPORTANT)
+// ===============================
+app.use("/webhook", webhookRoutes);
+app.use("/admin", adminRoutes);
+
+// ===============================
+// STATIC FILES (DASHBOARD)
+// ===============================
+app.use(express.static(path.join(__dirname, "public")));
+
+// ===============================
+// HEALTH CHECK (SAFE)
 // ===============================
 app.get("/health", (req, res) => {
     res.send("OK");
 });
 
 // ===============================
-// ROUTES
+// NO catch-all route for now ❌
 // ===============================
-app.use("/webhook", webhookRoutes);
-app.use("/admin", adminRoutes);
-
-// ===============================
-// SERVE DASHBOARD
-// ===============================
-app.use(express.static("public"));
 
 // ===============================
 // DB TABLES
