@@ -27,7 +27,53 @@
 
 <section id="list" class="grid"></section>
 
-<script src="app.js"></script>
+<script>
+
+// ===============================
+async function approveBooking(bookingId) {
+
+    const res = await fetch("/admin/approve", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ bookingId })
+    });
+
+    const data = await res.json();
+
+    if (!data.success) {
+        alert("Approve failed");
+        return;
+    }
+
+    alert("Approved ✅");
+    loadBookings();
+}
+
+// ===============================
+async function rejectBooking(bookingId) {
+
+    const res = await fetch("/admin/reject", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ bookingId })
+    });
+
+    const data = await res.json();
+
+    if (!data.success) {
+        alert("Reject failed");
+        return;
+    }
+
+    alert("Rejected ❌");
+    loadBookings();
+}
+
+</script>
 
 </body>
 </html>
