@@ -45,7 +45,7 @@ async function processMessage(phone, text) {
     if (text === "hi") {
 
         await setState(phone, {
-            state: "START",
+            state: "SERVICE_SELECTION",
             service_id: null,
             date: null,
             time: null
@@ -66,7 +66,7 @@ async function processMessage(phone, text) {
     // GET STATE
     // ===============================
     let stateData = await getState(phone);
-    let state = stateData?.state || "START";
+    let state = stateData?.state || "SERVICE_SELECTION";
 
     // ===============================
     // STATE MACHINE
@@ -74,19 +74,7 @@ async function processMessage(phone, text) {
     switch (state) {
 
         // ===============================
-        case "START":
-
-            await sendMessage(phone,
-`Welcome to ABC Clinic
-
-1 Dental
-2 Skin
-
-(Type 'hi' to restart)`);
-
-            await setState(phone, { state: "SERVICE_SELECTION" });
-            break;
-
+        // SERVICE SELECTION
         // ===============================
         case "SERVICE_SELECTION":
 
@@ -113,6 +101,8 @@ Please choose:
             break;
 
         // ===============================
+        // DATE SELECTION
+        // ===============================
         case "DATE_SELECTION":
 
             if (text.length < 3) {
@@ -136,6 +126,8 @@ Please enter valid date (e.g. Tomorrow)
 
             break;
 
+        // ===============================
+        // TIME SELECTION
         // ===============================
         case "TIME_SELECTION":
 
@@ -161,6 +153,8 @@ Example: 10 AM or 3 PM
             break;
 
         // ===============================
+        // CONFIRMATION
+        // ===============================
         case "CONFIRMATION":
 
             if (!["yes", "no"].includes(text)) {
@@ -174,6 +168,7 @@ Please type yes or no
             }
 
             if (text === "yes") {
+
                 await createBooking({
                     phone,
                     service_id: stateData.service_id,
@@ -186,13 +181,14 @@ Please type yes or no
 Waiting for confirmation`);
 
             } else {
+
                 await sendMessage(phone,
 `Booking cancelled ❌`);
             }
 
             // RESET STATE
             await setState(phone, {
-                state: "START",
+                state: "SERVICE_SELECTION",
                 service_id: null,
                 date: null,
                 time: null
@@ -201,12 +197,21 @@ Waiting for confirmation`);
             break;
 
         // ===============================
+        // FALLBACK (SAFETY)
+        // ===============================
         default:
+
+            await setState(phone, {
+                state: "SERVICE_SELECTION"
+            });
 
             await sendMessage(phone,
 `Invalid input ❌
 
-Type 'hi' to start
+Please choose:
+1 Dental
+2 Skin
+
 (Type 'hi' to restart)`);
     }
 }
