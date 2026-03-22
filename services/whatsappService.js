@@ -1,10 +1,9 @@
 const axios = require("axios");
-const logger = require("../utils/logger");
 
-async function sendMessage(to, text) {
+async function sendMessage({ tenant, to, text }) {
     try {
         await axios.post(
-            `https://graph.facebook.com/v19.0/${process.env.PHONE_ID}/messages`,
+            `https://graph.facebook.com/v19.0/${tenant.phone_number_id}/messages`,
             {
                 messaging_product: "whatsapp",
                 to,
@@ -12,15 +11,13 @@ async function sendMessage(to, text) {
             },
             {
                 headers: {
-                    Authorization: `Bearer ${process.env.TOKEN}`
+                    Authorization: `Bearer ${tenant.token}`,
+                    "Content-Type": "application/json"
                 }
             }
         );
-
-        logger.info("Message sent", { to });
-
     } catch (err) {
-        logger.error("WhatsApp send failed", err);
+        console.error("WhatsApp error:", err.response?.data || err.message);
     }
 }
 
