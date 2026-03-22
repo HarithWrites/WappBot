@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Admin Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<header>
+  <h1>📊 Booking Dashboard</h1>
+</header>
+
+<section class="filters">
+  <button onclick="filterBookings('all')">All</button>
+  <button onclick="filterBookings('pending')">Pending</button>
+  <button onclick="filterBookings('confirmed')">Confirmed</button>
+  <button onclick="filterBookings('rejected')">Rejected</button>
+</section>
+
+<section id="loading">Loading bookings...</section>
+
+<section id="empty" style="display:none;">
+  No bookings available
+</section>
+
+<section id="list" class="grid"></section>
+
+<script src="app.js"></script>
+
+</body>
+</html>
