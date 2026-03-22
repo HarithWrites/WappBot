@@ -9,8 +9,8 @@ app.use(express.json());
 // ===============================
 // HEALTH CHECK
 // ===============================
-app.get("/", (req, res) => {
-    res.send("Enterprise Bot Running 🚀");
+app.get("/health", (req, res) => {
+    res.send("OK");
 });
 
 // ===============================
