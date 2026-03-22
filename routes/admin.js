@@ -1,9 +1,10 @@
 const express = require("express");
 const router = express.Router();
+
 const controller = require("../controllers/adminController");
 
 // ===============================
-// GET BOOKINGS (Dashboard)
+// GET BOOKINGS (with filters)
 // ===============================
 router.get("/bookings", controller.getBookings);
 
