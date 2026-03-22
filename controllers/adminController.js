@@ -7,6 +7,8 @@ const { sendMessage } = require("../services/whatsappService");
 const db = require("../db");
 
 // ===============================
+// GET BOOKINGS
+// ===============================
 exports.getBookings = async (req, res) => {
     try {
         const { tenant_id, date, time } = req.query;
@@ -17,19 +19,30 @@ exports.getBookings = async (req, res) => {
 
         const data = await getAllBookings(tenant_id, { date, time });
 
-        res.json(data);
+        return res.json(data);
 
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error("getBookings error:", err);
+        return res.status(500).json({ error: "Internal server error" });
     }
 };
 
+// ===============================
+// APPROVE BOOKING
 // ===============================
 exports.approveBooking = async (req, res) => {
     try {
         const { bookingId } = req.body;
 
+        if (!bookingId) {
+            return res.status(400).json({ error: "bookingId required" });
+        }
+
         const booking = await updateBookingStatus(bookingId, "confirmed");
+
+        if (!booking) {
+            return res.status(404).json({ error: "Booking not found" });
+        }
 
         const tenantRes = await db.query(
             "SELECT * FROM tenants WHERE id=$1",
@@ -49,19 +62,30 @@ Time: ${booking.booking_time}`
             });
         }
 
-        res.json({ success: true });
+        return res.json({ success: true });
 
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error("approveBooking error:", err);
+        return res.status(500).json({ error: "Internal server error" });
     }
 };
 
+// ===============================
+// REJECT BOOKING
 // ===============================
 exports.rejectBooking = async (req, res) => {
     try {
         const { bookingId } = req.body;
 
+        if (!bookingId) {
+            return res.status(400).json({ error: "bookingId required" });
+        }
+
         const booking = await updateBookingStatus(bookingId, "rejected");
+
+        if (!booking) {
+            return res.status(404).json({ error: "Booking not found" });
+        }
 
         const tenantRes = await db.query(
             "SELECT * FROM tenants WHERE id=$1",
@@ -79,9 +103,10 @@ Service: ${booking.service_name}`
             });
         }
 
-        res.json({ success: true });
+        return res.json({ success: true });
 
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error("rejectBooking error:", err);
+        return res.status(500).json({ error: "Internal server error" });
     }
 };
