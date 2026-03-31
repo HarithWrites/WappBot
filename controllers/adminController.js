@@ -12,11 +12,7 @@ const db = require("../db");
 // ===============================
 exports.getBookings = async (req, res) => {
     try {
-        const { tenant_id, date, time, range = "upcoming_30_days" } = req.query;
-
-        if (!tenant_id) {
-            return res.status(400).json({ error: "tenant_id required" });
-        }
+        const { tenant_id, date, time, range } = req.query;
 
         const data = await getAllBookings(tenant_id, { date, time, range });
 
@@ -31,10 +27,6 @@ exports.getBookings = async (req, res) => {
 exports.streamBookings = async (req, res) => {
     const { tenant_id } = req.query;
 
-    if (!tenant_id) {
-        return res.status(400).json({ error: "tenant_id required" });
-    }
-
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
@@ -44,21 +36,21 @@ exports.streamBookings = async (req, res) => {
         res.write(`data: ${JSON.stringify(payload)}\n\n`);
     };
 
-    sendEvent({ type: "connected", tenant_id });
+    sendEvent({ type: "connected", tenant_id: tenant_id || null });
 
     const heartbeat = setInterval(() => {
         res.write(": keep-alive\n\n");
     }, 15000);
 
     const listener = (event) => {
-        if (String(event.tenant_id) !== String(tenant_id)) {
+        if (tenant_id && String(event.tenant_id) !== String(tenant_id)) {
             return;
         }
 
         sendEvent({
             type: event.type,
             bookingId: event.bookingId,
-            tenant_id
+            tenant_id: tenant_id || null
         });
     };
 

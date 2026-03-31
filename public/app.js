@@ -5,8 +5,7 @@ let streamTenantId = null;
 
 const tenantInput = document.getElementById("tenantId");
 const dateInput = document.getElementById("dateFilter");
-const timeInput = document.getElementById("timeFilter");
-const bookingsList = document.getElementById("bookingsList");
+const bookingGroups = document.getElementById("bookingGroups");
 const dashboardEmpty = document.getElementById("dashboardEmpty");
 const weekHighlights = document.getElementById("weekHighlights");
 const weekEmpty = document.getElementById("weekEmpty");
@@ -77,20 +76,20 @@ function renderWeekHighlights() {
         card.innerHTML = `
             <div class="highlight-top">
                 <span class="status-badge status-${booking.status}">${booking.status}</span>
-                <span>#${booking.id}</span>
+                <span>Booking #${booking.id}</span>
             </div>
             <h3 class="booking-title">${booking.service_name}</h3>
             <p class="booking-copy">${formatDisplayDate(booking.booking_date)} at ${formatDisplayTime(booking.booking_time)}</p>
             <p class="booking-subtitle">Phone: ${booking.phone}</p>
+            <p class="booking-subtitle">Tenant: ${booking.tenant_id}</p>
+            <p class="booking-subtitle">Created: ${booking.created_at ? new Date(booking.created_at).toLocaleString("en-IN") : "N/A"}</p>
         `;
         weekHighlights.appendChild(card);
     });
 }
 
-function renderDashboard() {
-    bookingsList.innerHTML = "";
-
-    const filteredBookings = allBookings.filter((booking) => {
+function getFilteredBookings() {
+    return allBookings.filter((booking) => {
         if (currentFilter !== "all" && booking.status !== currentFilter) {
             return false;
         }
@@ -99,12 +98,61 @@ function renderDashboard() {
             return false;
         }
 
-        if (timeInput.value && booking.booking_time !== `${timeInput.value}:00`) {
-            return false;
-        }
-
         return true;
     });
+}
+
+function createBookingCard(booking) {
+    const card = document.createElement("article");
+    card.className = `booking-card${isThisWeek(booking.booking_date) ? " this-week" : ""}`;
+
+    const isPending = booking.status === "pending";
+
+    card.innerHTML = `
+        <div class="booking-meta">
+            <div>
+                <h3 class="booking-title">${booking.service_name}</h3>
+                <p class="booking-copy">${formatDisplayDate(booking.booking_date)} at ${formatDisplayTime(booking.booking_time)}</p>
+                <p class="booking-subtitle">Phone: ${booking.phone}</p>
+                <p class="booking-subtitle">Tenant: ${booking.tenant_id}</p>
+                <p class="booking-subtitle">Created: ${booking.created_at ? new Date(booking.created_at).toLocaleString("en-IN") : "N/A"}</p>
+            </div>
+            <span class="status-badge status-${booking.status}">${booking.status}</span>
+        </div>
+        <div class="booking-actions">
+            <p class="booking-subtitle">Booking #${booking.id}${isThisWeek(booking.booking_date) ? " is part of this week." : ""}</p>
+            ${isPending ? `
+                <div>
+                    <button class="approve" data-action="approve" data-id="${booking.id}" type="button">Approve</button>
+                    <button class="reject" data-action="reject" data-id="${booking.id}" type="button">Reject</button>
+                </div>
+            ` : ""}
+        </div>
+    `;
+
+    return card;
+}
+
+function renderBookingGroup(title, bookings) {
+    const section = document.createElement("section");
+    section.className = "group-panel";
+
+    section.innerHTML = `<h3>${title} (${bookings.length})</h3>`;
+
+    const grid = document.createElement("div");
+    grid.className = "booking-grid";
+
+    bookings.forEach((booking) => {
+        grid.appendChild(createBookingCard(booking));
+    });
+
+    section.appendChild(grid);
+    return section;
+}
+
+function renderDashboard() {
+    bookingGroups.innerHTML = "";
+    const filteredBookings = getFilteredBookings();
 
     if (!filteredBookings.length) {
         dashboardEmpty.classList.remove("hidden");
@@ -113,34 +161,34 @@ function renderDashboard() {
 
     dashboardEmpty.classList.add("hidden");
 
-    filteredBookings.forEach((booking) => {
-        const card = document.createElement("article");
-        card.className = `booking-card${isThisWeek(booking.booking_date) ? " this-week" : ""}`;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-        const isPending = booking.status === "pending";
-
-        card.innerHTML = `
-            <div class="booking-meta">
-                <div>
-                    <h3 class="booking-title">${booking.service_name}</h3>
-                    <p class="booking-copy">${formatDisplayDate(booking.booking_date)} at ${formatDisplayTime(booking.booking_time)}</p>
-                    <p class="booking-subtitle">Phone: ${booking.phone}</p>
-                </div>
-                <span class="status-badge status-${booking.status}">${booking.status}</span>
-            </div>
-            <div class="booking-actions">
-                <p class="booking-subtitle">Booking #${booking.id}${isThisWeek(booking.booking_date) ? " is part of this week." : ""}</p>
-                ${isPending ? `
-                    <div>
-                        <button class="approve" data-action="approve" data-id="${booking.id}" type="button">Approve</button>
-                        <button class="reject" data-action="reject" data-id="${booking.id}" type="button">Reject</button>
-                    </div>
-                ` : ""}
-            </div>
-        `;
-
-        bookingsList.appendChild(card);
+    const pending = filteredBookings.filter((booking) => booking.status === "pending" && !isThisWeek(booking.booking_date));
+    const canceled = filteredBookings.filter((booking) => booking.status === "rejected");
+    const upcoming = filteredBookings.filter((booking) => {
+        const bookingDate = new Date(`${booking.booking_date}T00:00:00`);
+        return booking.status !== "rejected" && booking.status !== "pending" && bookingDate >= today && !isThisWeek(booking.booking_date);
     });
+    const old = filteredBookings.filter((booking) => {
+        const bookingDate = new Date(`${booking.booking_date}T00:00:00`);
+        return bookingDate < today && booking.status !== "rejected";
+    });
+
+    [
+        ["Pending bookings", pending],
+        ["Upcoming bookings", upcoming],
+        ["Canceled bookings", canceled],
+        ["Old bookings", old]
+    ].forEach(([title, bookings]) => {
+        if (bookings.length) {
+            bookingGroups.appendChild(renderBookingGroup(title, bookings));
+        }
+    });
+
+    if (!bookingGroups.children.length) {
+        dashboardEmpty.classList.remove("hidden");
+    }
 }
 
 function render() {
@@ -151,28 +199,17 @@ function render() {
 
 function buildBookingsUrl() {
     const tenantId = tenantInput.value.trim();
+    const params = new URLSearchParams();
 
-    if (!tenantId) {
-        return null;
+    if (tenantId) {
+        params.set("tenant_id", tenantId);
     }
-
-    const params = new URLSearchParams({
-        tenant_id: tenantId,
-        range: "upcoming_30_days"
-    });
 
     return `/admin/bookings?${params.toString()}`;
 }
 
 async function loadBookings() {
     const url = buildBookingsUrl();
-
-    if (!url) {
-        connectionStatus.textContent = "Enter a tenant ID to load bookings.";
-        tenantInput.focus();
-        return;
-    }
-
     connectionStatus.textContent = "Loading bookings...";
     localStorage.setItem("tenantId", tenantInput.value.trim());
 
@@ -183,7 +220,7 @@ async function loadBookings() {
         allBookings = Array.isArray(data) ? data : [];
         render();
         connectionStatus.textContent = "Live updates connected.";
-        connectStream(tenantInput.value.trim());
+        connectStream(tenantInput.value.trim() || "");
     } catch (err) {
         console.error(err);
         connectionStatus.textContent = "Could not load bookings right now.";
@@ -225,11 +262,6 @@ async function updateBookingStatus(bookingId, status) {
 }
 
 function connectStream(tenantId) {
-
-    if (!tenantId) {
-        return;
-    }
-
     if (stream && streamTenantId === tenantId) {
         return;
     }
@@ -239,7 +271,8 @@ function connectStream(tenantId) {
     }
 
     streamTenantId = tenantId;
-    stream = new EventSource(`/admin/bookings/stream?tenant_id=${encodeURIComponent(tenantId)}`);
+    const query = tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : "";
+    stream = new EventSource(`/admin/bookings/stream${query}`);
 
     stream.onopen = () => {
         connectionStatus.textContent = "Live updates connected.";
@@ -267,7 +300,6 @@ function connectStream(tenantId) {
 document.getElementById("loadButton").addEventListener("click", loadBookings);
 document.getElementById("clearButton").addEventListener("click", () => {
     dateInput.value = "";
-    timeInput.value = "";
     currentFilter = "all";
     document.querySelectorAll(".pill").forEach((pill) => {
         pill.classList.toggle("active", pill.dataset.filter === "all");
@@ -286,9 +318,7 @@ document.querySelectorAll(".pill").forEach((pill) => {
 });
 
 dateInput.addEventListener("change", renderDashboard);
-timeInput.addEventListener("change", renderDashboard);
-
-bookingsList.addEventListener("click", (event) => {
+bookingGroups.addEventListener("click", (event) => {
     const actionButton = event.target.closest("[data-action]");
 
     if (!actionButton) {
@@ -300,7 +330,4 @@ bookingsList.addEventListener("click", (event) => {
 });
 
 tenantInput.value = localStorage.getItem("tenantId") || "";
-
-if (tenantInput.value) {
-    loadBookings();
-}
+loadBookings();

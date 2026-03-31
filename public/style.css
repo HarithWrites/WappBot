@@ -222,6 +222,23 @@ button:disabled {
   gap: 16px;
 }
 
+.group-stack {
+  display: grid;
+  gap: 18px;
+}
+
+.group-panel {
+  padding: 18px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(136, 86, 53, 0.12);
+}
+
+.group-panel h3 {
+  margin: 0 0 14px;
+  font-size: 1.05rem;
+}
+
 .highlight-grid {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
@@ -236,6 +253,12 @@ button:disabled {
 
 .highlight-card {
   background: linear-gradient(160deg, rgba(246, 216, 200, 0.55), rgba(255, 255, 255, 0.9));
+}
+
+.booking-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 
 .booking-card.this-week {

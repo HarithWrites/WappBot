@@ -27,8 +27,13 @@ async function createBooking({
 }
 
 async function getAllBookings(tenant_id, filters = {}) {
-    let query = `SELECT * FROM bookings WHERE tenant_id=$1`;
-    let values = [tenant_id];
+    let query = "SELECT * FROM bookings WHERE 1=1";
+    let values = [];
+
+    if (tenant_id) {
+        values.push(tenant_id);
+        query += ` AND tenant_id=$${values.length}`;
+    }
 
     if (filters.range === "upcoming_30_days") {
         query += " AND booking_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '29 days'";

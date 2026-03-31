@@ -13,13 +13,13 @@
                 <p class="eyebrow">Live operations</p>
                 <h1>Booking dashboard</h1>
                 <p class="hero-copy">
-                    Track this week's bookings in the home section and keep the next 30 days synced in real time.
+                    Track this week's bookings in the home section and keep the full admin dashboard synced in real time.
                 </p>
             </div>
             <div class="hero-stats">
                 <article>
                     <span id="statTotal">0</span>
-                    <label>Next 30 days</label>
+                    <label>Total bookings</label>
                 </article>
                 <article>
                     <span id="statWeek">0</span>
@@ -36,30 +36,25 @@
             <section class="panel controls">
                 <div>
                     <p class="section-label">Dashboard filters</p>
-                    <h2>Load a tenant</h2>
+                    <h2>Live booking admin</h2>
                 </div>
 
                 <div class="control-grid">
                     <label>
                         <span>Tenant ID</span>
-                        <input type="text" id="tenantId" placeholder="Enter tenant ID">
+                        <input type="text" id="tenantId" placeholder="Optional tenant ID">
                     </label>
 
                     <label>
                         <span>Date</span>
                         <input type="date" id="dateFilter">
                     </label>
-
-                    <label>
-                        <span>Time</span>
-                        <input type="time" id="timeFilter" step="1800">
-                    </label>
                 </div>
 
                 <div class="control-actions">
                     <button id="loadButton" class="primary">Load bookings</button>
                     <button id="clearButton" class="secondary" type="button">Clear filters</button>
-                    <p id="connectionStatus" class="status-note">Waiting for tenant selection.</p>
+                    <p id="connectionStatus" class="status-note">Loading all bookings when the page opens.</p>
                 </div>
             </section>
 
@@ -67,9 +62,9 @@
                 <div class="section-heading">
                     <div>
                         <p class="section-label">Home</p>
-                        <h2>This week</h2>
+                        <h2>This week bookings</h2>
                     </div>
-                    <p class="section-subtitle">Bookings happening during the current week are highlighted here.</p>
+                    <p class="section-subtitle">Cards in the middle section show full booking details for the current week.</p>
                 </div>
                 <div id="weekHighlights" class="highlight-grid"></div>
                 <div id="weekEmpty" class="empty-state hidden">No bookings scheduled for this week.</div>
@@ -79,9 +74,9 @@
                 <div class="section-heading">
                     <div>
                         <p class="section-label">Dashboard</p>
-                        <h2>Bookings for the next 30 days</h2>
+                        <h2>All other bookings</h2>
                     </div>
-                    <p class="section-subtitle">This list refreshes automatically when new bookings arrive or statuses change.</p>
+                    <p class="section-subtitle">Old, upcoming, canceled, and pending bookings stay updated in real time.</p>
                 </div>
                 <div class="filter-pills">
                     <button class="pill active" data-filter="all" type="button">All</button>
@@ -89,7 +84,7 @@
                     <button class="pill" data-filter="confirmed" type="button">Confirmed</button>
                     <button class="pill" data-filter="rejected" type="button">Rejected</button>
                 </div>
-                <div id="bookingsList" class="bookings-list"></div>
+                <div id="bookingGroups" class="group-stack"></div>
                 <div id="dashboardEmpty" class="empty-state hidden">No bookings found for the selected filters.</div>
             </section>
         </main>
