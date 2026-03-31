@@ -5,14 +5,19 @@ let streamTenantId = null;
 
 const tenantInput = document.getElementById("tenantId");
 const dateInput = document.getElementById("dateFilter");
-const bookingGroups = document.getElementById("bookingGroups");
+const bookingsGrid = document.getElementById("bookingsGrid");
 const dashboardEmpty = document.getElementById("dashboardEmpty");
-const weekHighlights = document.getElementById("weekHighlights");
-const weekEmpty = document.getElementById("weekEmpty");
 const connectionStatus = document.getElementById("connectionStatus");
 
 function formatDisplayDate(dateString) {
-    const date = new Date(`${dateString}T00:00:00`);
+    let date;
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+        date = new Date(`${dateString}T00:00:00`);
+    } else {
+        date = new Date(dateString);
+    }
+
     return new Intl.DateTimeFormat("en-GB", {
         day: "2-digit",
         month: "2-digit",
@@ -59,35 +64,6 @@ function setStats() {
     document.getElementById("statPending").textContent = pendingCount;
 }
 
-function renderWeekHighlights() {
-    const weekBookings = allBookings.filter((booking) => isThisWeek(booking.booking_date));
-    weekHighlights.innerHTML = "";
-
-    if (!weekBookings.length) {
-        weekEmpty.classList.remove("hidden");
-        return;
-    }
-
-    weekEmpty.classList.add("hidden");
-
-    weekBookings.forEach((booking) => {
-        const card = document.createElement("article");
-        card.className = "highlight-card";
-        card.innerHTML = `
-            <div class="highlight-top">
-                <span class="status-badge status-${booking.status}">${booking.status}</span>
-                <span>Booking #${booking.id}</span>
-            </div>
-            <h3 class="booking-title">${booking.service_name}</h3>
-            <p class="booking-copy">${formatDisplayDate(booking.booking_date)} at ${formatDisplayTime(booking.booking_time)}</p>
-            <p class="booking-subtitle">Phone: ${booking.phone}</p>
-            <p class="booking-subtitle">Tenant: ${booking.tenant_id}</p>
-            <p class="booking-subtitle">Created: ${booking.created_at ? new Date(booking.created_at).toLocaleString("en-IN") : "N/A"}</p>
-        `;
-        weekHighlights.appendChild(card);
-    });
-}
-
 function getFilteredBookings() {
     return allBookings.filter((booking) => {
         if (currentFilter !== "all" && booking.status !== currentFilter) {
@@ -106,8 +82,6 @@ function createBookingCard(booking) {
     const card = document.createElement("article");
     card.className = `booking-card${isThisWeek(booking.booking_date) ? " this-week" : ""}`;
 
-    const isPending = booking.status === "pending";
-
     card.innerHTML = `
         <div class="booking-meta">
             <div>
@@ -121,37 +95,20 @@ function createBookingCard(booking) {
         </div>
         <div class="booking-actions">
             <p class="booking-subtitle">Booking #${booking.id}${isThisWeek(booking.booking_date) ? " is part of this week." : ""}</p>
-            ${isPending ? `
-                <div>
-                    <button class="approve" data-action="approve" data-id="${booking.id}" type="button">Approve</button>
-                    <button class="reject" data-action="reject" data-id="${booking.id}" type="button">Reject</button>
-                </div>
-            ` : ""}
+            <div>
+                <button class="approve" data-action="approve" data-id="${booking.id}" type="button">Confirm</button>
+                <button class="secondary" data-action="pending" data-id="${booking.id}" type="button">Pending</button>
+                <button class="reject" data-action="reject" data-id="${booking.id}" type="button">Reject</button>
+            </div>
         </div>
+        <textarea data-comment-for="${booking.id}" placeholder="Optional comment for the user"></textarea>
     `;
 
     return card;
 }
 
-function renderBookingGroup(title, bookings) {
-    const section = document.createElement("section");
-    section.className = "group-panel";
-
-    section.innerHTML = `<h3>${title} (${bookings.length})</h3>`;
-
-    const grid = document.createElement("div");
-    grid.className = "booking-grid";
-
-    bookings.forEach((booking) => {
-        grid.appendChild(createBookingCard(booking));
-    });
-
-    section.appendChild(grid);
-    return section;
-}
-
 function renderDashboard() {
-    bookingGroups.innerHTML = "";
+    bookingsGrid.innerHTML = "";
     const filteredBookings = getFilteredBookings();
 
     if (!filteredBookings.length) {
@@ -161,39 +118,13 @@ function renderDashboard() {
 
     dashboardEmpty.classList.add("hidden");
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const pending = filteredBookings.filter((booking) => booking.status === "pending" && !isThisWeek(booking.booking_date));
-    const canceled = filteredBookings.filter((booking) => booking.status === "rejected");
-    const upcoming = filteredBookings.filter((booking) => {
-        const bookingDate = new Date(`${booking.booking_date}T00:00:00`);
-        return booking.status !== "rejected" && booking.status !== "pending" && bookingDate >= today && !isThisWeek(booking.booking_date);
+    filteredBookings.forEach((booking) => {
+        bookingsGrid.appendChild(createBookingCard(booking));
     });
-    const old = filteredBookings.filter((booking) => {
-        const bookingDate = new Date(`${booking.booking_date}T00:00:00`);
-        return bookingDate < today && booking.status !== "rejected";
-    });
-
-    [
-        ["Pending bookings", pending],
-        ["Upcoming bookings", upcoming],
-        ["Canceled bookings", canceled],
-        ["Old bookings", old]
-    ].forEach(([title, bookings]) => {
-        if (bookings.length) {
-            bookingGroups.appendChild(renderBookingGroup(title, bookings));
-        }
-    });
-
-    if (!bookingGroups.children.length) {
-        dashboardEmpty.classList.remove("hidden");
-    }
 }
 
 function render() {
     setStats();
-    renderWeekHighlights();
     renderDashboard();
 }
 
@@ -228,8 +159,14 @@ async function loadBookings() {
 }
 
 async function updateBookingStatus(bookingId, status) {
-    const endpoint = status === "confirmed" ? "/admin/approve" : "/admin/reject";
-    const button = document.querySelector(`[data-id="${bookingId}"][data-action="${status === "confirmed" ? "approve" : "reject"}"]`);
+    const endpoint = status === "confirmed"
+        ? "/admin/approve"
+        : status === "pending"
+            ? "/admin/pending"
+            : "/admin/reject";
+    const actionName = status === "confirmed" ? "approve" : status;
+    const button = document.querySelector(`[data-id="${bookingId}"][data-action="${actionName}"]`);
+    const comment = document.querySelector(`[data-comment-for="${bookingId}"]`)?.value?.trim() || "";
 
     if (button) {
         button.disabled = true;
@@ -241,7 +178,7 @@ async function updateBookingStatus(bookingId, status) {
             headers: {
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify({ bookingId })
+            body: JSON.stringify({ bookingId, comment })
         });
 
         const data = await res.json();
@@ -318,7 +255,7 @@ document.querySelectorAll(".pill").forEach((pill) => {
 });
 
 dateInput.addEventListener("change", renderDashboard);
-bookingGroups.addEventListener("click", (event) => {
+bookingsGrid.addEventListener("click", (event) => {
     const actionButton = event.target.closest("[data-action]");
 
     if (!actionButton) {
@@ -326,7 +263,12 @@ bookingGroups.addEventListener("click", (event) => {
     }
 
     const { action, id } = actionButton.dataset;
-    updateBookingStatus(id, action === "approve" ? "confirmed" : "rejected");
+    const nextStatus = action === "approve"
+        ? "confirmed"
+        : action === "pending"
+            ? "pending"
+            : "rejected";
+    updateBookingStatus(id, nextStatus);
 });
 
 tenantInput.value = localStorage.getItem("tenantId") || "";

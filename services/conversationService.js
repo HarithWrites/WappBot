@@ -8,6 +8,7 @@ const { createBooking } = require("./bookingService");
 const { getServices } = require("./serviceService");
 const {
     addDays,
+    formatDisplayDate,
     parseDate,
     toDisplayDate
 } = require("../utils/validators");
@@ -220,7 +221,7 @@ async function promptTimePeriodSelection({ tenant, phone, tenant_id, service_nam
         tenant,
         to: phone,
         header: "Choose a time window",
-        body: `Service: ${service_name}\nDate: ${toDisplayDate(new Date(`${date}T00:00:00`))}\nChoose a slot from 9:00 AM to 9:00 PM.`,
+        body: `Service: ${service_name}\nDate: ${formatDisplayDate(date)}\nChoose a slot from 9:00 AM to 9:00 PM.`,
         footer: "Pick a period first",
         buttons: TIME_PERIODS.map((period) => ({
             id: period.id,
@@ -247,7 +248,7 @@ async function promptTimeSelection({ tenant, phone, tenant_id, service_name, dat
         tenant,
         to: phone,
         header: `${period.title} slots`,
-        body: `Service: ${service_name}\nDate: ${toDisplayDate(new Date(`${date}T00:00:00`))}\nChoose one 30-minute slot.`,
+        body: `Service: ${service_name}\nDate: ${formatDisplayDate(date)}\nChoose one 30-minute slot.`,
         footer: "Single-select time list",
         buttonText: "View times",
         sections: [
@@ -281,7 +282,7 @@ async function promptConfirmation({ tenant, phone, tenant_id, service_name, date
         tenant,
         to: phone,
         header: "Confirm booking",
-        body: `Service: ${service_name}\nDate: ${toDisplayDate(bookingDate)}\nTime: ${timeSlot ? timeSlot.title : time}${weekNote}`,
+        body: `Service: ${service_name}\nDate: ${formatDisplayDate(date)}\nTime: ${timeSlot ? timeSlot.title : time}${weekNote}`,
         footer: "Please confirm",
         buttons: [
             { id: "confirm_yes", title: "Yes" },
@@ -456,7 +457,7 @@ async function processMessage({ tenant, phone, text, payload }) {
             await sendMessage({
                 tenant,
                 to: phone,
-                text: `Booking confirmed.\nID: ${booking.id}\nService: ${booking.service_name}\nDate: ${toDisplayDate(new Date(`${booking.booking_date}T00:00:00`))}\nTime: ${TIME_SLOTS.find((slot) => slot.dbValue === booking.booking_time)?.title || booking.booking_time}`
+                text: `Booking confirmed.\nID: ${booking.id}\nService: ${booking.service_name}\nDate: ${formatDisplayDate(booking.booking_date) || booking.booking_date}\nTime: ${TIME_SLOTS.find((slot) => slot.dbValue === booking.booking_time)?.title || booking.booking_time}`
             });
 
             await setState(phone, tenant_id, {

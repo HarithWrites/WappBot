@@ -13,7 +13,7 @@
                 <p class="eyebrow">Live operations</p>
                 <h1>Booking dashboard</h1>
                 <p class="hero-copy">
-                    Track this week's bookings in the home section and keep the full admin dashboard synced in real time.
+                    Live flash cards for every booking, with counts preserved and instant admin actions.
                 </p>
             </div>
             <div class="hero-stats">
@@ -33,58 +33,43 @@
         </header>
 
         <main class="layout">
-            <section class="panel controls">
-                <div>
-                    <p class="section-label">Dashboard filters</p>
-                    <h2>Live booking admin</h2>
-                </div>
-
-                <div class="control-grid">
-                    <label>
-                        <span>Tenant ID</span>
-                        <input type="text" id="tenantId" placeholder="Optional tenant ID">
-                    </label>
-
-                    <label>
-                        <span>Date</span>
-                        <input type="date" id="dateFilter">
-                    </label>
-                </div>
-
-                <div class="control-actions">
-                    <button id="loadButton" class="primary">Load bookings</button>
-                    <button id="clearButton" class="secondary" type="button">Clear filters</button>
-                    <p id="connectionStatus" class="status-note">Loading all bookings when the page opens.</p>
-                </div>
-            </section>
-
-            <section class="panel">
-                <div class="section-heading">
-                    <div>
-                        <p class="section-label">Home</p>
-                        <h2>This week bookings</h2>
-                    </div>
-                    <p class="section-subtitle">Cards in the middle section show full booking details for the current week.</p>
-                </div>
-                <div id="weekHighlights" class="highlight-grid"></div>
-                <div id="weekEmpty" class="empty-state hidden">No bookings scheduled for this week.</div>
-            </section>
-
             <section class="panel">
                 <div class="section-heading">
                     <div>
                         <p class="section-label">Dashboard</p>
-                        <h2>All other bookings</h2>
+                        <h2>All bookings</h2>
                     </div>
-                    <p class="section-subtitle">Old, upcoming, canceled, and pending bookings stay updated in real time.</p>
+                    <p class="section-subtitle">Confirm, reject, or mark pending and optionally send a comment to the user.</p>
                 </div>
+
+                <div class="toolbar">
+                    <div class="control-grid compact">
+                        <label>
+                            <span>Tenant ID</span>
+                            <input type="text" id="tenantId" placeholder="Optional tenant ID">
+                        </label>
+
+                        <label>
+                            <span>Date</span>
+                            <input type="date" id="dateFilter">
+                        </label>
+                    </div>
+
+                    <div class="control-actions compact-actions">
+                        <button id="loadButton" class="primary">Load bookings</button>
+                        <button id="clearButton" class="secondary" type="button">Clear filters</button>
+                        <p id="connectionStatus" class="status-note">Loading all bookings when the page opens.</p>
+                    </div>
+                </div>
+
                 <div class="filter-pills">
                     <button class="pill active" data-filter="all" type="button">All</button>
                     <button class="pill" data-filter="pending" type="button">Pending</button>
                     <button class="pill" data-filter="confirmed" type="button">Confirmed</button>
                     <button class="pill" data-filter="rejected" type="button">Rejected</button>
                 </div>
-                <div id="bookingGroups" class="group-stack"></div>
+
+                <div id="bookingsGrid" class="booking-grid"></div>
                 <div id="dashboardEmpty" class="empty-state hidden">No bookings found for the selected filters.</div>
             </section>
         </main>

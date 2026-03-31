@@ -13,6 +13,47 @@ function toDisplayDate(date) {
     return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`;
 }
 
+function normalizeDateInput(value) {
+    if (!value) {
+        return null;
+    }
+
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+        return value;
+    }
+
+    if (typeof value === "string") {
+        const trimmed = value.trim();
+
+        if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+            const [year, month, day] = trimmed.split("-").map(Number);
+            return new Date(year, month - 1, day);
+        }
+
+        if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
+            const [day, month, year] = trimmed.split("/").map(Number);
+            return new Date(year, month - 1, day);
+        }
+
+        const parsed = new Date(trimmed);
+        if (!Number.isNaN(parsed.getTime())) {
+            return parsed;
+        }
+    }
+
+    return null;
+}
+
+function formatDisplayDate(value) {
+    const normalized = normalizeDateInput(value);
+
+    if (!normalized) {
+        return "";
+    }
+
+    return toDisplayDate(normalized);
+}
+
 function addDays(date, days) {
     const copy = new Date(date);
     copy.setHours(0, 0, 0, 0);
@@ -51,7 +92,9 @@ function isValidTime(input) {
 
 module.exports = {
     addDays,
+    formatDisplayDate,
     isValidTime,
+    normalizeDateInput,
     parseDate,
     toDateOnlyString,
     toDisplayDate

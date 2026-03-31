@@ -13,6 +13,7 @@ router.get("/bookings/stream", controller.streamBookings);
 // APPROVE (POST ONLY)
 // ===============================
 router.post("/approve", controller.approveBooking);
+router.post("/pending", controller.markPendingBooking);
 
 // ===============================
 // REJECT (POST ONLY)

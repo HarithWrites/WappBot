@@ -5,19 +5,14 @@ const {
 } = require("../services/bookingService");
 
 const { sendMessage } = require("../services/whatsappService");
+const { formatDisplayDate } = require("../utils/validators");
 const db = require("../db");
 
-// ===============================
-// GET BOOKINGS
-// ===============================
 exports.getBookings = async (req, res) => {
     try {
         const { tenant_id, date, time, range } = req.query;
-
         const data = await getAllBookings(tenant_id, { date, time, range });
-
         return res.json(data);
-
     } catch (err) {
         console.error("getBookings error:", err);
         return res.status(500).json({ error: "Internal server error" });
@@ -63,86 +58,78 @@ exports.streamBookings = async (req, res) => {
     });
 };
 
-// ===============================
-// APPROVE BOOKING
-// ===============================
-exports.approveBooking = async (req, res) => {
+async function getTenantByBooking(booking) {
+    const tenantRes = await db.query(
+        "SELECT * FROM tenants WHERE id=$1",
+        [booking.tenant_id]
+    );
+
+    return tenantRes.rows[0];
+}
+
+function buildStatusMessage(status, booking, comment) {
+    const commentLine = comment ? `\nComment: ${comment}` : "";
+    const dateText = formatDisplayDate(booking.booking_date) || booking.booking_date;
+
+    if (status === "confirmed") {
+        return `Booking CONFIRMED.
+Service: ${booking.service_name}
+Date: ${dateText}
+Time: ${booking.booking_time}${commentLine}`;
+    }
+
+    if (status === "rejected") {
+        return `Booking REJECTED.
+Service: ${booking.service_name}
+Date: ${dateText}
+Time: ${booking.booking_time}${commentLine}`;
+    }
+
+    return `Booking is still PENDING.
+Service: ${booking.service_name}
+Date: ${dateText}
+Time: ${booking.booking_time}${commentLine}`;
+}
+
+async function handleStatusUpdate(req, res, status, logLabel) {
     try {
-        const { bookingId } = req.body;
+        const { bookingId, comment } = req.body;
 
         if (!bookingId) {
             return res.status(400).json({ error: "bookingId required" });
         }
 
-        const booking = await updateBookingStatus(bookingId, "confirmed");
+        const booking = await updateBookingStatus(bookingId, status);
 
         if (!booking) {
             return res.status(404).json({ error: "Booking not found" });
         }
 
-        const tenantRes = await db.query(
-            "SELECT * FROM tenants WHERE id=$1",
-            [booking.tenant_id]
-        );
-
-        const tenant = tenantRes.rows[0];
+        const tenant = await getTenantByBooking(booking);
 
         if (tenant) {
             await sendMessage({
                 tenant,
                 to: booking.phone,
-                text: `Booking CONFIRMED ✅
-Service: ${booking.service_name}
-Date: ${booking.booking_date}
-Time: ${booking.booking_time}`
+                text: buildStatusMessage(status, booking, comment)
             });
         }
 
         return res.json({ success: true });
-
     } catch (err) {
-        console.error("approveBooking error:", err);
+        console.error(`${logLabel} error:`, err);
         return res.status(500).json({ error: "Internal server error" });
     }
+}
+
+exports.approveBooking = (req, res) => {
+    return handleStatusUpdate(req, res, "confirmed", "approveBooking");
 };
 
-// ===============================
-// REJECT BOOKING
-// ===============================
-exports.rejectBooking = async (req, res) => {
-    try {
-        const { bookingId } = req.body;
+exports.rejectBooking = (req, res) => {
+    return handleStatusUpdate(req, res, "rejected", "rejectBooking");
+};
 
-        if (!bookingId) {
-            return res.status(400).json({ error: "bookingId required" });
-        }
-
-        const booking = await updateBookingStatus(bookingId, "rejected");
-
-        if (!booking) {
-            return res.status(404).json({ error: "Booking not found" });
-        }
-
-        const tenantRes = await db.query(
-            "SELECT * FROM tenants WHERE id=$1",
-            [booking.tenant_id]
-        );
-
-        const tenant = tenantRes.rows[0];
-
-        if (tenant) {
-            await sendMessage({
-                tenant,
-                to: booking.phone,
-                text: `Booking REJECTED ❌
-Service: ${booking.service_name}`
-            });
-        }
-
-        return res.json({ success: true });
-
-    } catch (err) {
-        console.error("rejectBooking error:", err);
-        return res.status(500).json({ error: "Internal server error" });
-    }
+exports.markPendingBooking = (req, res) => {
+    return handleStatusUpdate(req, res, "pending", "markPendingBooking");
 };
