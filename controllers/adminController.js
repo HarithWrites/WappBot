@@ -1,4 +1,5 @@
 const {
+    bookingEvents,
     getAllBookings,
     updateBookingStatus
 } = require("../services/bookingService");
@@ -11,13 +12,13 @@ const db = require("../db");
 // ===============================
 exports.getBookings = async (req, res) => {
     try {
-        const { tenant_id, date, time } = req.query;
+        const { tenant_id, date, time, range = "upcoming_30_days" } = req.query;
 
         if (!tenant_id) {
             return res.status(400).json({ error: "tenant_id required" });
         }
 
-        const data = await getAllBookings(tenant_id, { date, time });
+        const data = await getAllBookings(tenant_id, { date, time, range });
 
         return res.json(data);
 
@@ -25,6 +26,49 @@ exports.getBookings = async (req, res) => {
         console.error("getBookings error:", err);
         return res.status(500).json({ error: "Internal server error" });
     }
+};
+
+exports.streamBookings = async (req, res) => {
+    const { tenant_id } = req.query;
+
+    if (!tenant_id) {
+        return res.status(400).json({ error: "tenant_id required" });
+    }
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders?.();
+
+    const sendEvent = (payload) => {
+        res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    sendEvent({ type: "connected", tenant_id });
+
+    const heartbeat = setInterval(() => {
+        res.write(": keep-alive\n\n");
+    }, 15000);
+
+    const listener = (event) => {
+        if (String(event.tenant_id) !== String(tenant_id)) {
+            return;
+        }
+
+        sendEvent({
+            type: event.type,
+            bookingId: event.bookingId,
+            tenant_id
+        });
+    };
+
+    bookingEvents.on("changed", listener);
+
+    req.on("close", () => {
+        clearInterval(heartbeat);
+        bookingEvents.off("changed", listener);
+        res.end();
+    });
 };
 
 // ===============================

@@ -1,231 +1,100 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Admin Dashboard</title>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <style>
-    body {
-        font-family: Arial;
-        margin: 0;
-        background: linear-gradient(135deg, #eef2ff, #f8fafc);
-    }
-
-    .header {
-        background: linear-gradient(135deg, #4f46e5, #7c3aed);
-        color: white;
-        padding: 20px;
-        text-align: center;
-        font-size: 22px;
-        font-weight: bold;
-    }
-
-    .container {
-        padding: 20px;
-    }
-
-    .filters {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-        margin-bottom: 20px;
-        justify-content: center;
-    }
-
-    input {
-        padding: 10px;
-        border-radius: 6px;
-        border: 1px solid #ccc;
-    }
-
-    button {
-        padding: 10px 14px;
-        border: none;
-        border-radius: 6px;
-        cursor: pointer;
-        font-weight: bold;
-    }
-
-    .primary {
-        background: #4f46e5;
-        color: white;
-    }
-
-    .approve {
-        background: #16a34a;
-        color: white;
-    }
-
-    .reject {
-        background: #dc2626;
-        color: white;
-    }
-
-    .card {
-        background: white;
-        border-radius: 12px;
-        padding: 15px;
-        margin-bottom: 12px;
-        box-shadow: 0 5px 15px rgba(0,0,0,0.05);
-    }
-
-    .row {
-        display: flex;
-        justify-content: space-between;
-        flex-wrap: wrap;
-    }
-
-    .status {
-        padding: 5px 10px;
-        border-radius: 6px;
-        font-size: 12px;
-        font-weight: bold;
-    }
-
-    .pending { background: orange; color: white; }
-    .confirmed { background: green; color: white; }
-    .rejected { background: red; color: white; }
-
-    .empty {
-        text-align: center;
-        padding: 20px;
-        color: #555;
-    }
-
-    @media(min-width: 768px) {
-        .card {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-    }
-    </style>
+    <title>Booking Dashboard</title>
+    <link rel="stylesheet" href="/style.css">
 </head>
-
 <body>
-
-<div class="header">📊 Booking Dashboard</div>
-
-<div class="container">
-
-<div class="filters">
-    <input type="text" id="tenantId" placeholder="Tenant ID">
-    <input type="date" id="dateFilter">
-    <input type="time" id="timeFilter">
-    <button class="primary" onclick="loadBookings()">Load</button>
-</div>
-
-<div id="content"></div>
-
-</div>
-
-<script>
-
-// ===============================
-// LOAD BOOKINGS
-// ===============================
-async function loadBookings() {
-
-    const tenant = document.getElementById("tenantId").value;
-    const date = document.getElementById("dateFilter").value;
-    const time = document.getElementById("timeFilter").value;
-
-    if (!tenant) {
-        alert("Enter Tenant ID");
-        return;
-    }
-
-    let url = `/admin/bookings?tenant_id=${tenant}`;
-
-    if (date) url += `&date=${date}`;
-    if (time) url += `&time=${time}`;
-
-    const res = await fetch(url);
-    const data = await res.json();
-
-    const container = document.getElementById("content");
-    container.innerHTML = "";
-
-    if (!data.length) {
-        container.innerHTML = `<div class="empty">No bookings found</div>`;
-        return;
-    }
-
-    data.forEach(b => {
-
-        container.innerHTML += `
-        <div class="card">
+    <div class="shell">
+        <header class="hero">
             <div>
-                <b>${b.service_name}</b><br>
-                📅 ${b.booking_date}<br>
-                ⏰ ${b.booking_time}
+                <p class="eyebrow">Live operations</p>
+                <h1>Booking dashboard</h1>
+                <p class="hero-copy">
+                    Track this week's bookings in the home section and keep the next 30 days synced in real time.
+                </p>
             </div>
-
-            <div>
-                <span class="status ${b.status}">${b.status}</span><br><br>
-
-                <button type="button" class="approve" onclick="approveBooking('${b.id}')">
-                    Approve
-                </button>
-
-                <button type="button" class="reject" onclick="rejectBooking('${b.id}')">
-                    Reject
-                </button>
+            <div class="hero-stats">
+                <article>
+                    <span id="statTotal">0</span>
+                    <label>Next 30 days</label>
+                </article>
+                <article>
+                    <span id="statWeek">0</span>
+                    <label>This week</label>
+                </article>
+                <article>
+                    <span id="statPending">0</span>
+                    <label>Pending</label>
+                </article>
             </div>
-        </div>
-        `;
-    });
-}
+        </header>
 
-// ===============================
-// APPROVE (POST)
-// ===============================
-async function approveBooking(id) {
+        <main class="layout">
+            <section class="panel controls">
+                <div>
+                    <p class="section-label">Dashboard filters</p>
+                    <h2>Load a tenant</h2>
+                </div>
 
-    const res = await fetch("/admin/approve", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ bookingId: id })
-    });
+                <div class="control-grid">
+                    <label>
+                        <span>Tenant ID</span>
+                        <input type="text" id="tenantId" placeholder="Enter tenant ID">
+                    </label>
 
-    const data = await res.json();
+                    <label>
+                        <span>Date</span>
+                        <input type="date" id="dateFilter">
+                    </label>
 
-    if (!data.success) {
-        alert("Approve failed");
-        return;
-    }
+                    <label>
+                        <span>Time</span>
+                        <input type="time" id="timeFilter" step="1800">
+                    </label>
+                </div>
 
-    alert("Approved ✅");
-    loadBookings();
-}
+                <div class="control-actions">
+                    <button id="loadButton" class="primary">Load bookings</button>
+                    <button id="clearButton" class="secondary" type="button">Clear filters</button>
+                    <p id="connectionStatus" class="status-note">Waiting for tenant selection.</p>
+                </div>
+            </section>
 
-// ===============================
-// REJECT (POST)
-// ===============================
-async function rejectBooking(id) {
+            <section class="panel">
+                <div class="section-heading">
+                    <div>
+                        <p class="section-label">Home</p>
+                        <h2>This week</h2>
+                    </div>
+                    <p class="section-subtitle">Bookings happening during the current week are highlighted here.</p>
+                </div>
+                <div id="weekHighlights" class="highlight-grid"></div>
+                <div id="weekEmpty" class="empty-state hidden">No bookings scheduled for this week.</div>
+            </section>
 
-    const res = await fetch("/admin/reject", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ bookingId: id })
-    });
+            <section class="panel">
+                <div class="section-heading">
+                    <div>
+                        <p class="section-label">Dashboard</p>
+                        <h2>Bookings for the next 30 days</h2>
+                    </div>
+                    <p class="section-subtitle">This list refreshes automatically when new bookings arrive or statuses change.</p>
+                </div>
+                <div class="filter-pills">
+                    <button class="pill active" data-filter="all" type="button">All</button>
+                    <button class="pill" data-filter="pending" type="button">Pending</button>
+                    <button class="pill" data-filter="confirmed" type="button">Confirmed</button>
+                    <button class="pill" data-filter="rejected" type="button">Rejected</button>
+                </div>
+                <div id="bookingsList" class="bookings-list"></div>
+                <div id="dashboardEmpty" class="empty-state hidden">No bookings found for the selected filters.</div>
+            </section>
+        </main>
+    </div>
 
-    const data = await res.json();
-
-    if (!data.success) {
-        alert("Reject failed");
-        return;
-    }
-
-    alert("Rejected ❌");
-    loadBookings();
-}
-
-</script>
-
+    <script src="/app.js"></script>
 </body>
 </html>

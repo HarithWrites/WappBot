@@ -17,6 +17,39 @@ setInterval(() => {
 // ===============================
 // MAIN WEBHOOK HANDLER
 // ===============================
+function extractIncomingContent(message) {
+    if (!message) {
+        return null;
+    }
+
+    if (message.type === "text") {
+        const text = message.text?.body;
+        return text ? { text: text.trim(), payload: null } : null;
+    }
+
+    if (message.type === "button") {
+        const payload = message.button?.payload || message.button?.text;
+        const text = message.button?.text || payload;
+        return payload ? { text: (text || "").trim(), payload: payload.trim() } : null;
+    }
+
+    if (message.type === "interactive") {
+        const interactive = message.interactive || {};
+        const reply = interactive.button_reply || interactive.list_reply;
+
+        if (!reply?.id) {
+            return null;
+        }
+
+        return {
+            text: (reply.title || reply.id).trim(),
+            payload: reply.id.trim()
+        };
+    }
+
+    return null;
+}
+
 exports.handleWebhook = async (req, res) => {
     try {
         const value = req.body?.entry?.[0]?.changes?.[0]?.value;
@@ -48,19 +81,14 @@ exports.handleWebhook = async (req, res) => {
         // Ignore system/invalid messages
         if (!message.from) return res.sendStatus(200);
 
-        // Only process text messages
-        if (message.type !== "text") {
+        const messageContent = extractIncomingContent(message);
+
+        if (!messageContent) {
             return res.sendStatus(200);
         }
 
-        // Safe text extraction
-        const rawText = message.text?.body;
-
-        if (!rawText || typeof rawText !== "string") {
-            return res.sendStatus(200);
-        }
-
-        const text = rawText.trim().toLowerCase();
+        const text = messageContent.text.trim().toLowerCase();
+        const payload = messageContent.payload?.trim().toLowerCase() || null;
 
         if (!text) {
             return res.sendStatus(200);
@@ -107,7 +135,8 @@ exports.handleWebhook = async (req, res) => {
         console.log("Incoming message", {
             tenant: tenant.id,
             phone,
-            text
+            text,
+            payload
         });
 
         // ===============================
@@ -116,7 +145,8 @@ exports.handleWebhook = async (req, res) => {
         await processMessage({
             tenant,
             phone,
-            text
+            text,
+            payload
         });
 
         // ===============================

@@ -7,6 +7,7 @@ const controller = require("../controllers/adminController");
 // GET BOOKINGS
 // ===============================
 router.get("/bookings", controller.getBookings);
+router.get("/bookings/stream", controller.streamBookings);
 
 // ===============================
 // APPROVE (POST ONLY)
