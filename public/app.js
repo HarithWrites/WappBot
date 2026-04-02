@@ -52,8 +52,36 @@ const closeRemarks = document.getElementById("closeRemarks");
 const closeModalDismiss = document.getElementById("closeModalDismiss");
 const closeModalSummary = document.getElementById("closeModalSummary");
 
+function normalizeDateValue(value) {
+    if (!value) {
+        return "";
+    }
+
+    const raw = String(value);
+    return raw.includes("T") ? raw.slice(0, 10) : raw;
+}
+
+function normalizeTimeValue(value) {
+    if (!value) {
+        return "";
+    }
+
+    const raw = String(value);
+    if (raw.includes("T")) {
+        const timePart = raw.split("T")[1] || "";
+        return timePart.replace("Z", "").slice(0, 8);
+    }
+
+    return raw.slice(0, 8);
+}
+
 function formatDisplayDate(dateString) {
-    const date = new Date(`${dateString}T00:00:00`);
+    const normalizedDate = normalizeDateValue(dateString);
+    const date = new Date(`${normalizedDate}T00:00:00`);
+
+    if (Number.isNaN(date.getTime())) {
+        return normalizedDate || "No date";
+    }
 
     return new Intl.DateTimeFormat("en-GB", {
         day: "2-digit",
@@ -63,9 +91,19 @@ function formatDisplayDate(dateString) {
 }
 
 function formatDisplayTime(timeString) {
-    const [hours, minutes] = String(timeString).split(":");
+    const normalizedTime = normalizeTimeValue(timeString);
+    const [hours, minutes] = normalizedTime.split(":");
+
+    if (hours == null || minutes == null) {
+        return normalizedTime || "No time";
+    }
+
     const date = new Date();
     date.setHours(Number(hours), Number(minutes), 0, 0);
+
+    if (Number.isNaN(date.getTime())) {
+        return normalizedTime || "No time";
+    }
 
     return new Intl.DateTimeFormat("en-US", {
         hour: "numeric",
@@ -87,7 +125,13 @@ function getWeekRange() {
 }
 
 function isThisWeek(dateString) {
-    const date = new Date(`${dateString}T00:00:00`);
+    const normalizedDate = normalizeDateValue(dateString);
+    const date = new Date(`${normalizedDate}T00:00:00`);
+
+    if (Number.isNaN(date.getTime())) {
+        return false;
+    }
+
     const { start, end } = getWeekRange();
     return date >= start && date <= end;
 }
@@ -128,7 +172,7 @@ function getFilteredBookings() {
             return false;
         }
 
-        if (dateInput.value && booking.booking_date !== dateInput.value) {
+        if (dateInput.value && normalizeDateValue(booking.booking_date) !== dateInput.value) {
             return false;
         }
 
