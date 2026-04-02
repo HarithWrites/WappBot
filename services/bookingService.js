@@ -3,6 +3,13 @@ const db = require("../db");
 
 const bookingEvents = new EventEmitter();
 
+class SlotAlreadyBookedError extends Error {
+    constructor() {
+        super("This slot has already been booked");
+        this.name = "SlotAlreadyBookedError";
+    }
+}
+
 async function createBooking({
     tenant_id,
     phone,
@@ -10,20 +17,53 @@ async function createBooking({
     booking_date,
     booking_time
 }) {
-    const res = await db.query(
-        `INSERT INTO bookings 
-        (tenant_id, phone, service_name, booking_date, booking_time, status)
-        VALUES ($1,$2,$3,$4,$5,'pending') RETURNING *`,
-        [tenant_id, phone, service_name, booking_date, booking_time]
-    );
+    const client = await db.connect();
 
-    const booking = res.rows[0];
-    bookingEvents.emit("changed", {
-        tenant_id,
-        bookingId: booking.id,
-        type: "created"
-    });
-    return booking;
+    try {
+        await client.query("BEGIN");
+
+        const existing = await client.query(
+            `SELECT id
+             FROM bookings
+             WHERE tenant_id=$1
+               AND booking_date=$2
+               AND booking_time=$3
+               AND status IN ('pending', 'confirmed')
+             LIMIT 1`,
+            [tenant_id, booking_date, booking_time]
+        );
+
+        if (existing.rows[0]) {
+            throw new SlotAlreadyBookedError();
+        }
+
+        const res = await client.query(
+            `INSERT INTO bookings
+            (tenant_id, phone, service_name, booking_date, booking_time, status)
+            VALUES ($1,$2,$3,$4,$5,'pending') RETURNING *`,
+            [tenant_id, phone, service_name, booking_date, booking_time]
+        );
+
+        await client.query("COMMIT");
+
+        const booking = res.rows[0];
+        bookingEvents.emit("changed", {
+            tenant_id,
+            bookingId: booking.id,
+            type: "created"
+        });
+        return booking;
+    } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+
+        if (err instanceof SlotAlreadyBookedError || err.code === "23505") {
+            throw new SlotAlreadyBookedError();
+        }
+
+        throw err;
+    } finally {
+        client.release();
+    }
 }
 
 async function getAllBookings(tenant_id, filters = {}) {
@@ -78,5 +118,6 @@ module.exports = {
     bookingEvents,
     createBooking,
     getAllBookings,
+    SlotAlreadyBookedError,
     updateBookingStatus
 };

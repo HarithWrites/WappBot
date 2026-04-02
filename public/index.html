@@ -7,72 +7,93 @@
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-    <div class="shell">
-        <header class="hero">
-            <div>
-                <p class="eyebrow">Live operations</p>
+    <div class="app-shell">
+        <section id="loginScreen" class="login-screen">
+            <div class="login-card">
+                <p class="eyebrow">Admin access</p>
                 <h1>Booking dashboard</h1>
                 <p class="hero-copy">
-                    Live flash cards for every booking, with counts preserved and instant admin actions.
+                    Sign in with your admin security token to manage live bookings and customer responses.
                 </p>
+
+                <form id="loginForm" class="login-form">
+                    <label>
+                        <span>Admin token</span>
+                        <input type="password" id="tenantId" placeholder="Enter your admin security token" autocomplete="current-password">
+                    </label>
+                    <button id="loginButton" class="primary" type="submit">Open dashboard</button>
+                </form>
+
+                <p id="loginStatus" class="status-note">Your token stays saved on this browser until you sign out.</p>
             </div>
-            <div class="hero-stats">
-                <article>
-                    <span id="statTotal">0</span>
-                    <label>Total bookings</label>
-                </article>
-                <article>
-                    <span id="statWeek">0</span>
-                    <label>This week</label>
-                </article>
-                <article>
-                    <span id="statPending">0</span>
-                    <label>Pending</label>
-                </article>
-            </div>
-        </header>
+        </section>
 
-        <main class="layout">
-            <section class="panel">
-                <div class="section-heading">
-                    <div>
-                        <p class="section-label">Dashboard</p>
-                        <h2>All bookings</h2>
-                    </div>
-                    <p class="section-subtitle">Confirm, reject, or mark pending and optionally send a comment to the user.</p>
+        <div id="dashboardShell" class="shell hidden">
+            <header class="hero">
+                <div class="hero-copy-block">
+                    <p class="eyebrow">Live operations</p>
+                    <h1>Booking dashboard</h1>
+                    <p class="hero-copy">
+                        Review incoming bookings, keep status changes moving, and stay synced with live updates.
+                    </p>
                 </div>
 
-                <div class="toolbar">
-                    <div class="control-grid compact">
-                        <label>
-                            <span>Tenant ID</span>
-                            <input type="text" id="tenantId" placeholder="Optional tenant ID">
-                        </label>
+                <div class="hero-corner">
+                    <div class="hero-stats">
+                        <article>
+                            <span id="statTotal">0</span>
+                            <label>Total bookings</label>
+                        </article>
+                        <article>
+                            <span id="statWeek">0</span>
+                            <label>This week</label>
+                        </article>
+                        <article>
+                            <span id="statPending">0</span>
+                            <label>Pending</label>
+                        </article>
+                    </div>
+                    <button id="logoutButton" class="secondary" type="button">Sign out</button>
+                </div>
+            </header>
 
-                        <label>
-                            <span>Date</span>
-                            <input type="date" id="dateFilter">
-                        </label>
+            <main class="layout">
+                <section class="panel">
+                    <div class="section-heading">
+                        <div>
+                            <p class="section-label">Dashboard</p>
+                            <h2>All bookings</h2>
+                        </div>
+                        <p class="section-subtitle">Confirm, reject, or keep a booking pending with an optional customer note.</p>
                     </div>
 
-                    <div class="control-actions compact-actions">
-                        <button id="loadButton" class="primary">Load bookings</button>
-                        <button id="clearButton" class="secondary" type="button">Clear filters</button>
-                        <p id="connectionStatus" class="status-note">Loading all bookings when the page opens.</p>
+                    <div class="toolbar">
+                        <div class="control-grid compact">
+                            <label>
+                                <span>Date</span>
+                                <input type="date" id="dateFilter">
+                            </label>
+                        </div>
+
+                        <div class="control-actions compact-actions">
+                            <button id="loadButton" class="primary" type="button">Refresh bookings</button>
+                            <button id="clearButton" class="secondary" type="button">Clear filters</button>
+                            <p id="connectionStatus" class="status-note">Checking your live connection.</p>
+                        </div>
                     </div>
-                </div>
 
-                <div class="filter-pills">
-                    <button class="pill active" data-filter="all" type="button">All</button>
-                    <button class="pill" data-filter="pending" type="button">Pending</button>
-                    <button class="pill" data-filter="confirmed" type="button">Confirmed</button>
-                    <button class="pill" data-filter="rejected" type="button">Rejected</button>
-                </div>
+                    <div class="filter-pills">
+                        <button class="pill active" data-filter="all" type="button">All</button>
+                        <button class="pill" data-filter="pending" type="button">Pending</button>
+                        <button class="pill" data-filter="confirmed" type="button">Confirmed</button>
+                        <button class="pill" data-filter="rejected" type="button">Rejected</button>
+                    </div>
 
-                <div id="bookingsGrid" class="booking-grid"></div>
-                <div id="dashboardEmpty" class="empty-state hidden">No bookings found for the selected filters.</div>
-            </section>
-        </main>
+                    <div id="bookingsGrid" class="booking-grid"></div>
+                    <div id="dashboardEmpty" class="empty-state hidden">No bookings found for the selected filters.</div>
+                </section>
+            </main>
+        </div>
     </div>
 
     <script src="/app.js"></script>

@@ -9,9 +9,9 @@ const pool = new Pool({
     idleTimeoutMillis: 30000
 });
 
-// SAFE CONNECTION TEST
-pool.connect()
-    .then(() => console.log("✅ PostgreSQL Connected"))
-    .catch(err => console.error("❌ PostgreSQL Error:", err.message));
+// Run a cheap query so we do not leak a checked-out client during boot.
+pool.query("SELECT 1")
+    .then(() => console.log("PostgreSQL connected"))
+    .catch((err) => console.error("PostgreSQL error:", err.message));
 
 module.exports = pool;

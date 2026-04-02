@@ -4,11 +4,15 @@ const {
     sendListMessage,
     sendMessage
 } = require("./whatsappService");
-const { createBooking } = require("./bookingService");
+const {
+    createBooking,
+    SlotAlreadyBookedError
+} = require("./bookingService");
 const { getServices } = require("./serviceService");
 const {
     addDays,
     formatDisplayDate,
+    getDateInTimeZone,
     parseDate,
     toDisplayDate
 } = require("../utils/validators");
@@ -52,44 +56,55 @@ function format12Hour(hours, minutes) {
 
 function buildTimeSlots(tenant) {
     const slots = [];
-    
+
     const open = tenant?.opening_hour || 9;
     const close = tenant?.closing_hour || 21;
     const interval = tenant?.slot_duration || 30;
 
-    for (let hour = open; hour <= close; hour += 1) {
-        for (let minute = 0; minute < 60; minute += interval) {
-            if (hour === close && minute > 0) {
-                break;
-            }
+    for (let totalMinutes = open * 60; totalMinutes < close * 60; totalMinutes += interval) {
+        const hour = Math.floor(totalMinutes / 60);
+        const minute = totalMinutes % 60;
+        const hh = String(hour).padStart(2, "0");
+        const mm = String(minute).padStart(2, "0");
 
-            const hh = String(hour).padStart(2, "0");
-            const mm = String(minute).padStart(2, "0");
-            slots.push({
-                id: `time_${hh}_${mm}`,
-                title: format12Hour(hour, minute),
-                dbValue: `${hh}:${mm}:00`
-            });
-        }
+        slots.push({
+            id: `time_${hh}_${mm}`,
+            title: format12Hour(hour, minute),
+            dbValue: `${hh}:${mm}:00`
+        });
     }
 
     return slots;
 }
 
 function getTimePeriods(tenant) {
-    const open = tenant?.opening_hour || 9;
-    const close = tenant?.closing_hour || 21;
-
-    return [
-        { id: "period_morning", title: "Morning", startHour: open, endHour: 12 },
-        { id: "period_afternoon", title: "Afternoon", startHour: 13, endHour: 16 },
-        { id: "period_evening", title: "Evening", startHour: 17, endHour: close }
+    const allSlots = buildTimeSlots(tenant);
+    const periods = [
+        { id: "period_morning", title: "Morning", startHour: 0, endHour: 11 },
+        { id: "period_afternoon", title: "Afternoon", startHour: 12, endHour: 16 },
+        { id: "period_evening", title: "Evening", startHour: 17, endHour: 23 }
     ];
+
+    return periods
+        .map((period) => {
+            const slots = allSlots.filter((slot) => {
+                const hour = Number(slot.dbValue.slice(0, 2));
+                return hour >= period.startHour && hour <= period.endHour;
+            });
+
+            return {
+                ...period,
+                slots
+            };
+        })
+        .filter((period) => period.slots.length > 0);
 }
 
-function getOtherDateOptions() {
+function getOtherDateOptions(tenant) {
+    const timeZone = tenant?.timezone;
+
     return [2, 3, 4].map((offset) => {
-        const date = addDays(new Date(), offset);
+        const date = addDays(getDateInTimeZone(timeZone), offset);
         const display = toDisplayDate(date);
         return {
             id: `date_${display.replace(/\//g, "_")}`,
@@ -99,9 +114,8 @@ function getOtherDateOptions() {
     });
 }
 
-function getCurrentWeekRange() {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+function getCurrentWeekRange(timeZone) {
+    const today = getDateInTimeZone(timeZone);
     const day = today.getDay();
     const diffToMonday = day === 0 ? -6 : 1 - day;
     const start = addDays(today, diffToMonday);
@@ -191,7 +205,7 @@ async function promptOtherDateSelection({ tenant, phone, tenant_id, service_name
         time: null
     });
 
-    const options = getOtherDateOptions();
+    const options = getOtherDateOptions(tenant);
 
     return sendListMessage({
         tenant,
@@ -221,13 +235,26 @@ async function promptTimePeriodSelection({ tenant, phone, tenant_id, service_nam
         time: null
     });
 
+    const periods = getTimePeriods(tenant);
+
+    if (!periods.length) {
+        return sendMessage({
+            tenant,
+            to: phone,
+            text: "No appointment times are available right now. Please try again later."
+        });
+    }
+
+    const openingHour = tenant?.opening_hour || 9;
+    const closingHour = tenant?.closing_hour || 21;
+
     return sendButtonsMessage({
         tenant,
         to: phone,
         header: "Choose a time window",
-        body: `Service: ${service_name}\nDate: ${formatDisplayDate(date)}\nChoose a slot from 9:00 AM to 9:00 PM.`,
+        body: `Service: ${service_name}\nDate: ${formatDisplayDate(date)}\nAvailable hours: ${format12Hour(openingHour, 0)} to ${format12Hour(closingHour, 0)}.`,
         footer: "Pick a period first",
-        buttons: getTimePeriods(tenant).map((period) => ({
+        buttons: periods.map((period) => ({
             id: period.id,
             title: period.title
         }))
@@ -244,22 +271,30 @@ async function promptTimeSelection({ tenant, phone, tenant_id, service_name, dat
 
     const periods = getTimePeriods(tenant);
     const period = periods.find((item) => item.id === periodId) || periods[0];
-    const slots = buildTimeSlots(tenant).filter((slot) => {
-        const hour = Number(slot.dbValue.slice(0, 2));
-        return hour >= period.startHour && hour <= period.endHour;
-    });
+
+    if (!period) {
+        return promptTimePeriodSelection({
+            tenant,
+            phone,
+            tenant_id,
+            service_name,
+            date
+        });
+    }
+
+    const slotDuration = tenant?.slot_duration || 30;
 
     return sendListMessage({
         tenant,
         to: phone,
         header: `${period.title} slots`,
-        body: `Service: ${service_name}\nDate: ${formatDisplayDate(date)}\nChoose one 30-minute slot.`,
+        body: `Service: ${service_name}\nDate: ${formatDisplayDate(date)}\nChoose one ${slotDuration}-minute slot.`,
         footer: "Single-select time list",
         buttonText: "View times",
         sections: [
             {
                 title: period.title,
-                rows: slots.map((slot) => ({
+                rows: period.slots.map((slot) => ({
                     id: slot.id,
                     title: slot.title,
                     description: "Tap to select"
@@ -278,7 +313,7 @@ async function promptConfirmation({ tenant, phone, tenant_id, service_name, date
     });
 
     const timeSlot = buildTimeSlots(tenant).find((slot) => slot.dbValue === time);
-    const week = getCurrentWeekRange();
+    const week = getCurrentWeekRange(tenant?.timezone);
     const bookingDate = new Date(`${date}T00:00:00`);
     const isThisWeek = bookingDate >= week.start && bookingDate <= week.end;
     const weekNote = isThisWeek ? "\nThis booking is in this week." : "";
@@ -346,7 +381,7 @@ async function processMessage({ tenant, phone, text, payload }) {
                     phone,
                     tenant_id,
                     service_name: stateData.service_name,
-                    date: parseDate("today")
+                    date: parseDate("today", tenant?.timezone)
                 });
             }
 
@@ -356,7 +391,7 @@ async function processMessage({ tenant, phone, text, payload }) {
                     phone,
                     tenant_id,
                     service_name: stateData.service_name,
-                    date: parseDate("tomorrow")
+                    date: parseDate("tomorrow", tenant?.timezone)
                 });
             }
 
@@ -369,7 +404,7 @@ async function processMessage({ tenant, phone, text, payload }) {
         }
 
         case "OTHER_DATE_SELECTION": {
-            const option = getOtherDateOptions().find((item) => item.id.toLowerCase() === input);
+            const option = getOtherDateOptions(tenant).find((item) => item.id.toLowerCase() === input);
 
             if (!option) {
                 return promptOtherDateSelection({
@@ -451,13 +486,35 @@ async function processMessage({ tenant, phone, text, payload }) {
                 });
             }
 
-            const booking = await createBooking({
-                tenant_id,
-                phone,
-                service_name: stateData.service_name,
-                booking_date: stateData.date,
-                booking_time: stateData.time
-            });
+            let booking;
+
+            try {
+                booking = await createBooking({
+                    tenant_id,
+                    phone,
+                    service_name: stateData.service_name,
+                    booking_date: stateData.date,
+                    booking_time: stateData.time
+                });
+            } catch (err) {
+                if (err instanceof SlotAlreadyBookedError) {
+                    await sendMessage({
+                        tenant,
+                        to: phone,
+                        text: "That time was just booked by someone else. Please choose another available slot."
+                    });
+
+                    return promptTimePeriodSelection({
+                        tenant,
+                        phone,
+                        tenant_id,
+                        service_name: stateData.service_name,
+                        date: stateData.date
+                    });
+                }
+
+                throw err;
+            }
 
             await sendMessage({
                 tenant,

@@ -1,15 +1,22 @@
 :root {
-  --bg: #f5efe5;
-  --panel: rgba(255, 251, 245, 0.88);
-  --panel-border: rgba(136, 86, 53, 0.12);
-  --ink: #2f241f;
-  --muted: #7b675c;
-  --accent: #b85c38;
-  --accent-deep: #8f3f24;
-  --success: #2d7a52;
-  --warn: #c7881a;
-  --danger: #b84040;
-  --shadow: 0 22px 50px rgba(86, 53, 33, 0.12);
+  --bg: #f3f4f6;
+  --bg-accent: #e7eef7;
+  --surface: #ffffff;
+  --surface-muted: #f8fafc;
+  --border: #e5e7eb;
+  --border-strong: #d1d5db;
+  --ink: #111827;
+  --muted: #6b7280;
+  --accent: #2563eb;
+  --accent-soft: #dbeafe;
+  --success: #15803d;
+  --success-soft: #dcfce7;
+  --warn: #b45309;
+  --warn-soft: #fef3c7;
+  --danger: #b91c1c;
+  --danger-soft: #fee2e2;
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08);
+  --shadow-md: 0 14px 38px rgba(15, 23, 42, 0.08);
 }
 
 * {
@@ -19,133 +26,176 @@
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   color: var(--ink);
   background:
-    radial-gradient(circle at top left, rgba(255, 214, 177, 0.8), transparent 34%),
-    radial-gradient(circle at top right, rgba(191, 220, 203, 0.65), transparent 28%),
-    linear-gradient(180deg, #fbf7f2 0%, var(--bg) 48%, #efe2d4 100%);
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(14, 165, 233, 0.07), transparent 24%),
+    linear-gradient(180deg, #f9fafb 0%, var(--bg) 100%);
+}
+
+.app-shell {
+  min-height: 100vh;
 }
 
 .shell {
-  width: min(1200px, calc(100% - 32px));
+  width: min(1220px, calc(100% - 32px));
   margin: 0 auto;
-  padding: 28px 0 40px;
+  padding: 32px 0 40px;
+}
+
+.login-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.login-card,
+.panel,
+.booking-card,
+.empty-state,
+.hero-stats article {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.login-card {
+  width: min(460px, 100%);
+  padding: 32px;
+  border-radius: 24px;
+}
+
+.login-form {
+  display: grid;
+  gap: 16px;
+  margin: 28px 0 12px;
 }
 
 .hero {
-  display: grid;
-  gap: 24px;
-  grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr);
+  position: relative;
+  overflow: hidden;
   margin-bottom: 24px;
-  padding: 28px;
-  border: 1px solid var(--panel-border);
+  padding: 32px;
+  padding-right: 320px;
+  border: 1px solid var(--border);
   border-radius: 28px;
-  background: linear-gradient(135deg, rgba(91, 45, 29, 0.92), rgba(184, 92, 56, 0.9));
-  color: #fff8f2;
-  box-shadow: var(--shadow);
+  background:
+    linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(14, 165, 233, 0.03)),
+    var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+.hero::after {
+  content: "";
+  position: absolute;
+  inset: auto -80px -90px auto;
+  width: 220px;
+  height: 220px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.12), transparent 70%);
+  pointer-events: none;
+}
+
+.hero-copy-block {
+  max-width: 58ch;
+}
+
+.hero-corner {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  display: grid;
+  gap: 12px;
+  justify-items: end;
 }
 
 .eyebrow,
 .section-label {
   margin: 0 0 8px;
-  letter-spacing: 0.16em;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  font-size: 0.72rem;
-  font-family: "Trebuchet MS", sans-serif;
+  color: var(--muted);
 }
 
 .hero h1,
-.section-heading h2 {
+.section-heading h2,
+.login-card h1 {
   margin: 0;
-  font-size: clamp(2rem, 4vw, 3.4rem);
-  line-height: 0.98;
-  font-weight: 700;
+  font-size: clamp(2rem, 4vw, 3.3rem);
+  line-height: 1;
 }
 
 .section-heading h2 {
-  font-size: clamp(1.4rem, 2vw, 2rem);
-  color: var(--ink);
+  font-size: clamp(1.35rem, 2vw, 1.85rem);
 }
 
 .hero-copy,
 .section-subtitle,
 .status-note {
   margin: 0;
-  font-size: 1rem;
   line-height: 1.6;
-}
-
-.hero-copy {
-  color: rgba(255, 248, 242, 0.84);
-  max-width: 55ch;
-}
-
-.status-note,
-.section-subtitle {
   color: var(--muted);
 }
 
 .hero-stats {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .hero-stats article {
-  padding: 18px;
-  border-radius: 20px;
-  background: rgba(255, 248, 242, 0.14);
-  border: 1px solid rgba(255, 248, 242, 0.18);
+  min-width: 170px;
+  padding: 14px 16px;
+  border-radius: 16px;
 }
 
 .hero-stats span {
   display: block;
-  font-size: 2rem;
+  font-size: 1.7rem;
   font-weight: 700;
+  color: var(--ink);
 }
 
 .hero-stats label {
   display: block;
   margin-top: 4px;
-  color: rgba(255, 248, 242, 0.78);
-  font-family: "Trebuchet MS", sans-serif;
+  font-size: 0.9rem;
+  color: var(--muted);
 }
 
 .layout {
   display: grid;
-  gap: 24px;
 }
 
 .panel {
   padding: 24px;
-  border: 1px solid var(--panel-border);
   border-radius: 24px;
-  background: var(--panel);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(14px);
 }
 
 .toolbar {
   display: grid;
   gap: 16px;
-  margin: 18px 0;
+  margin: 20px 0 18px;
 }
 
 .control-grid {
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
 .compact {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 260px));
+  grid-template-columns: minmax(180px, 240px);
 }
 
 label span {
   display: block;
   margin-bottom: 8px;
   font-size: 0.95rem;
-  color: var(--muted);
+  font-weight: 600;
+  color: var(--ink);
 }
 
 input,
@@ -153,8 +203,8 @@ textarea {
   width: 100%;
   padding: 12px 14px;
   border-radius: 14px;
-  border: 1px solid rgba(136, 86, 53, 0.18);
-  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
   color: var(--ink);
   font: inherit;
 }
@@ -166,7 +216,7 @@ textarea {
 
 input:focus,
 textarea:focus {
-  outline: 2px solid rgba(184, 92, 56, 0.2);
+  outline: 3px solid rgba(37, 99, 235, 0.14);
   border-color: var(--accent);
 }
 
@@ -187,12 +237,13 @@ textarea:focus {
 }
 
 button {
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 999px;
   padding: 11px 18px;
   cursor: pointer;
   font: inherit;
-  transition: transform 150ms ease, opacity 150ms ease, background 150ms ease;
+  font-weight: 600;
+  transition: transform 150ms ease, background 150ms ease, border-color 150ms ease, opacity 150ms ease;
 }
 
 button:hover {
@@ -207,21 +258,23 @@ button:disabled {
 
 .primary {
   background: var(--accent);
-  color: #fff8f2;
+  color: #ffffff;
 }
 
 .secondary {
-  background: rgba(184, 92, 56, 0.12);
-  color: var(--accent-deep);
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--ink);
 }
 
 .approve {
   background: var(--success);
-  color: #f8fff8;
+  color: #ffffff;
 }
 
 .reject {
-  background: rgba(184, 64, 64, 0.12);
+  background: var(--danger-soft);
+  border-color: #fecaca;
   color: var(--danger);
 }
 
@@ -233,36 +286,36 @@ button:disabled {
 }
 
 .pill {
-  background: rgba(136, 86, 53, 0.08);
+  background: var(--surface-muted);
+  border-color: var(--border);
   color: var(--muted);
 }
 
 .pill.active {
   background: var(--ink);
-  color: #fff8f2;
+  border-color: var(--ink);
+  color: #ffffff;
 }
 
 .booking-grid {
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
 }
 
 .booking-card {
-  border-radius: 22px;
-  border: 1px solid rgba(136, 86, 53, 0.12);
-  background: rgba(255, 255, 255, 0.82);
   padding: 18px;
+  border-radius: 22px;
 }
 
 .booking-card.this-week {
-  border-color: rgba(184, 92, 56, 0.5);
-  box-shadow: inset 0 0 0 1px rgba(184, 92, 56, 0.12);
+  border-color: #93c5fd;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.08);
 }
 
 .booking-title {
   margin: 0 0 6px;
-  font-size: 1.15rem;
+  font-size: 1.1rem;
 }
 
 .booking-subtitle,
@@ -284,29 +337,28 @@ button:disabled {
   padding: 7px 12px;
   border-radius: 999px;
   font-size: 0.82rem;
+  font-weight: 700;
   text-transform: capitalize;
-  font-family: "Trebuchet MS", sans-serif;
 }
 
 .status-pending {
-  background: rgba(199, 136, 26, 0.16);
+  background: var(--warn-soft);
   color: var(--warn);
 }
 
 .status-confirmed {
-  background: rgba(45, 122, 82, 0.15);
+  background: var(--success-soft);
   color: var(--success);
 }
 
 .status-rejected {
-  background: rgba(184, 64, 64, 0.12);
+  background: var(--danger-soft);
   color: var(--danger);
 }
 
 .empty-state {
   padding: 24px;
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.7);
   color: var(--muted);
   text-align: center;
 }
@@ -315,19 +367,41 @@ button:disabled {
   display: none;
 }
 
+@media (max-width: 920px) {
+  .hero {
+    padding-right: 32px;
+  }
+
+  .hero-corner {
+    position: static;
+    margin-top: 24px;
+    justify-items: stretch;
+  }
+
+  .hero-stats {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+}
+
 @media (max-width: 780px) {
   .shell {
-    width: min(100% - 20px, 1200px);
+    width: min(100% - 20px, 1220px);
     padding-top: 16px;
   }
 
+  .login-card,
   .hero,
   .panel {
     padding: 20px;
-    border-radius: 22px;
+    border-radius: 20px;
   }
 
-  .hero {
+  .hero h1,
+  .login-card h1 {
+    font-size: 2.2rem;
+  }
+
+  .booking-grid {
     grid-template-columns: 1fr;
   }
 }

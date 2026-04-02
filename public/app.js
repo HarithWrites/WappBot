@@ -1,13 +1,19 @@
 let allBookings = [];
 let currentFilter = "all";
 let stream;
-let streamTenantId = null;
+let streamTenantToken = null;
+let adminToken = "";
 
+const loginScreen = document.getElementById("loginScreen");
+const dashboardShell = document.getElementById("dashboardShell");
+const loginForm = document.getElementById("loginForm");
 const tenantInput = document.getElementById("tenantId");
 const dateInput = document.getElementById("dateFilter");
 const bookingsGrid = document.getElementById("bookingsGrid");
 const dashboardEmpty = document.getElementById("dashboardEmpty");
 const connectionStatus = document.getElementById("connectionStatus");
+const loginStatus = document.getElementById("loginStatus");
+const logoutButton = document.getElementById("logoutButton");
 
 function formatDisplayDate(dateString) {
     let date;
@@ -129,32 +135,89 @@ function render() {
 }
 
 function buildBookingsUrl() {
-    const token = tenantInput.value.trim();
     const params = new URLSearchParams();
-
-    if (token) {
-        params.set("token", token);
-    }
-
+    params.set("token", adminToken);
     return `/admin/bookings?${params.toString()}`;
 }
 
+function closeStream() {
+    if (stream) {
+        stream.close();
+        stream = null;
+    }
+
+    streamTenantToken = null;
+}
+
+function showLogin(message = "Your token stays saved on this browser until you sign out.") {
+    closeStream();
+    allBookings = [];
+    render();
+    loginScreen.classList.remove("hidden");
+    dashboardShell.classList.add("hidden");
+    loginStatus.textContent = message;
+    connectionStatus.textContent = "Signed out.";
+    tenantInput.focus();
+}
+
+function showDashboard() {
+    loginScreen.classList.add("hidden");
+    dashboardShell.classList.remove("hidden");
+}
+
+function saveToken(token) {
+    adminToken = token;
+    localStorage.setItem("adminToken", token);
+}
+
+function clearToken() {
+    adminToken = "";
+    localStorage.removeItem("adminToken");
+    tenantInput.value = "";
+}
+
+function handleUnauthorized() {
+    clearToken();
+    showLogin("Your session expired or the token was invalid. Sign in again to continue.");
+}
+
+async function fetchJson(url, options = {}) {
+    const res = await fetch(url, options);
+
+    if (res.status === 401 || res.status === 403) {
+        handleUnauthorized();
+        throw new Error("Unauthorized");
+    }
+
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok) {
+        throw new Error(data?.error || "Request failed");
+    }
+
+    return data;
+}
+
 async function loadBookings() {
-    const url = buildBookingsUrl();
+    if (!adminToken) {
+        showLogin();
+        return;
+    }
+
     connectionStatus.textContent = "Loading bookings...";
-    localStorage.setItem("adminToken", tenantInput.value.trim());
 
     try {
-        const res = await fetch(url);
-        const data = await res.json();
-
+        const data = await fetchJson(buildBookingsUrl());
         allBookings = Array.isArray(data) ? data : [];
+        showDashboard();
         render();
         connectionStatus.textContent = "Live updates connected.";
-        connectStream(tenantInput.value.trim());
+        connectStream(adminToken);
     } catch (err) {
-        console.error(err);
-        connectionStatus.textContent = "Could not load bookings right now.";
+        if (err.message !== "Unauthorized") {
+            console.error(err);
+            connectionStatus.textContent = "Could not load bookings right now.";
+        }
     }
 }
 
@@ -167,22 +230,19 @@ async function updateBookingStatus(bookingId, status) {
     const actionName = status === "confirmed" ? "approve" : status;
     const button = document.querySelector(`[data-id="${bookingId}"][data-action="${actionName}"]`);
     const comment = document.querySelector(`[data-comment-for="${bookingId}"]`)?.value?.trim() || "";
-    const token = tenantInput.value.trim();
 
     if (button) {
         button.disabled = true;
     }
 
     try {
-        const res = await fetch(endpoint, {
+        const data = await fetchJson(endpoint, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify({ bookingId, comment, token })
+            body: JSON.stringify({ bookingId, comment, token: adminToken })
         });
-
-        const data = await res.json();
 
         if (!data.success) {
             throw new Error("Status update failed");
@@ -190,8 +250,10 @@ async function updateBookingStatus(bookingId, status) {
 
         await loadBookings();
     } catch (err) {
-        console.error(err);
-        connectionStatus.textContent = "Status update failed. Please retry.";
+        if (err.message !== "Unauthorized") {
+            console.error(err);
+            connectionStatus.textContent = "Status update failed. Please retry.";
+        }
     } finally {
         if (button) {
             button.disabled = false;
@@ -200,15 +262,13 @@ async function updateBookingStatus(bookingId, status) {
 }
 
 function connectStream(token) {
-    if (!token || (stream && streamTenantId === token)) {
+    if (!token || (stream && streamTenantToken === token)) {
         return;
     }
 
-    if (stream) {
-        stream.close();
-    }
+    closeStream();
 
-    streamTenantId = token;
+    streamTenantToken = token;
     const query = `?token=${encodeURIComponent(token)}`;
     stream = new EventSource(`/admin/bookings/stream${query}`);
 
@@ -235,14 +295,38 @@ function connectStream(token) {
     };
 }
 
-document.getElementById("loadButton").addEventListener("click", loadBookings);
-document.getElementById("clearButton").addEventListener("click", () => {
+function resetFilters() {
     dateInput.value = "";
     currentFilter = "all";
     document.querySelectorAll(".pill").forEach((pill) => {
         pill.classList.toggle("active", pill.dataset.filter === "all");
     });
-    loadBookings();
+}
+
+loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const token = tenantInput.value.trim();
+
+    if (!token) {
+        loginStatus.textContent = "Enter your admin token to continue.";
+        return;
+    }
+
+    loginStatus.textContent = "Signing you in...";
+    saveToken(token);
+    await loadBookings();
+});
+
+document.getElementById("loadButton").addEventListener("click", loadBookings);
+document.getElementById("clearButton").addEventListener("click", () => {
+    resetFilters();
+    renderDashboard();
+});
+
+logoutButton.addEventListener("click", () => {
+    clearToken();
+    resetFilters();
+    showLogin("Signed out. Enter your admin token to open the dashboard again.");
 });
 
 document.querySelectorAll(".pill").forEach((pill) => {
@@ -273,5 +357,11 @@ bookingsGrid.addEventListener("click", (event) => {
 });
 
 tenantInput.value = localStorage.getItem("adminToken") || "";
-tenantInput.placeholder = "Enter Admin Security Token";
-loadBookings();
+
+if (tenantInput.value.trim()) {
+    saveToken(tenantInput.value.trim());
+    loginStatus.textContent = "Restoring your session...";
+    loadBookings();
+} else {
+    showLogin();
+}

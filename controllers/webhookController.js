@@ -1,18 +1,6 @@
 const { processMessage } = require("../services/conversationService");
 const { getTenantByPhoneNumberId } = require("../services/tenantService");
-
-// ===============================
-// DEDUP STORE (PREVENT DUPLICATES)
-// ===============================
-const processedMessages = new Set();
-
-// Cleanup to avoid memory growth
-setInterval(() => {
-    if (processedMessages.size > 10000) {
-        processedMessages.clear();
-        console.log("Dedup cache cleared");
-    }
-}, 10 * 60 * 1000); // every 10 mins
+const { claimWebhookMessage } = require("../services/webhookDedupService");
 
 // ===============================
 // MAIN WEBHOOK HANDLER
@@ -98,21 +86,6 @@ exports.handleWebhook = async (req, res) => {
         const phone = message.from;
 
         // ===============================
-        // DEDUPLICATION (IMPORTANT)
-        // ===============================
-        if (processedMessages.has(messageId)) {
-            console.log("Duplicate ignored:", messageId);
-            return res.sendStatus(200);
-        }
-
-        processedMessages.add(messageId);
-
-        // Remove after 5 minutes
-        setTimeout(() => {
-            processedMessages.delete(messageId);
-        }, 5 * 60 * 1000);
-
-        // ===============================
         // TENANT RESOLUTION (DYNAMIC)
         // ===============================
         const phoneNumberId = value.metadata?.phone_number_id;
@@ -126,6 +99,21 @@ exports.handleWebhook = async (req, res) => {
 
         if (!tenant) {
             console.error("Tenant not found for:", phoneNumberId);
+            return res.sendStatus(200);
+        }
+
+        // ===============================
+        // DEDUPLICATION (DATABASE-BACKED)
+        // ===============================
+        const claimed = await claimWebhookMessage({
+            messageId,
+            tenantId: tenant.id,
+            phone,
+            phoneNumberId
+        });
+
+        if (!claimed) {
+            console.log("Duplicate ignored:", messageId);
             return res.sendStatus(200);
         }
 

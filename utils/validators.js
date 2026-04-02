@@ -2,6 +2,45 @@ function pad(value) {
     return String(value).padStart(2, "0");
 }
 
+function getTimeZoneOrDefault(timeZone) {
+    if (!timeZone) {
+        return "UTC";
+    }
+
+    try {
+        Intl.DateTimeFormat("en-US", { timeZone }).format(new Date());
+        return timeZone;
+    } catch (err) {
+        return "UTC";
+    }
+}
+
+function getDatePartsInTimeZone(date, timeZone) {
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+        timeZone: getTimeZoneOrDefault(timeZone),
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+    });
+
+    const parts = formatter.formatToParts(date);
+    const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+
+    return {
+        year: Number(map.year),
+        month: Number(map.month),
+        day: Number(map.day)
+    };
+}
+
+function getDateInTimeZone(timeZone, offsetDays = 0) {
+    const { year, month, day } = getDatePartsInTimeZone(new Date(), timeZone);
+    const date = new Date(year, month - 1, day);
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() + offsetDays);
+    return date;
+}
+
 function toDateOnlyString(date) {
     const year = date.getFullYear();
     const month = pad(date.getMonth() + 1);
@@ -61,10 +100,9 @@ function addDays(date, days) {
     return copy;
 }
 
-function parseDate(input) {
+function parseDate(input, timeZone) {
     const normalized = input.trim().toLowerCase();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = getDateInTimeZone(timeZone, 0);
 
     if (normalized === "today") return toDateOnlyString(today);
     if (normalized === "tomorrow") return toDateOnlyString(addDays(today, 1));
@@ -93,6 +131,7 @@ function isValidTime(input) {
 module.exports = {
     addDays,
     formatDisplayDate,
+    getDateInTimeZone,
     isValidTime,
     normalizeDateInput,
     parseDate,
