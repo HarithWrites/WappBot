@@ -8,6 +8,11 @@ async function ensureDatabaseSchema() {
 
     await db.query(`
         ALTER TABLE tenants
+        ADD COLUMN IF NOT EXISTS business_name TEXT
+    `);
+
+    await db.query(`
+        ALTER TABLE tenants
         ADD COLUMN IF NOT EXISTS max_parallel_appointments INTEGER NOT NULL DEFAULT 1
     `);
 
@@ -26,6 +31,13 @@ async function ensureDatabaseSchema() {
         SET max_parallel_appointments = 1
         WHERE max_parallel_appointments IS NULL
            OR max_parallel_appointments < 1
+    `);
+
+    await db.query(`
+        UPDATE tenants
+        SET business_name = CONCAT('Tenant ', id::text)
+        WHERE business_name IS NULL
+           OR btrim(business_name) = ''
     `);
 
     await db.query(`

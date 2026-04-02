@@ -13,8 +13,14 @@ exports.getBookings = async (req, res) => {
     try {
         const tenant_id = req.tenant.id;
         const { date, time, range } = req.query;
+        const tenantName = req.tenant.business_name || `Tenant ${req.tenant.id}`;
         const data = await getAllBookings(tenant_id, { date, time, range });
-        return res.json(data);
+
+        const normalized = data.map((booking) => ({
+            ...booking,
+            tenant_name: tenantName
+        }));
+        return res.json(normalized);
     } catch (err) {
         console.error("getBookings error:", err);
         return res.status(500).json({ error: "Internal server error" });

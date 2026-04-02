@@ -93,14 +93,7 @@ async function createBooking({
 }
 
 async function getAllBookings(tenant_id, filters = {}) {
-    let query = `
-        SELECT
-            bookings.*,
-            COALESCE(tenants.business_name, CONCAT('Tenant ', bookings.tenant_id::text)) AS tenant_name
-        FROM bookings
-        LEFT JOIN tenants ON tenants.id = bookings.tenant_id
-        WHERE 1=1
-    `;
+    let query = "SELECT * FROM bookings WHERE 1=1";
     let values = [];
 
     if (tenant_id) {
