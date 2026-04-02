@@ -129,11 +129,11 @@ function render() {
 }
 
 function buildBookingsUrl() {
-    const tenantId = tenantInput.value.trim();
+    const token = tenantInput.value.trim();
     const params = new URLSearchParams();
 
-    if (tenantId) {
-        params.set("tenant_id", tenantId);
+    if (token) {
+        params.set("token", token);
     }
 
     return `/admin/bookings?${params.toString()}`;
@@ -142,7 +142,7 @@ function buildBookingsUrl() {
 async function loadBookings() {
     const url = buildBookingsUrl();
     connectionStatus.textContent = "Loading bookings...";
-    localStorage.setItem("tenantId", tenantInput.value.trim());
+    localStorage.setItem("adminToken", tenantInput.value.trim());
 
     try {
         const res = await fetch(url);
@@ -151,7 +151,7 @@ async function loadBookings() {
         allBookings = Array.isArray(data) ? data : [];
         render();
         connectionStatus.textContent = "Live updates connected.";
-        connectStream(tenantInput.value.trim() || "");
+        connectStream(tenantInput.value.trim());
     } catch (err) {
         console.error(err);
         connectionStatus.textContent = "Could not load bookings right now.";
@@ -167,6 +167,7 @@ async function updateBookingStatus(bookingId, status) {
     const actionName = status === "confirmed" ? "approve" : status;
     const button = document.querySelector(`[data-id="${bookingId}"][data-action="${actionName}"]`);
     const comment = document.querySelector(`[data-comment-for="${bookingId}"]`)?.value?.trim() || "";
+    const token = tenantInput.value.trim();
 
     if (button) {
         button.disabled = true;
@@ -178,7 +179,7 @@ async function updateBookingStatus(bookingId, status) {
             headers: {
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify({ bookingId, comment })
+            body: JSON.stringify({ bookingId, comment, token })
         });
 
         const data = await res.json();
@@ -198,8 +199,8 @@ async function updateBookingStatus(bookingId, status) {
     }
 }
 
-function connectStream(tenantId) {
-    if (stream && streamTenantId === tenantId) {
+function connectStream(token) {
+    if (!token || (stream && streamTenantId === token)) {
         return;
     }
 
@@ -207,8 +208,8 @@ function connectStream(tenantId) {
         stream.close();
     }
 
-    streamTenantId = tenantId;
-    const query = tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : "";
+    streamTenantId = token;
+    const query = `?token=${encodeURIComponent(token)}`;
     stream = new EventSource(`/admin/bookings/stream${query}`);
 
     stream.onopen = () => {
@@ -271,5 +272,6 @@ bookingsGrid.addEventListener("click", (event) => {
     updateBookingStatus(id, nextStatus);
 });
 
-tenantInput.value = localStorage.getItem("tenantId") || "";
+tenantInput.value = localStorage.getItem("adminToken") || "";
+tenantInput.placeholder = "Enter Admin Security Token";
 loadBookings();

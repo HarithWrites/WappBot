@@ -55,10 +55,10 @@ async function getAllBookings(tenant_id, filters = {}) {
     return res.rows;
 }
 
-async function updateBookingStatus(id, status) {
+async function updateBookingStatus(id, status, tenant_id) {
     const res = await db.query(
-        `UPDATE bookings SET status=$1 WHERE id=$2 RETURNING *`,
-        [status, id]
+        `UPDATE bookings SET status=$1 WHERE id=$2 AND tenant_id=$3 RETURNING *`,
+        [status, id, tenant_id]
     );
 
     const booking = res.rows[0];

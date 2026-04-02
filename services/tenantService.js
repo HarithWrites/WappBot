@@ -8,4 +8,12 @@ async function getTenantByPhoneNumberId(phoneNumberId) {
     return res.rows[0];
 }
 
-module.exports = { getTenantByPhoneNumberId };
+async function getTenantByAdminToken(adminToken) {
+    const res = await db.query(
+        "SELECT * FROM tenants WHERE admin_token=$1",
+        [adminToken]
+    );
+    return res.rows[0];
+}
+
+module.exports = { getTenantByPhoneNumberId, getTenantByAdminToken };

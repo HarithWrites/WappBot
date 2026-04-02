@@ -13,10 +13,6 @@ const {
     toDisplayDate
 } = require("../utils/validators");
 
-const OPENING_HOUR = 9;
-const CLOSING_HOUR = 21;
-const HALF_HOUR_MINUTES = 30;
-
 async function getState(phone, tenant_id) {
     const res = await db.query(
         "SELECT * FROM conversation_state WHERE phone=$1 AND tenant_id=$2",
@@ -54,12 +50,16 @@ function format12Hour(hours, minutes) {
     return `${normalizedHours}:${String(minutes).padStart(2, "0")} ${meridiem}`;
 }
 
-function buildTimeSlots() {
+function buildTimeSlots(tenant) {
     const slots = [];
+    
+    const open = tenant?.opening_hour || 9;
+    const close = tenant?.closing_hour || 21;
+    const interval = tenant?.slot_duration || 30;
 
-    for (let hour = OPENING_HOUR; hour <= CLOSING_HOUR; hour += 1) {
-        for (let minute = 0; minute < 60; minute += HALF_HOUR_MINUTES) {
-            if (hour === CLOSING_HOUR && minute > 0) {
+    for (let hour = open; hour <= close; hour += 1) {
+        for (let minute = 0; minute < 60; minute += interval) {
+            if (hour === close && minute > 0) {
                 break;
             }
 
@@ -76,12 +76,16 @@ function buildTimeSlots() {
     return slots;
 }
 
-const TIME_SLOTS = buildTimeSlots();
-const TIME_PERIODS = [
-    { id: "period_morning", title: "Morning", startHour: 9, endHour: 12 },
-    { id: "period_afternoon", title: "Afternoon", startHour: 13, endHour: 16 },
-    { id: "period_evening", title: "Evening", startHour: 17, endHour: 21 }
-];
+function getTimePeriods(tenant) {
+    const open = tenant?.opening_hour || 9;
+    const close = tenant?.closing_hour || 21;
+
+    return [
+        { id: "period_morning", title: "Morning", startHour: open, endHour: 12 },
+        { id: "period_afternoon", title: "Afternoon", startHour: 13, endHour: 16 },
+        { id: "period_evening", title: "Evening", startHour: 17, endHour: close }
+    ];
+}
 
 function getOtherDateOptions() {
     return [2, 3, 4].map((offset) => {
@@ -223,7 +227,7 @@ async function promptTimePeriodSelection({ tenant, phone, tenant_id, service_nam
         header: "Choose a time window",
         body: `Service: ${service_name}\nDate: ${formatDisplayDate(date)}\nChoose a slot from 9:00 AM to 9:00 PM.`,
         footer: "Pick a period first",
-        buttons: TIME_PERIODS.map((period) => ({
+        buttons: getTimePeriods(tenant).map((period) => ({
             id: period.id,
             title: period.title
         }))
@@ -238,8 +242,9 @@ async function promptTimeSelection({ tenant, phone, tenant_id, service_name, dat
         time: null
     });
 
-    const period = TIME_PERIODS.find((item) => item.id === periodId) || TIME_PERIODS[0];
-    const slots = TIME_SLOTS.filter((slot) => {
+    const periods = getTimePeriods(tenant);
+    const period = periods.find((item) => item.id === periodId) || periods[0];
+    const slots = buildTimeSlots(tenant).filter((slot) => {
         const hour = Number(slot.dbValue.slice(0, 2));
         return hour >= period.startHour && hour <= period.endHour;
     });
@@ -272,7 +277,7 @@ async function promptConfirmation({ tenant, phone, tenant_id, service_name, date
         time
     });
 
-    const timeSlot = TIME_SLOTS.find((slot) => slot.dbValue === time);
+    const timeSlot = buildTimeSlots(tenant).find((slot) => slot.dbValue === time);
     const week = getCurrentWeekRange();
     const bookingDate = new Date(`${date}T00:00:00`);
     const isThisWeek = bookingDate >= week.start && bookingDate <= week.end;
@@ -385,7 +390,7 @@ async function processMessage({ tenant, phone, text, payload }) {
         }
 
         case "TIME_PERIOD_SELECTION": {
-            const period = TIME_PERIODS.find((item) => item.id.toLowerCase() === input);
+            const period = getTimePeriods(tenant).find((item) => item.id.toLowerCase() === input);
 
             if (!period) {
                 return promptTimePeriodSelection({
@@ -408,7 +413,7 @@ async function processMessage({ tenant, phone, text, payload }) {
         }
 
         case "TIME_SELECTION": {
-            const timeSlot = TIME_SLOTS.find((slot) => slot.id.toLowerCase() === input);
+            const timeSlot = buildTimeSlots(tenant).find((slot) => slot.id.toLowerCase() === input);
 
             if (!timeSlot) {
                 return promptTimePeriodSelection({
@@ -457,7 +462,7 @@ async function processMessage({ tenant, phone, text, payload }) {
             await sendMessage({
                 tenant,
                 to: phone,
-                text: `Booking confirmed.\nID: ${booking.id}\nService: ${booking.service_name}\nDate: ${formatDisplayDate(booking.booking_date) || booking.booking_date}\nTime: ${TIME_SLOTS.find((slot) => slot.dbValue === booking.booking_time)?.title || booking.booking_time}`
+                text: `Booking confirmed.\nID: ${booking.id}\nService: ${booking.service_name}\nDate: ${formatDisplayDate(booking.booking_date) || booking.booking_date}\nTime: ${buildTimeSlots(tenant).find((slot) => slot.dbValue === booking.booking_time)?.title || booking.booking_time}`
             });
 
             await setState(phone, tenant_id, {

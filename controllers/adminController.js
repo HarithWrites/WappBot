@@ -10,7 +10,8 @@ const db = require("../db");
 
 exports.getBookings = async (req, res) => {
     try {
-        const { tenant_id, date, time, range } = req.query;
+        const tenant_id = req.tenant.id;
+        const { date, time, range } = req.query;
         const data = await getAllBookings(tenant_id, { date, time, range });
         return res.json(data);
     } catch (err) {
@@ -20,7 +21,7 @@ exports.getBookings = async (req, res) => {
 };
 
 exports.streamBookings = async (req, res) => {
-    const { tenant_id } = req.query;
+    const tenant_id = req.tenant.id;
 
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
@@ -31,21 +32,21 @@ exports.streamBookings = async (req, res) => {
         res.write(`data: ${JSON.stringify(payload)}\n\n`);
     };
 
-    sendEvent({ type: "connected", tenant_id: tenant_id || null });
+    sendEvent({ type: "connected", tenant_id });
 
     const heartbeat = setInterval(() => {
         res.write(": keep-alive\n\n");
     }, 15000);
 
     const listener = (event) => {
-        if (tenant_id && String(event.tenant_id) !== String(tenant_id)) {
+        if (String(event.tenant_id) !== String(tenant_id)) {
             return;
         }
 
         sendEvent({
             type: event.type,
             bookingId: event.bookingId,
-            tenant_id: tenant_id || null
+            tenant_id
         });
     };
 
@@ -99,7 +100,7 @@ async function handleStatusUpdate(req, res, status, logLabel) {
             return res.status(400).json({ error: "bookingId required" });
         }
 
-        const booking = await updateBookingStatus(bookingId, status);
+        const booking = await updateBookingStatus(bookingId, status, req.tenant.id);
 
         if (!booking) {
             return res.status(404).json({ error: "Booking not found" });
