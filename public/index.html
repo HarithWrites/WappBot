@@ -11,9 +11,9 @@
         <section id="loginScreen" class="login-screen">
             <div class="login-card">
                 <p class="eyebrow">Admin access</p>
-                <h1>Booking dashboard</h1>
+                <h1>Manage appointments</h1>
                 <p class="hero-copy">
-                    Sign in with your admin security token to manage live bookings and customer responses.
+                    Sign in with your admin token to view bookings, update statuses, and control tenant scheduling rules.
                 </p>
 
                 <form id="loginForm" class="login-form">
@@ -28,57 +28,93 @@
             </div>
         </section>
 
-        <div id="dashboardShell" class="shell hidden">
-            <header class="hero">
-                <div class="hero-copy-block">
-                    <p class="eyebrow">Live operations</p>
-                    <h1>Booking dashboard</h1>
-                    <p class="hero-copy">
-                        Review incoming bookings, keep status changes moving, and stay synced with live updates.
-                    </p>
-                </div>
-
-                <div class="hero-corner">
-                    <div class="hero-stats">
-                        <article>
-                            <span id="statTotal">0</span>
-                            <label>Total bookings</label>
-                        </article>
-                        <article>
-                            <span id="statWeek">0</span>
-                            <label>This week</label>
-                        </article>
-                        <article>
-                            <span id="statPending">0</span>
-                            <label>Pending</label>
-                        </article>
-                    </div>
-                    <button id="logoutButton" class="secondary" type="button">Sign out</button>
-                </div>
-            </header>
-
-            <main class="layout">
-                <section class="panel">
-                    <div class="section-heading">
+        <div id="dashboardShell" class="dashboard-shell hidden">
+            <aside class="sidebar">
+                <div class="sidebar-top">
+                    <div class="brand-block">
+                        <div class="brand-mark">WB</div>
                         <div>
-                            <p class="section-label">Dashboard</p>
-                            <h2>All bookings</h2>
+                            <p class="eyebrow light">Dashboard</p>
+                            <h1 id="tenantName">Manage Appointments</h1>
                         </div>
-                        <p class="section-subtitle">Confirm, reject, or keep a booking pending with an optional customer note.</p>
                     </div>
+
+                    <nav class="menu-list">
+                        <button class="menu-item active" type="button">
+                            <span class="menu-icon">#</span>
+                            <span>Manage appointments</span>
+                        </button>
+                        <button class="menu-item" type="button" id="refreshSidebarButton">
+                            <span class="menu-icon">+</span>
+                            <span>Refresh data</span>
+                        </button>
+                    </nav>
+
+                    <section class="settings-card">
+                        <div class="settings-heading">
+                            <p class="section-label light">Scheduling</p>
+                            <h2>Tenant settings</h2>
+                        </div>
+
+                        <form id="settingsForm" class="settings-form">
+                            <label>
+                                <span>Timezone</span>
+                                <input type="text" id="timezoneInput" placeholder="Asia/Kolkata">
+                            </label>
+
+                            <label>
+                                <span>Parallel appointments</span>
+                                <input type="number" id="parallelInput" min="1" step="1" value="1">
+                            </label>
+
+                            <button class="primary wide" id="saveSettingsButton" type="submit">Save settings</button>
+                        </form>
+
+                        <p id="settingsStatus" class="status-note light">Only slots with remaining capacity are shown to users.</p>
+                    </section>
+                </div>
+
+                <div class="sidebar-bottom">
+                    <div class="profile-card">
+                        <p class="section-label light">Profile</p>
+                        <p class="profile-name">Tenant admin</p>
+                        <p class="profile-copy">Live booking controls and scheduling capacity.</p>
+                    </div>
+                    <button id="logoutButton" class="ghost wide" type="button">Log out</button>
+                </div>
+            </aside>
+
+            <main class="workspace">
+                <section class="workspace-panel">
+                    <header class="workspace-header">
+                        <div>
+                            <p class="section-label">Operations</p>
+                            <h2>Manage appointments</h2>
+                        </div>
+                        <div class="top-stats">
+                            <article>
+                                <span id="statTotal">0</span>
+                                <label>Total</label>
+                            </article>
+                            <article>
+                                <span id="statWeek">0</span>
+                                <label>This week</label>
+                            </article>
+                            <article>
+                                <span id="statPending">0</span>
+                                <label>Pending</label>
+                            </article>
+                        </div>
+                    </header>
 
                     <div class="toolbar">
-                        <div class="control-grid compact">
-                            <label>
-                                <span>Date</span>
-                                <input type="date" id="dateFilter">
-                            </label>
+                        <div class="search-wrap">
+                            <input type="search" id="searchInput" placeholder="Search by phone, service, or status">
                         </div>
-
-                        <div class="control-actions compact-actions">
-                            <button id="loadButton" class="primary" type="button">Refresh bookings</button>
-                            <button id="clearButton" class="secondary" type="button">Clear filters</button>
-                            <p id="connectionStatus" class="status-note">Checking your live connection.</p>
+                        <div class="toolbar-actions">
+                            <input type="date" id="dateFilter">
+                            <button id="loadButton" class="primary" type="button">Refresh</button>
+                            <button id="clearButton" class="secondary" type="button">Clear</button>
                         </div>
                     </div>
 
@@ -89,7 +125,23 @@
                         <button class="pill" data-filter="rejected" type="button">Rejected</button>
                     </div>
 
-                    <div id="bookingsGrid" class="booking-grid"></div>
+                    <p id="connectionStatus" class="status-note">Checking your live connection.</p>
+
+                    <div class="table-shell">
+                        <table class="booking-table">
+                            <thead>
+                                <tr>
+                                    <th>Service</th>
+                                    <th>Phone Number</th>
+                                    <th>Appointment Date &amp; Time</th>
+                                    <th>Status</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bookingsTableBody"></tbody>
+                        </table>
+                    </div>
+
                     <div id="dashboardEmpty" class="empty-state hidden">No bookings found for the selected filters.</div>
                 </section>
             </main>

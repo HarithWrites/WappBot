@@ -16,4 +16,21 @@ async function getTenantByAdminToken(adminToken) {
     return res.rows[0];
 }
 
-module.exports = { getTenantByPhoneNumberId, getTenantByAdminToken };
+async function updateTenantSettings(tenantId, settings) {
+    const res = await db.query(
+        `UPDATE tenants
+         SET timezone = $2,
+             max_parallel_appointments = $3
+         WHERE id = $1
+         RETURNING *`,
+        [tenantId, settings.timezone, settings.max_parallel_appointments]
+    );
+
+    return res.rows[0];
+}
+
+module.exports = {
+    getTenantByPhoneNumberId,
+    getTenantByAdminToken,
+    updateTenantSettings
+};

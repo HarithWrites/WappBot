@@ -10,7 +10,28 @@ class SlotAlreadyBookedError extends Error {
     }
 }
 
+function getSlotCapacity(tenant) {
+    return Math.max(1, Number(tenant?.max_parallel_appointments) || 1);
+}
+
+async function getBookedSlotCounts(tenant_id, booking_date) {
+    const res = await db.query(
+        `SELECT booking_time, COUNT(*)::int AS booking_count
+         FROM bookings
+         WHERE tenant_id = $1
+           AND booking_date = $2
+           AND status IN ('pending', 'confirmed')
+         GROUP BY booking_time`,
+        [tenant_id, booking_date]
+    );
+
+    return new Map(
+        res.rows.map((row) => [row.booking_time, row.booking_count])
+    );
+}
+
 async function createBooking({
+    tenant,
     tenant_id,
     phone,
     service_name,
@@ -18,29 +39,34 @@ async function createBooking({
     booking_time
 }) {
     const client = await db.connect();
+    const slotKey = `${tenant_id}:${booking_date}:${booking_time}`;
+    const capacity = getSlotCapacity(tenant);
 
     try {
         await client.query("BEGIN");
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [slotKey]);
 
         const existing = await client.query(
-            `SELECT id
+            `SELECT COUNT(*)::int AS booking_count
              FROM bookings
-             WHERE tenant_id=$1
-               AND booking_date=$2
-               AND booking_time=$3
-               AND status IN ('pending', 'confirmed')
-             LIMIT 1`,
+             WHERE tenant_id = $1
+               AND booking_date = $2
+               AND booking_time = $3
+               AND status IN ('pending', 'confirmed')`,
             [tenant_id, booking_date, booking_time]
         );
 
-        if (existing.rows[0]) {
+        const bookingCount = existing.rows[0]?.booking_count || 0;
+
+        if (bookingCount >= capacity) {
             throw new SlotAlreadyBookedError();
         }
 
         const res = await client.query(
             `INSERT INTO bookings
             (tenant_id, phone, service_name, booking_date, booking_time, status)
-            VALUES ($1,$2,$3,$4,$5,'pending') RETURNING *`,
+            VALUES ($1, $2, $3, $4, $5, 'pending')
+            RETURNING *`,
             [tenant_id, phone, service_name, booking_date, booking_time]
         );
 
@@ -56,8 +82,8 @@ async function createBooking({
     } catch (err) {
         await client.query("ROLLBACK").catch(() => {});
 
-        if (err instanceof SlotAlreadyBookedError || err.code === "23505") {
-            throw new SlotAlreadyBookedError();
+        if (err instanceof SlotAlreadyBookedError) {
+            throw err;
         }
 
         throw err;
@@ -118,6 +144,8 @@ module.exports = {
     bookingEvents,
     createBooking,
     getAllBookings,
+    getBookedSlotCounts,
+    getSlotCapacity,
     SlotAlreadyBookedError,
     updateBookingStatus
 };

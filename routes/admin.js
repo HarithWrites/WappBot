@@ -25,6 +25,8 @@ router.use(async (req, res, next) => {
 // ===============================
 router.get("/bookings", controller.getBookings);
 router.get("/bookings/stream", controller.streamBookings);
+router.get("/settings", controller.getSettings);
+router.post("/settings", controller.updateSettings);
 
 // ===============================
 // APPROVE (POST ONLY)

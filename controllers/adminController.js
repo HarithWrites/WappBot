@@ -1,9 +1,10 @@
 const {
     bookingEvents,
     getAllBookings,
+    getSlotCapacity,
     updateBookingStatus
 } = require("../services/bookingService");
-
+const { updateTenantSettings } = require("../services/tenantService");
 const { sendMessage } = require("../services/whatsappService");
 const { formatDisplayDate } = require("../utils/validators");
 const db = require("../db");
@@ -16,6 +17,43 @@ exports.getBookings = async (req, res) => {
         return res.json(data);
     } catch (err) {
         console.error("getBookings error:", err);
+        return res.status(500).json({ error: "Internal server error" });
+    }
+};
+
+exports.getSettings = async (req, res) => {
+    return res.json({
+        id: req.tenant.id,
+        business_name: req.tenant.business_name || `Tenant ${req.tenant.id}`,
+        timezone: req.tenant.timezone || "UTC",
+        max_parallel_appointments: getSlotCapacity(req.tenant)
+    });
+};
+
+exports.updateSettings = async (req, res) => {
+    try {
+        const timezone = String(req.body.timezone || "UTC").trim() || "UTC";
+        const maxParallelAppointments = Math.max(
+            1,
+            Number.parseInt(req.body.max_parallel_appointments, 10) || 1
+        );
+
+        const tenant = await updateTenantSettings(req.tenant.id, {
+            timezone,
+            max_parallel_appointments: maxParallelAppointments
+        });
+
+        return res.json({
+            success: true,
+            tenant: {
+                id: tenant.id,
+                business_name: tenant.business_name || `Tenant ${tenant.id}`,
+                timezone: tenant.timezone || "UTC",
+                max_parallel_appointments: getSlotCapacity(tenant)
+            }
+        });
+    } catch (err) {
+        console.error("updateSettings error:", err);
         return res.status(500).json({ error: "Internal server error" });
     }
 };

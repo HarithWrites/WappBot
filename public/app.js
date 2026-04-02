@@ -1,32 +1,35 @@
 let allBookings = [];
 let currentFilter = "all";
+let searchTerm = "";
 let stream;
 let streamTenantToken = null;
 let adminToken = "";
+let tenantSettings = null;
 
 const loginScreen = document.getElementById("loginScreen");
 const dashboardShell = document.getElementById("dashboardShell");
 const loginForm = document.getElementById("loginForm");
 const tenantInput = document.getElementById("tenantId");
 const dateInput = document.getElementById("dateFilter");
-const bookingsGrid = document.getElementById("bookingsGrid");
+const searchInput = document.getElementById("searchInput");
+const bookingsTableBody = document.getElementById("bookingsTableBody");
 const dashboardEmpty = document.getElementById("dashboardEmpty");
 const connectionStatus = document.getElementById("connectionStatus");
 const loginStatus = document.getElementById("loginStatus");
 const logoutButton = document.getElementById("logoutButton");
+const refreshSidebarButton = document.getElementById("refreshSidebarButton");
+const settingsForm = document.getElementById("settingsForm");
+const timezoneInput = document.getElementById("timezoneInput");
+const parallelInput = document.getElementById("parallelInput");
+const settingsStatus = document.getElementById("settingsStatus");
+const tenantName = document.getElementById("tenantName");
 
 function formatDisplayDate(dateString) {
-    let date;
-
-    if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
-        date = new Date(`${dateString}T00:00:00`);
-    } else {
-        date = new Date(dateString);
-    }
+    const date = new Date(`${dateString}T00:00:00`);
 
     return new Intl.DateTimeFormat("en-GB", {
         day: "2-digit",
-        month: "2-digit",
+        month: "short",
         year: "numeric"
     }).format(date);
 }
@@ -71,6 +74,8 @@ function setStats() {
 }
 
 function getFilteredBookings() {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
     return allBookings.filter((booking) => {
         if (currentFilter !== "all" && booking.status !== currentFilter) {
             return false;
@@ -80,41 +85,55 @@ function getFilteredBookings() {
             return false;
         }
 
-        return true;
+        if (!normalizedSearch) {
+            return true;
+        }
+
+        return [
+            booking.service_name,
+            booking.phone,
+            booking.status,
+            booking.booking_date,
+            booking.booking_time
+        ].some((value) => String(value || "").toLowerCase().includes(normalizedSearch));
     });
 }
 
-function createBookingCard(booking) {
-    const card = document.createElement("article");
-    card.className = `booking-card${isThisWeek(booking.booking_date) ? " this-week" : ""}`;
+function createBookingRow(booking) {
+    const row = document.createElement("tr");
+    const isCurrentWeek = isThisWeek(booking.booking_date);
 
-    card.innerHTML = `
-        <div class="booking-meta">
-            <div>
-                <h3 class="booking-title">${booking.service_name}</h3>
-                <p class="booking-copy">${formatDisplayDate(booking.booking_date)} at ${formatDisplayTime(booking.booking_time)}</p>
-                <p class="booking-subtitle">Phone: ${booking.phone}</p>
-                <p class="booking-subtitle">Tenant: ${booking.tenant_id}</p>
-                <p class="booking-subtitle">Created: ${booking.created_at ? new Date(booking.created_at).toLocaleString("en-IN") : "N/A"}</p>
-            </div>
+    row.innerHTML = `
+        <td>
+            <div class="cell-title">${booking.service_name}</div>
+            <div class="cell-copy">Booking #${booking.id}${isCurrentWeek ? " - this week" : ""}</div>
+        </td>
+        <td>
+            <div class="cell-title">${booking.phone}</div>
+            <div class="cell-copy">Tenant ${booking.tenant_id}</div>
+        </td>
+        <td>
+            <div class="cell-title">${formatDisplayDate(booking.booking_date)}</div>
+            <div class="cell-copy">${formatDisplayTime(booking.booking_time)}</div>
+        </td>
+        <td>
             <span class="status-badge status-${booking.status}">${booking.status}</span>
-        </div>
-        <div class="booking-actions">
-            <p class="booking-subtitle">Booking #${booking.id}${isThisWeek(booking.booking_date) ? " is part of this week." : ""}</p>
-            <div>
+            <div class="cell-copy">${booking.created_at ? new Date(booking.created_at).toLocaleString("en-IN") : ""}</div>
+        </td>
+        <td>
+            <div class="action-stack">
                 <button class="approve" data-action="approve" data-id="${booking.id}" type="button">Confirm</button>
-                <button class="secondary" data-action="pending" data-id="${booking.id}" type="button">Pending</button>
+                <button class="pending" data-action="pending" data-id="${booking.id}" type="button">Pending</button>
                 <button class="reject" data-action="reject" data-id="${booking.id}" type="button">Reject</button>
             </div>
-        </div>
-        <textarea data-comment-for="${booking.id}" placeholder="Optional comment for the user"></textarea>
+        </td>
     `;
 
-    return card;
+    return row;
 }
 
 function renderDashboard() {
-    bookingsGrid.innerHTML = "";
+    bookingsTableBody.innerHTML = "";
     const filteredBookings = getFilteredBookings();
 
     if (!filteredBookings.length) {
@@ -125,12 +144,23 @@ function renderDashboard() {
     dashboardEmpty.classList.add("hidden");
 
     filteredBookings.forEach((booking) => {
-        bookingsGrid.appendChild(createBookingCard(booking));
+        bookingsTableBody.appendChild(createBookingRow(booking));
     });
+}
+
+function renderTenantSettings() {
+    if (!tenantSettings) {
+        return;
+    }
+
+    tenantName.textContent = tenantSettings.business_name || `Tenant ${tenantSettings.id}`;
+    timezoneInput.value = tenantSettings.timezone || "UTC";
+    parallelInput.value = tenantSettings.max_parallel_appointments || 1;
 }
 
 function render() {
     setStats();
+    renderTenantSettings();
     renderDashboard();
 }
 
@@ -138,6 +168,12 @@ function buildBookingsUrl() {
     const params = new URLSearchParams();
     params.set("token", adminToken);
     return `/admin/bookings?${params.toString()}`;
+}
+
+function buildSettingsUrl() {
+    const params = new URLSearchParams();
+    params.set("token", adminToken);
+    return `/admin/settings?${params.toString()}`;
 }
 
 function closeStream() {
@@ -152,6 +188,7 @@ function closeStream() {
 function showLogin(message = "Your token stays saved on this browser until you sign out.") {
     closeStream();
     allBookings = [];
+    tenantSettings = null;
     render();
     loginScreen.classList.remove("hidden");
     dashboardShell.classList.add("hidden");
@@ -207,11 +244,17 @@ async function loadBookings() {
     connectionStatus.textContent = "Loading bookings...";
 
     try {
-        const data = await fetchJson(buildBookingsUrl());
-        allBookings = Array.isArray(data) ? data : [];
+        const [bookings, settings] = await Promise.all([
+            fetchJson(buildBookingsUrl()),
+            fetchJson(buildSettingsUrl())
+        ]);
+
+        allBookings = Array.isArray(bookings) ? bookings : [];
+        tenantSettings = settings;
         showDashboard();
         render();
         connectionStatus.textContent = "Live updates connected.";
+        settingsStatus.textContent = `Only slots with remaining capacity are shown to users. Current parallel limit: ${tenantSettings.max_parallel_appointments}.`;
         connectStream(adminToken);
     } catch (err) {
         if (err.message !== "Unauthorized") {
@@ -229,7 +272,6 @@ async function updateBookingStatus(bookingId, status) {
             : "/admin/reject";
     const actionName = status === "confirmed" ? "approve" : status;
     const button = document.querySelector(`[data-id="${bookingId}"][data-action="${actionName}"]`);
-    const comment = document.querySelector(`[data-comment-for="${bookingId}"]`)?.value?.trim() || "";
 
     if (button) {
         button.disabled = true;
@@ -241,7 +283,7 @@ async function updateBookingStatus(bookingId, status) {
             headers: {
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify({ bookingId, comment, token: adminToken })
+            body: JSON.stringify({ bookingId, token: adminToken })
         });
 
         if (!data.success) {
@@ -257,6 +299,36 @@ async function updateBookingStatus(bookingId, status) {
     } finally {
         if (button) {
             button.disabled = false;
+        }
+    }
+}
+
+async function saveSettings(event) {
+    event.preventDefault();
+
+    settingsStatus.textContent = "Saving settings...";
+
+    try {
+        const data = await fetchJson("/admin/settings", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                token: adminToken,
+                timezone: timezoneInput.value.trim(),
+                max_parallel_appointments: parallelInput.value
+            })
+        });
+
+        tenantSettings = data.tenant;
+        renderTenantSettings();
+        settingsStatus.textContent = `Saved. Users will now see slots based on a parallel limit of ${tenantSettings.max_parallel_appointments}.`;
+        await loadBookings();
+    } catch (err) {
+        if (err.message !== "Unauthorized") {
+            console.error(err);
+            settingsStatus.textContent = "Could not save settings right now.";
         }
     }
 }
@@ -297,6 +369,8 @@ function connectStream(token) {
 
 function resetFilters() {
     dateInput.value = "";
+    searchInput.value = "";
+    searchTerm = "";
     currentFilter = "all";
     document.querySelectorAll(".pill").forEach((pill) => {
         pill.classList.toggle("active", pill.dataset.filter === "all");
@@ -317,11 +391,13 @@ loginForm.addEventListener("submit", async (event) => {
     await loadBookings();
 });
 
+settingsForm.addEventListener("submit", saveSettings);
 document.getElementById("loadButton").addEventListener("click", loadBookings);
 document.getElementById("clearButton").addEventListener("click", () => {
     resetFilters();
     renderDashboard();
 });
+refreshSidebarButton.addEventListener("click", loadBookings);
 
 logoutButton.addEventListener("click", () => {
     clearToken();
@@ -339,8 +415,13 @@ document.querySelectorAll(".pill").forEach((pill) => {
     });
 });
 
+searchInput.addEventListener("input", (event) => {
+    searchTerm = event.target.value;
+    renderDashboard();
+});
+
 dateInput.addEventListener("change", renderDashboard);
-bookingsGrid.addEventListener("click", (event) => {
+bookingsTableBody.addEventListener("click", (event) => {
     const actionButton = event.target.closest("[data-action]");
 
     if (!actionButton) {
