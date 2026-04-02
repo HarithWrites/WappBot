@@ -43,6 +43,9 @@ const homeSearchButton = document.getElementById("homeSearchButton");
 const homeWeekCount = document.getElementById("homeWeekCount");
 const homeConnectionLabel = document.getElementById("homeConnectionLabel");
 const archiveCount = document.getElementById("archiveCount");
+const homeTableStatus = document.getElementById("homeTableStatus");
+const searchTableStatus = document.getElementById("searchTableStatus");
+const archiveTableStatus = document.getElementById("archiveTableStatus");
 const closeModal = document.getElementById("closeModal");
 const closeForm = document.getElementById("closeForm");
 const closeRemarks = document.getElementById("closeRemarks");
@@ -253,11 +256,30 @@ function renderTableBody(target, bookings, emptyState) {
 }
 
 function renderManageScreen() {
-    renderTableBody(weeklyBookingsTableBody, getCurrentWeekBookings(), weeklyEmpty);
+    const weeklyBookings = getCurrentWeekBookings();
+    const activeBookings = getActiveBookings();
+    renderTableBody(weeklyBookingsTableBody, weeklyBookings, weeklyEmpty);
+
+    if (!weeklyBookings.length && allBookings.length > 0) {
+        weeklyEmpty.textContent = `No current week appointments found. ${allBookings.length} booking(s) are available in Search appointments.`;
+        homeTableStatus.textContent = `Loaded ${activeBookings.length} active booking(s). None fall within the current week, so this screen stays empty. Open Search appointments to see all records.`;
+        return;
+    }
+
+    weeklyEmpty.textContent = "No current week appointments found.";
+    homeTableStatus.textContent = weeklyBookings.length
+        ? `Showing ${weeklyBookings.length} current-week appointment(s) out of ${activeBookings.length} active booking(s).`
+        : "No active bookings are available yet.";
 }
 
 function renderSearchScreen() {
-    renderTableBody(bookingsTableBody, getFilteredBookings(), dashboardEmpty);
+    const filteredBookings = getFilteredBookings();
+    renderTableBody(bookingsTableBody, filteredBookings, dashboardEmpty);
+    searchTableStatus.textContent = filteredBookings.length
+        ? `Showing ${filteredBookings.length} booking(s) from ${allBookings.length} loaded record(s).`
+        : allBookings.length
+            ? `Loaded ${allBookings.length} booking(s), but none match the current search and filter selection.`
+            : "No bookings have been loaded yet.";
 }
 
 function renderArchiveScreen() {
@@ -266,10 +288,14 @@ function renderArchiveScreen() {
 
     if (!archivedBookings.length) {
         archiveEmpty.classList.remove("hidden");
+        archiveTableStatus.textContent = allBookings.length
+            ? "No appointments have been archived yet."
+            : "No bookings have been loaded yet.";
         return;
     }
 
     archiveEmpty.classList.add("hidden");
+    archiveTableStatus.textContent = `Showing ${archivedBookings.length} archived appointment(s).`;
     archivedBookings.forEach((booking) => {
         try {
             archiveTableBody.appendChild(createArchiveRow(booking));
@@ -434,6 +460,14 @@ async function loadBookings() {
         };
 
         showDashboard();
+        const shouldOpenSearch = activeScreen === "manageAppointments"
+            && allBookings.length > 0
+            && getCurrentWeekBookings().length === 0;
+
+        if (shouldOpenSearch) {
+            setActiveScreen("searchAppointments");
+        }
+
         try {
             render();
         } catch (renderError) {
