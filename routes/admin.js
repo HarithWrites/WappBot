@@ -3,9 +3,6 @@ const router = express.Router();
 
 const controller = require("../controllers/adminController");
 
-const router = express.Router();
-const controller = require("../controllers/adminController");
-
 const { getTenantByAdminToken } = require("../services/tenantService");
 
 // ===============================
