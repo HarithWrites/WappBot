@@ -12,6 +12,16 @@ async function ensureDatabaseSchema() {
     `);
 
     await db.query(`
+        ALTER TABLE bookings
+        ADD COLUMN IF NOT EXISTS close_remarks TEXT
+    `);
+
+    await db.query(`
+        ALTER TABLE bookings
+        ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ
+    `);
+
+    await db.query(`
         UPDATE tenants
         SET max_parallel_appointments = 1
         WHERE max_parallel_appointments IS NULL

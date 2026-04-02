@@ -13,7 +13,7 @@
                 <p class="eyebrow">Admin access</p>
                 <h1>Manage appointments</h1>
                 <p class="hero-copy">
-                    Sign in with your admin token to view bookings, update statuses, and control tenant scheduling rules.
+                    Sign in with your admin token to manage bookings, search appointment history, archive closed items, and control scheduling rules.
                 </p>
 
                 <form id="loginForm" class="login-form">
@@ -40,13 +40,21 @@
                     </div>
 
                     <nav class="menu-list">
-                        <button class="menu-item active" type="button" data-screen-target="searchAppointments">
-                            <span class="menu-icon">#</span>
+                        <button class="menu-item active" type="button" data-screen-target="manageAppointments">
+                            <span class="menu-icon">1</span>
+                            <span>Manage appointments</span>
+                        </button>
+                        <button class="menu-item" type="button" data-screen-target="searchAppointments">
+                            <span class="menu-icon">2</span>
                             <span>Search appointments</span>
                         </button>
                         <button class="menu-item" type="button" data-screen-target="adminSettings">
-                            <span class="menu-icon">+</span>
+                            <span class="menu-icon">3</span>
                             <span>Admin settings</span>
+                        </button>
+                        <button class="menu-item" type="button" data-screen-target="archiveAppointments">
+                            <span class="menu-icon">4</span>
+                            <span>Archive appointments</span>
                         </button>
                     </nav>
                 </div>
@@ -54,19 +62,19 @@
                 <div class="sidebar-bottom">
                     <div class="profile-card">
                         <p class="section-label light">Profile</p>
-                        <p class="profile-name">Tenant admin</p>
-                        <p class="profile-copy">Live booking controls and scheduling capacity.</p>
+                        <p class="profile-name" id="sidebarBusinessName">Tenant admin</p>
+                        <p class="profile-copy">Live booking controls, archive actions, and scheduling capacity.</p>
                     </div>
                     <button id="logoutButton" class="ghost wide" type="button">Log out</button>
                 </div>
             </aside>
 
             <main class="workspace">
-                <section id="searchAppointments" class="workspace-panel workspace-screen">
+                <section id="manageAppointments" class="workspace-panel workspace-screen">
                     <header class="workspace-header">
                         <div>
-                            <p class="section-label">Operations</p>
-                            <h2>Search appointments</h2>
+                            <p class="section-label">Home</p>
+                            <h2>Manage appointments</h2>
                         </div>
                         <div class="top-stats">
                             <article>
@@ -84,9 +92,54 @@
                         </div>
                     </header>
 
+                    <div class="home-grid">
+                        <article class="summary-card">
+                            <p class="section-label">Current week</p>
+                            <h3 id="homeWeekCount">0 appointments</h3>
+                            <p class="hero-copy">This view shows the current week's active appointments for quick operations.</p>
+                        </article>
+                        <article class="summary-card">
+                            <p class="section-label">Live status</p>
+                            <h3 id="homeConnectionLabel">Connected</h3>
+                            <p id="connectionStatus" class="status-note">Checking your live connection.</p>
+                        </article>
+                    </div>
+
+                    <div class="screen-actions">
+                        <button class="primary" id="homeRefreshButton" type="button">Refresh current week</button>
+                        <button class="secondary" id="homeSearchButton" type="button">Go to search</button>
+                    </div>
+
+                    <div class="table-shell">
+                        <table class="booking-table">
+                            <thead>
+                                <tr>
+                                    <th>Business</th>
+                                    <th>Service</th>
+                                    <th>Phone Number</th>
+                                    <th>Appointment Date &amp; Time</th>
+                                    <th>Status</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="weeklyBookingsTableBody"></tbody>
+                        </table>
+                    </div>
+
+                    <div id="weeklyEmpty" class="empty-state hidden">No current week appointments found.</div>
+                </section>
+
+                <section id="searchAppointments" class="workspace-panel workspace-screen hidden">
+                    <header class="workspace-header">
+                        <div>
+                            <p class="section-label">Search</p>
+                            <h2>Search appointments</h2>
+                        </div>
+                    </header>
+
                     <div class="toolbar">
                         <div class="search-wrap">
-                            <input type="search" id="searchInput" placeholder="Search by phone, service, or status">
+                            <input type="search" id="searchInput" placeholder="Search by phone, service, status, remarks, or business">
                         </div>
                         <div class="toolbar-actions">
                             <input type="date" id="dateFilter">
@@ -100,14 +153,14 @@
                         <button class="pill" data-filter="pending" type="button">Pending</button>
                         <button class="pill" data-filter="confirmed" type="button">Confirmed</button>
                         <button class="pill" data-filter="rejected" type="button">Rejected</button>
+                        <button class="pill" data-filter="closed" type="button">Closed</button>
                     </div>
-
-                    <p id="connectionStatus" class="status-note">Checking your live connection.</p>
 
                     <div class="table-shell">
                         <table class="booking-table">
                             <thead>
                                 <tr>
+                                    <th>Business</th>
                                     <th>Service</th>
                                     <th>Phone Number</th>
                                     <th>Appointment Date &amp; Time</th>
@@ -153,7 +206,61 @@
                         <p id="settingsStatus" class="status-note">Only slots with remaining capacity are shown to users.</p>
                     </section>
                 </section>
+
+                <section id="archiveAppointments" class="workspace-panel workspace-screen hidden">
+                    <header class="workspace-header">
+                        <div>
+                            <p class="section-label">Archive</p>
+                            <h2>Archive appointments</h2>
+                        </div>
+                    </header>
+
+                    <article class="summary-card archive-card">
+                        <p class="section-label">Closed records</p>
+                        <h3 id="archiveCount">0 archived appointments</h3>
+                        <p class="hero-copy">Closed appointments with remarks stay here for reference and audit history.</p>
+                    </article>
+
+                    <div class="table-shell">
+                        <table class="booking-table">
+                            <thead>
+                                <tr>
+                                    <th>Business</th>
+                                    <th>Service</th>
+                                    <th>Phone Number</th>
+                                    <th>Appointment Date &amp; Time</th>
+                                    <th>Archive Details</th>
+                                </tr>
+                            </thead>
+                            <tbody id="archiveTableBody"></tbody>
+                        </table>
+                    </div>
+
+                    <div id="archiveEmpty" class="empty-state hidden">No archived appointments yet.</div>
+                </section>
             </main>
+        </div>
+    </div>
+
+    <div id="closeModal" class="modal hidden">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div>
+                    <p class="section-label">Archive appointment</p>
+                    <h2>Close appointment</h2>
+                </div>
+                <button id="closeModalDismiss" class="secondary" type="button">Cancel</button>
+            </div>
+
+            <p id="closeModalSummary" class="status-note">Add remarks before moving this appointment to archive.</p>
+
+            <form id="closeForm" class="settings-form">
+                <label>
+                    <span>Remarks</span>
+                    <textarea id="closeRemarks" rows="5" placeholder="Add the reason or closure note"></textarea>
+                </label>
+                <button id="closeSubmitButton" class="primary" type="submit">Close appointment</button>
+            </form>
         </div>
     </div>
 

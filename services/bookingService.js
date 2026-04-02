@@ -93,7 +93,14 @@ async function createBooking({
 }
 
 async function getAllBookings(tenant_id, filters = {}) {
-    let query = "SELECT * FROM bookings WHERE 1=1";
+    let query = `
+        SELECT
+            bookings.*,
+            COALESCE(tenants.business_name, CONCAT('Tenant ', bookings.tenant_id::text)) AS tenant_name
+        FROM bookings
+        LEFT JOIN tenants ON tenants.id = bookings.tenant_id
+        WHERE 1=1
+    `;
     let values = [];
 
     if (tenant_id) {
@@ -121,10 +128,17 @@ async function getAllBookings(tenant_id, filters = {}) {
     return res.rows;
 }
 
-async function updateBookingStatus(id, status, tenant_id) {
+async function updateBookingStatus(id, status, tenant_id, options = {}) {
+    const remarks = options.remarks ? String(options.remarks).trim() : "";
+    const closedAt = status === "closed" ? new Date().toISOString() : null;
     const res = await db.query(
-        `UPDATE bookings SET status=$1 WHERE id=$2 AND tenant_id=$3 RETURNING *`,
-        [status, id, tenant_id]
+        `UPDATE bookings
+         SET status = $1,
+             close_remarks = CASE WHEN $1 = 'closed' THEN $4 ELSE close_remarks END,
+             closed_at = CASE WHEN $1 = 'closed' THEN $5 ELSE closed_at END
+         WHERE id = $2 AND tenant_id = $3
+         RETURNING *`,
+        [status, id, tenant_id, remarks || null, closedAt]
     );
 
     const booking = res.rows[0];

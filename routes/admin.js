@@ -46,6 +46,7 @@ router.post("/settings", controller.updateSettings);
 // ===============================
 router.post("/approve", controller.approveBooking);
 router.post("/pending", controller.markPendingBooking);
+router.post("/close", controller.closeBooking);
 
 // ===============================
 // REJECT (POST ONLY)

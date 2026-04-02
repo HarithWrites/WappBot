@@ -5,7 +5,9 @@ let stream;
 let streamTenantToken = null;
 let adminToken = "";
 let tenantSettings = null;
-let activeScreen = "searchAppointments";
+let activeScreen = "manageAppointments";
+let closeBookingId = null;
+
 const DEFAULT_TENANT_SETTINGS = {
     id: "",
     business_name: "Manage Appointments",
@@ -20,7 +22,11 @@ const tenantInput = document.getElementById("tenantId");
 const dateInput = document.getElementById("dateFilter");
 const searchInput = document.getElementById("searchInput");
 const bookingsTableBody = document.getElementById("bookingsTableBody");
+const weeklyBookingsTableBody = document.getElementById("weeklyBookingsTableBody");
+const archiveTableBody = document.getElementById("archiveTableBody");
 const dashboardEmpty = document.getElementById("dashboardEmpty");
+const weeklyEmpty = document.getElementById("weeklyEmpty");
+const archiveEmpty = document.getElementById("archiveEmpty");
 const connectionStatus = document.getElementById("connectionStatus");
 const loginStatus = document.getElementById("loginStatus");
 const logoutButton = document.getElementById("logoutButton");
@@ -29,8 +35,19 @@ const timezoneInput = document.getElementById("timezoneInput");
 const parallelInput = document.getElementById("parallelInput");
 const settingsStatus = document.getElementById("settingsStatus");
 const tenantName = document.getElementById("tenantName");
+const sidebarBusinessName = document.getElementById("sidebarBusinessName");
 const screenButtons = document.querySelectorAll("[data-screen-target]");
 const screens = document.querySelectorAll(".workspace-screen");
+const homeRefreshButton = document.getElementById("homeRefreshButton");
+const homeSearchButton = document.getElementById("homeSearchButton");
+const homeWeekCount = document.getElementById("homeWeekCount");
+const homeConnectionLabel = document.getElementById("homeConnectionLabel");
+const archiveCount = document.getElementById("archiveCount");
+const closeModal = document.getElementById("closeModal");
+const closeForm = document.getElementById("closeForm");
+const closeRemarks = document.getElementById("closeRemarks");
+const closeModalDismiss = document.getElementById("closeModalDismiss");
+const closeModalSummary = document.getElementById("closeModalSummary");
 
 function formatDisplayDate(dateString) {
     const date = new Date(`${dateString}T00:00:00`);
@@ -43,7 +60,7 @@ function formatDisplayDate(dateString) {
 }
 
 function formatDisplayTime(timeString) {
-    const [hours, minutes] = timeString.split(":");
+    const [hours, minutes] = String(timeString).split(":");
     const date = new Date();
     date.setHours(Number(hours), Number(minutes), 0, 0);
 
@@ -72,13 +89,32 @@ function isThisWeek(dateString) {
     return date >= start && date <= end;
 }
 
-function setStats() {
-    const weekCount = allBookings.filter((booking) => isThisWeek(booking.booking_date)).length;
-    const pendingCount = allBookings.filter((booking) => booking.status === "pending").length;
+function getTenantSettings() {
+    return tenantSettings || DEFAULT_TENANT_SETTINGS;
+}
 
-    document.getElementById("statTotal").textContent = allBookings.length;
+function getActiveBookings() {
+    return allBookings.filter((booking) => booking.status !== "closed");
+}
+
+function getCurrentWeekBookings() {
+    return getActiveBookings().filter((booking) => isThisWeek(booking.booking_date));
+}
+
+function getArchivedBookings() {
+    return allBookings.filter((booking) => booking.status === "closed");
+}
+
+function setStats() {
+    const activeBookings = getActiveBookings();
+    const weekCount = getCurrentWeekBookings().length;
+    const pendingCount = activeBookings.filter((booking) => booking.status === "pending").length;
+
+    document.getElementById("statTotal").textContent = activeBookings.length;
     document.getElementById("statWeek").textContent = weekCount;
     document.getElementById("statPending").textContent = pendingCount;
+    homeWeekCount.textContent = `${weekCount} appointments`;
+    archiveCount.textContent = `${getArchivedBookings().length} archived appointments`;
 }
 
 function getFilteredBookings() {
@@ -102,23 +138,47 @@ function getFilteredBookings() {
             booking.phone,
             booking.status,
             booking.booking_date,
-            booking.booking_time
+            booking.booking_time,
+            booking.tenant_name,
+            booking.close_remarks
         ].some((value) => String(value || "").toLowerCase().includes(normalizedSearch));
     });
 }
 
+function getBusinessLabel(booking) {
+    return booking.tenant_name || getTenantSettings().business_name || `Tenant ${booking.tenant_id}`;
+}
+
+function getActionMarkup(booking) {
+    if (booking.status === "closed") {
+        return '<span class="cell-copy">Archived</span>';
+    }
+
+    return `
+        <div class="action-stack">
+            <button class="approve" data-action="approve" data-id="${booking.id}" type="button">Confirm</button>
+            <button class="pending" data-action="pending" data-id="${booking.id}" type="button">Pending</button>
+            <button class="reject" data-action="reject" data-id="${booking.id}" type="button">Reject</button>
+            <button class="secondary" data-action="close" data-id="${booking.id}" type="button">Close</button>
+        </div>
+    `;
+}
+
 function createBookingRow(booking) {
     const row = document.createElement("tr");
-    const isCurrentWeek = isThisWeek(booking.booking_date);
 
     row.innerHTML = `
         <td>
+            <div class="cell-title">${getBusinessLabel(booking)}</div>
+            <div class="cell-copy">Tenant ID ${booking.tenant_id}</div>
+        </td>
+        <td>
             <div class="cell-title">${booking.service_name}</div>
-            <div class="cell-copy">Booking #${booking.id}${isCurrentWeek ? " - this week" : ""}</div>
+            <div class="cell-copy">Booking #${booking.id}</div>
         </td>
         <td>
             <div class="cell-title">${booking.phone}</div>
-            <div class="cell-copy">Tenant ${booking.tenant_id}</div>
+            <div class="cell-copy">${booking.close_remarks || "No remarks"}</div>
         </td>
         <td>
             <div class="cell-title">${formatDisplayDate(booking.booking_date)}</div>
@@ -128,40 +188,84 @@ function createBookingRow(booking) {
             <span class="status-badge status-${booking.status}">${booking.status}</span>
             <div class="cell-copy">${booking.created_at ? new Date(booking.created_at).toLocaleString("en-IN") : ""}</div>
         </td>
+        <td>${getActionMarkup(booking)}</td>
+    `;
+
+    return row;
+}
+
+function createArchiveRow(booking) {
+    const row = document.createElement("tr");
+
+    row.innerHTML = `
         <td>
-            <div class="action-stack">
-                <button class="approve" data-action="approve" data-id="${booking.id}" type="button">Confirm</button>
-                <button class="pending" data-action="pending" data-id="${booking.id}" type="button">Pending</button>
-                <button class="reject" data-action="reject" data-id="${booking.id}" type="button">Reject</button>
-            </div>
+            <div class="cell-title">${getBusinessLabel(booking)}</div>
+            <div class="cell-copy">Tenant ID ${booking.tenant_id}</div>
+        </td>
+        <td>
+            <div class="cell-title">${booking.service_name}</div>
+            <div class="cell-copy">Booking #${booking.id}</div>
+        </td>
+        <td>
+            <div class="cell-title">${booking.phone}</div>
+            <div class="cell-copy">${formatDisplayDate(booking.booking_date)} at ${formatDisplayTime(booking.booking_time)}</div>
+        </td>
+        <td>
+            <div class="cell-title">${booking.close_remarks || "No remarks provided"}</div>
+            <div class="cell-copy">${booking.closed_at ? new Date(booking.closed_at).toLocaleString("en-IN") : "Closed timestamp unavailable"}</div>
+        </td>
+        <td>
+            <span class="status-badge status-closed">closed</span>
         </td>
     `;
 
     return row;
 }
 
-function renderDashboard() {
-    bookingsTableBody.innerHTML = "";
-    const filteredBookings = getFilteredBookings();
+function renderTableBody(target, bookings, emptyState) {
+    target.innerHTML = "";
 
-    if (!filteredBookings.length) {
-        dashboardEmpty.classList.remove("hidden");
+    if (!bookings.length) {
+        emptyState.classList.remove("hidden");
         return;
     }
 
-    dashboardEmpty.classList.add("hidden");
+    emptyState.classList.add("hidden");
+    bookings.forEach((booking) => {
+        target.appendChild(createBookingRow(booking));
+    });
+}
 
-    filteredBookings.forEach((booking) => {
-        bookingsTableBody.appendChild(createBookingRow(booking));
+function renderManageScreen() {
+    renderTableBody(weeklyBookingsTableBody, getCurrentWeekBookings(), weeklyEmpty);
+}
+
+function renderSearchScreen() {
+    renderTableBody(bookingsTableBody, getFilteredBookings(), dashboardEmpty);
+}
+
+function renderArchiveScreen() {
+    archiveTableBody.innerHTML = "";
+    const archivedBookings = getArchivedBookings();
+
+    if (!archivedBookings.length) {
+        archiveEmpty.classList.remove("hidden");
+        return;
+    }
+
+    archiveEmpty.classList.add("hidden");
+    archivedBookings.forEach((booking) => {
+        archiveTableBody.appendChild(createArchiveRow(booking));
     });
 }
 
 function renderTenantSettings() {
-    const settings = tenantSettings || DEFAULT_TENANT_SETTINGS;
+    const settings = getTenantSettings();
     const displayName = settings.business_name
         || (settings.id ? `Tenant ${settings.id}` : DEFAULT_TENANT_SETTINGS.business_name);
 
     tenantName.textContent = displayName;
+    sidebarBusinessName.textContent = displayName;
     timezoneInput.value = settings.timezone || DEFAULT_TENANT_SETTINGS.timezone;
     parallelInput.value = settings.max_parallel_appointments || DEFAULT_TENANT_SETTINGS.max_parallel_appointments;
 }
@@ -169,7 +273,9 @@ function renderTenantSettings() {
 function render() {
     setStats();
     renderTenantSettings();
-    renderDashboard();
+    renderManageScreen();
+    renderSearchScreen();
+    renderArchiveScreen();
 }
 
 function setActiveScreen(screenId) {
@@ -205,8 +311,29 @@ function closeStream() {
     streamTenantToken = null;
 }
 
+function closeArchiveModal() {
+    closeBookingId = null;
+    closeRemarks.value = "";
+    closeModal.classList.add("hidden");
+}
+
+function openCloseModal(bookingId) {
+    const booking = allBookings.find((item) => String(item.id) === String(bookingId));
+
+    if (!booking) {
+        return;
+    }
+
+    closeBookingId = bookingId;
+    closeModalSummary.textContent = `${booking.service_name} for ${booking.phone} on ${formatDisplayDate(booking.booking_date)} at ${formatDisplayTime(booking.booking_time)}.`;
+    closeRemarks.value = booking.close_remarks || "";
+    closeModal.classList.remove("hidden");
+    closeRemarks.focus();
+}
+
 function showLogin(message = "Your token stays saved on this browser until you sign out.") {
     closeStream();
+    closeArchiveModal();
     allBookings = [];
     tenantSettings = null;
     render();
@@ -214,6 +341,7 @@ function showLogin(message = "Your token stays saved on this browser until you s
     dashboardShell.classList.add("hidden");
     loginStatus.textContent = message;
     connectionStatus.textContent = "Signed out.";
+    homeConnectionLabel.textContent = "Signed out";
     tenantInput.focus();
 }
 
@@ -262,6 +390,7 @@ async function loadBookings() {
     }
 
     connectionStatus.textContent = "Loading bookings...";
+    homeConnectionLabel.textContent = "Loading";
 
     try {
         const bookings = await fetchJson(buildBookingsUrl());
@@ -283,29 +412,33 @@ async function loadBookings() {
             ...(tenantSettings || {}),
             ...(settings || {})
         };
+
         showDashboard();
         render();
-        connectionStatus.textContent = "Live updates connected.";
+        connectionStatus.textContent = `Live updates connected. Loaded ${allBookings.length} bookings.`;
+        homeConnectionLabel.textContent = "Connected";
         settingsStatus.textContent = settings
-            ? `Only slots with remaining capacity are shown to users. Current parallel limit: ${tenantSettings.max_parallel_appointments}.`
-            : `Bookings loaded. Settings could not be loaded, so dashboard controls are using the last known values.`;
+            ? `Settings loaded. Current parallel limit: ${tenantSettings.max_parallel_appointments}.`
+            : "Bookings loaded. Settings could not be loaded, so the dashboard is using fallback values.";
         connectStream(adminToken);
     } catch (err) {
         if (err.message !== "Unauthorized") {
-            console.error(err);
+            console.error("loadBookings error:", err);
             connectionStatus.textContent = "Could not load bookings right now.";
+            homeConnectionLabel.textContent = "Error";
         }
     }
 }
 
-async function updateBookingStatus(bookingId, status) {
+async function updateBookingStatus(bookingId, status, options = {}) {
     const endpoint = status === "confirmed"
         ? "/admin/approve"
         : status === "pending"
             ? "/admin/pending"
-            : "/admin/reject";
-    const actionName = status === "confirmed" ? "approve" : status;
-    const button = document.querySelector(`[data-id="${bookingId}"][data-action="${actionName}"]`);
+            : status === "closed"
+                ? "/admin/close"
+                : "/admin/reject";
+    const button = document.querySelector(`[data-id="${bookingId}"][data-action="${options.actionName || status}"]`);
 
     if (button) {
         button.disabled = true;
@@ -317,13 +450,18 @@ async function updateBookingStatus(bookingId, status) {
             headers: {
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify({ bookingId, token: adminToken })
+            body: JSON.stringify({
+                bookingId,
+                token: adminToken,
+                remarks: options.remarks || ""
+            })
         });
 
         if (!data.success) {
             throw new Error("Status update failed");
         }
 
+        closeArchiveModal();
         await loadBookings();
     } catch (err) {
         if (err.message !== "Unauthorized") {
@@ -361,7 +499,7 @@ async function saveSettings(event) {
             ...(data.tenant || {})
         };
         renderTenantSettings();
-        settingsStatus.textContent = `Saved. Users will now see slots based on a parallel limit of ${tenantSettings.max_parallel_appointments}.`;
+        settingsStatus.textContent = `Saved. Users now see availability using a parallel limit of ${tenantSettings.max_parallel_appointments}.`;
         await loadBookings();
     } catch (err) {
         if (err.message !== "Unauthorized") {
@@ -379,11 +517,11 @@ function connectStream(token) {
     closeStream();
 
     streamTenantToken = token;
-    const query = `?token=${encodeURIComponent(token)}`;
-    stream = new EventSource(`/admin/bookings/stream${query}`);
+    stream = new EventSource(`/admin/bookings/stream?token=${encodeURIComponent(token)}`);
 
     stream.onopen = () => {
         connectionStatus.textContent = "Live updates connected.";
+        homeConnectionLabel.textContent = "Connected";
     };
 
     stream.onmessage = (event) => {
@@ -402,6 +540,7 @@ function connectStream(token) {
 
     stream.onerror = () => {
         connectionStatus.textContent = "Live connection interrupted. Retrying...";
+        homeConnectionLabel.textContent = "Retrying";
     };
 }
 
@@ -433,8 +572,13 @@ settingsForm.addEventListener("submit", saveSettings);
 document.getElementById("loadButton").addEventListener("click", loadBookings);
 document.getElementById("clearButton").addEventListener("click", () => {
     resetFilters();
-    renderDashboard();
+    renderSearchScreen();
 });
+homeRefreshButton.addEventListener("click", loadBookings);
+homeSearchButton.addEventListener("click", () => {
+    setActiveScreen("searchAppointments");
+});
+
 screenButtons.forEach((button) => {
     button.addEventListener("click", () => {
         setActiveScreen(button.dataset.screenTarget);
@@ -453,17 +597,18 @@ document.querySelectorAll(".pill").forEach((pill) => {
         document.querySelectorAll(".pill").forEach((item) => {
             item.classList.toggle("active", item === pill);
         });
-        renderDashboard();
+        renderSearchScreen();
     });
 });
 
 searchInput.addEventListener("input", (event) => {
     searchTerm = event.target.value;
-    renderDashboard();
+    renderSearchScreen();
 });
 
-dateInput.addEventListener("change", renderDashboard);
-bookingsTableBody.addEventListener("click", (event) => {
+dateInput.addEventListener("change", renderSearchScreen);
+
+function handleTableAction(event) {
     const actionButton = event.target.closest("[data-action]");
 
     if (!actionButton) {
@@ -471,12 +616,41 @@ bookingsTableBody.addEventListener("click", (event) => {
     }
 
     const { action, id } = actionButton.dataset;
+
+    if (action === "close") {
+        openCloseModal(id);
+        return;
+    }
+
     const nextStatus = action === "approve"
         ? "confirmed"
         : action === "pending"
             ? "pending"
             : "rejected";
-    updateBookingStatus(id, nextStatus);
+    updateBookingStatus(id, nextStatus, { actionName: action });
+}
+
+bookingsTableBody.addEventListener("click", handleTableAction);
+weeklyBookingsTableBody.addEventListener("click", handleTableAction);
+
+closeModalDismiss.addEventListener("click", closeArchiveModal);
+closeModal.addEventListener("click", (event) => {
+    if (event.target === closeModal) {
+        closeArchiveModal();
+    }
+});
+
+closeForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    if (!closeBookingId) {
+        return;
+    }
+
+    await updateBookingStatus(closeBookingId, "closed", {
+        actionName: "close",
+        remarks: closeRemarks.value.trim()
+    });
 });
 
 tenantInput.value = localStorage.getItem("adminToken") || "";

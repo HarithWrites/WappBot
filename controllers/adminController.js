@@ -124,6 +124,13 @@ Date: ${dateText}
 Time: ${booking.booking_time}${commentLine}`;
     }
 
+    if (status === "closed") {
+        return `Booking CLOSED.
+Service: ${booking.service_name}
+Date: ${dateText}
+Time: ${booking.booking_time}${commentLine}`;
+    }
+
     return `Booking is still PENDING.
 Service: ${booking.service_name}
 Date: ${dateText}
@@ -132,13 +139,20 @@ Time: ${booking.booking_time}${commentLine}`;
 
 async function handleStatusUpdate(req, res, status, logLabel) {
     try {
-        const { bookingId, comment } = req.body;
+        const { bookingId, comment, remarks } = req.body;
+        const statusComment = String(remarks || comment || "").trim();
 
         if (!bookingId) {
             return res.status(400).json({ error: "bookingId required" });
         }
 
-        const booking = await updateBookingStatus(bookingId, status, req.tenant.id);
+        if (status === "closed" && !statusComment) {
+            return res.status(400).json({ error: "remarks required" });
+        }
+
+        const booking = await updateBookingStatus(bookingId, status, req.tenant.id, {
+            remarks: statusComment
+        });
 
         if (!booking) {
             return res.status(404).json({ error: "Booking not found" });
@@ -150,7 +164,7 @@ async function handleStatusUpdate(req, res, status, logLabel) {
             await sendMessage({
                 tenant,
                 to: booking.phone,
-                text: buildStatusMessage(status, booking, comment)
+                text: buildStatusMessage(status, booking, statusComment)
             });
         }
 
@@ -171,4 +185,8 @@ exports.rejectBooking = (req, res) => {
 
 exports.markPendingBooking = (req, res) => {
     return handleStatusUpdate(req, res, "pending", "markPendingBooking");
+};
+
+exports.closeBooking = (req, res) => {
+    return handleStatusUpdate(req, res, "closed", "closeBooking");
 };
