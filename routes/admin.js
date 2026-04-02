@@ -9,12 +9,25 @@ const { getTenantByAdminToken } = require("../services/tenantService");
 // ADMIN AUTHENTICATION (SECURITY)
 // ===============================
 router.use(async (req, res, next) => {
-    const token = req.query.token || req.body.token;
-    if (!token) return res.status(401).json({ error: "Missing admin token" });
-    const tenant = await getTenantByAdminToken(token);
-    if (!tenant) return res.status(403).json({ error: "Invalid admin token" });
-    req.tenant = tenant;
-    next();
+    try {
+        const token = req.query.token || req.body?.token;
+
+        if (!token) {
+            return res.status(401).json({ error: "Missing admin token" });
+        }
+
+        const tenant = await getTenantByAdminToken(token);
+
+        if (!tenant) {
+            return res.status(403).json({ error: "Invalid admin token" });
+        }
+
+        req.tenant = tenant;
+        next();
+    } catch (err) {
+        console.error("admin auth error:", err);
+        return res.status(500).json({ error: "Internal server error" });
+    }
 });
 
 // ===============================

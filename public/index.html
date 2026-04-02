@@ -40,38 +40,15 @@
                     </div>
 
                     <nav class="menu-list">
-                        <button class="menu-item active" type="button">
+                        <button class="menu-item active" type="button" data-screen-target="searchAppointments">
                             <span class="menu-icon">#</span>
-                            <span>Manage appointments</span>
+                            <span>Search appointments</span>
                         </button>
-                        <button class="menu-item" type="button" id="refreshSidebarButton">
+                        <button class="menu-item" type="button" data-screen-target="adminSettings">
                             <span class="menu-icon">+</span>
-                            <span>Refresh data</span>
+                            <span>Admin settings</span>
                         </button>
                     </nav>
-
-                    <section class="settings-card">
-                        <div class="settings-heading">
-                            <p class="section-label light">Scheduling</p>
-                            <h2>Tenant settings</h2>
-                        </div>
-
-                        <form id="settingsForm" class="settings-form">
-                            <label>
-                                <span>Timezone</span>
-                                <input type="text" id="timezoneInput" placeholder="Asia/Kolkata">
-                            </label>
-
-                            <label>
-                                <span>Parallel appointments</span>
-                                <input type="number" id="parallelInput" min="1" step="1" value="1">
-                            </label>
-
-                            <button class="primary wide" id="saveSettingsButton" type="submit">Save settings</button>
-                        </form>
-
-                        <p id="settingsStatus" class="status-note light">Only slots with remaining capacity are shown to users.</p>
-                    </section>
                 </div>
 
                 <div class="sidebar-bottom">
@@ -85,11 +62,11 @@
             </aside>
 
             <main class="workspace">
-                <section class="workspace-panel">
+                <section id="searchAppointments" class="workspace-panel workspace-screen">
                     <header class="workspace-header">
                         <div>
                             <p class="section-label">Operations</p>
-                            <h2>Manage appointments</h2>
+                            <h2>Search appointments</h2>
                         </div>
                         <div class="top-stats">
                             <article>
@@ -143,6 +120,38 @@
                     </div>
 
                     <div id="dashboardEmpty" class="empty-state hidden">No bookings found for the selected filters.</div>
+                </section>
+
+                <section id="adminSettings" class="workspace-panel workspace-screen hidden">
+                    <header class="workspace-header">
+                        <div>
+                            <p class="section-label">Configuration</p>
+                            <h2>Admin settings</h2>
+                        </div>
+                    </header>
+
+                    <section class="settings-page-card">
+                        <div class="settings-heading">
+                            <p class="section-label">Scheduling</p>
+                            <h2>Tenant settings</h2>
+                        </div>
+
+                        <form id="settingsForm" class="settings-form settings-form-page">
+                            <label>
+                                <span>Timezone</span>
+                                <input type="text" id="timezoneInput" placeholder="Asia/Kolkata">
+                            </label>
+
+                            <label>
+                                <span>Parallel appointments</span>
+                                <input type="number" id="parallelInput" min="1" step="1" value="1">
+                            </label>
+
+                            <button class="primary settings-submit" id="saveSettingsButton" type="submit">Save settings</button>
+                        </form>
+
+                        <p id="settingsStatus" class="status-note">Only slots with remaining capacity are shown to users.</p>
+                    </section>
                 </section>
             </main>
         </div>

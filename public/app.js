@@ -5,6 +5,13 @@ let stream;
 let streamTenantToken = null;
 let adminToken = "";
 let tenantSettings = null;
+let activeScreen = "searchAppointments";
+const DEFAULT_TENANT_SETTINGS = {
+    id: "",
+    business_name: "Manage Appointments",
+    timezone: "UTC",
+    max_parallel_appointments: 1
+};
 
 const loginScreen = document.getElementById("loginScreen");
 const dashboardShell = document.getElementById("dashboardShell");
@@ -17,12 +24,13 @@ const dashboardEmpty = document.getElementById("dashboardEmpty");
 const connectionStatus = document.getElementById("connectionStatus");
 const loginStatus = document.getElementById("loginStatus");
 const logoutButton = document.getElementById("logoutButton");
-const refreshSidebarButton = document.getElementById("refreshSidebarButton");
 const settingsForm = document.getElementById("settingsForm");
 const timezoneInput = document.getElementById("timezoneInput");
 const parallelInput = document.getElementById("parallelInput");
 const settingsStatus = document.getElementById("settingsStatus");
 const tenantName = document.getElementById("tenantName");
+const screenButtons = document.querySelectorAll("[data-screen-target]");
+const screens = document.querySelectorAll(".workspace-screen");
 
 function formatDisplayDate(dateString) {
     const date = new Date(`${dateString}T00:00:00`);
@@ -149,19 +157,31 @@ function renderDashboard() {
 }
 
 function renderTenantSettings() {
-    if (!tenantSettings) {
-        return;
-    }
+    const settings = tenantSettings || DEFAULT_TENANT_SETTINGS;
+    const displayName = settings.business_name
+        || (settings.id ? `Tenant ${settings.id}` : DEFAULT_TENANT_SETTINGS.business_name);
 
-    tenantName.textContent = tenantSettings.business_name || `Tenant ${tenantSettings.id}`;
-    timezoneInput.value = tenantSettings.timezone || "UTC";
-    parallelInput.value = tenantSettings.max_parallel_appointments || 1;
+    tenantName.textContent = displayName;
+    timezoneInput.value = settings.timezone || DEFAULT_TENANT_SETTINGS.timezone;
+    parallelInput.value = settings.max_parallel_appointments || DEFAULT_TENANT_SETTINGS.max_parallel_appointments;
 }
 
 function render() {
     setStats();
     renderTenantSettings();
     renderDashboard();
+}
+
+function setActiveScreen(screenId) {
+    activeScreen = screenId;
+
+    screenButtons.forEach((button) => {
+        button.classList.toggle("active", button.dataset.screenTarget === screenId);
+    });
+
+    screens.forEach((screen) => {
+        screen.classList.toggle("hidden", screen.id !== screenId);
+    });
 }
 
 function buildBookingsUrl() {
@@ -244,17 +264,31 @@ async function loadBookings() {
     connectionStatus.textContent = "Loading bookings...";
 
     try {
-        const [bookings, settings] = await Promise.all([
-            fetchJson(buildBookingsUrl()),
-            fetchJson(buildSettingsUrl())
-        ]);
+        const bookings = await fetchJson(buildBookingsUrl());
+        let settings = null;
+
+        try {
+            settings = await fetchJson(buildSettingsUrl());
+        } catch (settingsError) {
+            if (settingsError.message !== "Unauthorized") {
+                console.error("settings load error:", settingsError);
+            } else {
+                throw settingsError;
+            }
+        }
 
         allBookings = Array.isArray(bookings) ? bookings : [];
-        tenantSettings = settings;
+        tenantSettings = {
+            ...DEFAULT_TENANT_SETTINGS,
+            ...(tenantSettings || {}),
+            ...(settings || {})
+        };
         showDashboard();
         render();
         connectionStatus.textContent = "Live updates connected.";
-        settingsStatus.textContent = `Only slots with remaining capacity are shown to users. Current parallel limit: ${tenantSettings.max_parallel_appointments}.`;
+        settingsStatus.textContent = settings
+            ? `Only slots with remaining capacity are shown to users. Current parallel limit: ${tenantSettings.max_parallel_appointments}.`
+            : `Bookings loaded. Settings could not be loaded, so dashboard controls are using the last known values.`;
         connectStream(adminToken);
     } catch (err) {
         if (err.message !== "Unauthorized") {
@@ -321,7 +355,11 @@ async function saveSettings(event) {
             })
         });
 
-        tenantSettings = data.tenant;
+        tenantSettings = {
+            ...DEFAULT_TENANT_SETTINGS,
+            ...(tenantSettings || {}),
+            ...(data.tenant || {})
+        };
         renderTenantSettings();
         settingsStatus.textContent = `Saved. Users will now see slots based on a parallel limit of ${tenantSettings.max_parallel_appointments}.`;
         await loadBookings();
@@ -397,7 +435,11 @@ document.getElementById("clearButton").addEventListener("click", () => {
     resetFilters();
     renderDashboard();
 });
-refreshSidebarButton.addEventListener("click", loadBookings);
+screenButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+        setActiveScreen(button.dataset.screenTarget);
+    });
+});
 
 logoutButton.addEventListener("click", () => {
     clearToken();
@@ -438,6 +480,8 @@ bookingsTableBody.addEventListener("click", (event) => {
 });
 
 tenantInput.value = localStorage.getItem("adminToken") || "";
+renderTenantSettings();
+setActiveScreen(activeScreen);
 
 if (tenantInput.value.trim()) {
     saveToken(tenantInput.value.trim());
