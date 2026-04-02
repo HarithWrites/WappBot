@@ -166,27 +166,34 @@ function getActionMarkup(booking) {
 
 function createBookingRow(booking) {
     const row = document.createElement("tr");
+    const businessLabel = getBusinessLabel(booking);
+    const serviceName = booking.service_name || "Unnamed service";
+    const phone = booking.phone || "No phone";
+    const dateLabel = booking.booking_date ? formatDisplayDate(booking.booking_date) : "No date";
+    const timeLabel = booking.booking_time ? formatDisplayTime(booking.booking_time) : "No time";
+    const status = booking.status || "pending";
+    const createdAtLabel = booking.created_at ? new Date(booking.created_at).toLocaleString("en-IN") : "";
 
     row.innerHTML = `
         <td>
-            <div class="cell-title">${getBusinessLabel(booking)}</div>
+            <div class="cell-title">${businessLabel}</div>
             <div class="cell-copy">Tenant ID ${booking.tenant_id}</div>
         </td>
         <td>
-            <div class="cell-title">${booking.service_name}</div>
+            <div class="cell-title">${serviceName}</div>
             <div class="cell-copy">Booking #${booking.id}</div>
         </td>
         <td>
-            <div class="cell-title">${booking.phone}</div>
+            <div class="cell-title">${phone}</div>
             <div class="cell-copy">${booking.close_remarks || "No remarks"}</div>
         </td>
         <td>
-            <div class="cell-title">${formatDisplayDate(booking.booking_date)}</div>
-            <div class="cell-copy">${formatDisplayTime(booking.booking_time)}</div>
+            <div class="cell-title">${dateLabel}</div>
+            <div class="cell-copy">${timeLabel}</div>
         </td>
         <td>
-            <span class="status-badge status-${booking.status}">${booking.status}</span>
-            <div class="cell-copy">${booking.created_at ? new Date(booking.created_at).toLocaleString("en-IN") : ""}</div>
+            <span class="status-badge status-${status}">${status}</span>
+            <div class="cell-copy">${createdAtLabel}</div>
         </td>
         <td>${getActionMarkup(booking)}</td>
     `;
@@ -196,19 +203,24 @@ function createBookingRow(booking) {
 
 function createArchiveRow(booking) {
     const row = document.createElement("tr");
+    const businessLabel = getBusinessLabel(booking);
+    const serviceName = booking.service_name || "Unnamed service";
+    const phone = booking.phone || "No phone";
+    const dateLabel = booking.booking_date ? formatDisplayDate(booking.booking_date) : "No date";
+    const timeLabel = booking.booking_time ? formatDisplayTime(booking.booking_time) : "No time";
 
     row.innerHTML = `
         <td>
-            <div class="cell-title">${getBusinessLabel(booking)}</div>
+            <div class="cell-title">${businessLabel}</div>
             <div class="cell-copy">Tenant ID ${booking.tenant_id}</div>
         </td>
         <td>
-            <div class="cell-title">${booking.service_name}</div>
+            <div class="cell-title">${serviceName}</div>
             <div class="cell-copy">Booking #${booking.id}</div>
         </td>
         <td>
-            <div class="cell-title">${booking.phone}</div>
-            <div class="cell-copy">${formatDisplayDate(booking.booking_date)} at ${formatDisplayTime(booking.booking_time)}</div>
+            <div class="cell-title">${phone}</div>
+            <div class="cell-copy">${dateLabel} at ${timeLabel}</div>
         </td>
         <td>
             <div class="cell-title">${booking.close_remarks || "No remarks provided"}</div>
@@ -232,7 +244,11 @@ function renderTableBody(target, bookings, emptyState) {
 
     emptyState.classList.add("hidden");
     bookings.forEach((booking) => {
-        target.appendChild(createBookingRow(booking));
+        try {
+            target.appendChild(createBookingRow(booking));
+        } catch (err) {
+            console.error("render booking row error:", booking, err);
+        }
     });
 }
 
@@ -255,7 +271,11 @@ function renderArchiveScreen() {
 
     archiveEmpty.classList.add("hidden");
     archivedBookings.forEach((booking) => {
-        archiveTableBody.appendChild(createArchiveRow(booking));
+        try {
+            archiveTableBody.appendChild(createArchiveRow(booking));
+        } catch (err) {
+            console.error("render archive row error:", booking, err);
+        }
     });
 }
 
@@ -414,7 +434,11 @@ async function loadBookings() {
         };
 
         showDashboard();
-        render();
+        try {
+            render();
+        } catch (renderError) {
+            console.error("render error:", renderError);
+        }
         connectionStatus.textContent = `Live updates connected. Loaded ${allBookings.length} bookings.`;
         homeConnectionLabel.textContent = "Connected";
         settingsStatus.textContent = settings
@@ -424,8 +448,13 @@ async function loadBookings() {
     } catch (err) {
         if (err.message !== "Unauthorized") {
             console.error("loadBookings error:", err);
-            connectionStatus.textContent = "Could not load bookings right now.";
-            homeConnectionLabel.textContent = "Error";
+            if (allBookings.length > 0) {
+                connectionStatus.textContent = `Showing ${allBookings.length} cached bookings. Latest refresh failed.`;
+                homeConnectionLabel.textContent = "Cached";
+            } else {
+                connectionStatus.textContent = "Could not load bookings right now.";
+                homeConnectionLabel.textContent = "Error";
+            }
         }
     }
 }
