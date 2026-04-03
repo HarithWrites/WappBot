@@ -6,7 +6,8 @@ const pool = new Pool({
         rejectUnauthorized: false
     },
     max: 20,
-    idleTimeoutMillis: 30000
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000
 });
 
 // Run a cheap query so we do not leak a checked-out client during boot.
