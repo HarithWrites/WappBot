@@ -12,8 +12,13 @@ const DEFAULT_TENANT_SETTINGS = {
     id: "",
     business_name: "Manage Appointments",
     timezone: "UTC",
-    max_parallel_appointments: 1
+    max_parallel_appointments: 1,
+    workflow_config: null
 };
+
+function formatWorkflowConfig(value) {
+    return JSON.stringify(value || {}, null, 2);
+}
 
 const loginScreen = document.getElementById("loginScreen");
 const dashboardShell = document.getElementById("dashboardShell");
@@ -33,6 +38,7 @@ const logoutButton = document.getElementById("logoutButton");
 const settingsForm = document.getElementById("settingsForm");
 const timezoneInput = document.getElementById("timezoneInput");
 const parallelInput = document.getElementById("parallelInput");
+const workflowConfigInput = document.getElementById("workflowConfigInput");
 const settingsStatus = document.getElementById("settingsStatus");
 const tenantName = document.getElementById("tenantName");
 const sidebarBusinessName = document.getElementById("sidebarBusinessName");
@@ -358,6 +364,7 @@ function renderTenantSettings() {
     sidebarBusinessName.textContent = displayName;
     timezoneInput.value = settings.timezone || DEFAULT_TENANT_SETTINGS.timezone;
     parallelInput.value = settings.max_parallel_appointments || DEFAULT_TENANT_SETTINGS.max_parallel_appointments;
+    workflowConfigInput.value = formatWorkflowConfig(settings.workflow_config);
 }
 
 function render() {
@@ -588,6 +595,7 @@ async function saveSettings(event) {
     settingsStatus.textContent = "Saving settings...";
 
     try {
+        const workflowConfig = JSON.parse(workflowConfigInput.value || "{}");
         const data = await fetchJson("/admin/settings", {
             method: "POST",
             headers: {
@@ -596,7 +604,8 @@ async function saveSettings(event) {
             body: JSON.stringify({
                 token: adminToken,
                 timezone: timezoneInput.value.trim(),
-                max_parallel_appointments: parallelInput.value
+                max_parallel_appointments: parallelInput.value,
+                workflow_config: workflowConfig
             })
         });
 
@@ -606,12 +615,14 @@ async function saveSettings(event) {
             ...(data.tenant || {})
         };
         renderTenantSettings();
-        settingsStatus.textContent = `Saved. Users now see availability using a parallel limit of ${tenantSettings.max_parallel_appointments}.`;
+        settingsStatus.textContent = `Saved. Workflow and scheduling rules are now live for ${tenantSettings.business_name}.`;
         await loadBookings();
     } catch (err) {
         if (err.message !== "Unauthorized") {
             console.error(err);
-            settingsStatus.textContent = "Could not save settings right now.";
+            settingsStatus.textContent = err instanceof SyntaxError
+                ? "Workflow JSON is invalid. Fix the JSON and try again."
+                : "Could not save settings right now.";
         }
     }
 }

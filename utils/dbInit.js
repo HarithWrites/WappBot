@@ -17,6 +17,11 @@ async function ensureDatabaseSchema() {
     `);
 
     await db.query(`
+        ALTER TABLE tenants
+        ADD COLUMN IF NOT EXISTS workflow_config JSONB
+    `);
+
+    await db.query(`
         ALTER TABLE bookings
         ADD COLUMN IF NOT EXISTS close_remarks TEXT
     `);
@@ -24,6 +29,21 @@ async function ensureDatabaseSchema() {
     await db.query(`
         ALTER TABLE bookings
         ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ
+    `);
+
+    await db.query(`
+        ALTER TABLE bookings
+        ADD COLUMN IF NOT EXISTS workflow_answers JSONB DEFAULT '{}'::jsonb
+    `);
+
+    await db.query(`
+        ALTER TABLE conversation_state
+        ADD COLUMN IF NOT EXISTS workflow_step TEXT
+    `);
+
+    await db.query(`
+        ALTER TABLE conversation_state
+        ADD COLUMN IF NOT EXISTS workflow_context JSONB DEFAULT '{}'::jsonb
     `);
 
     await db.query(`
@@ -38,6 +58,32 @@ async function ensureDatabaseSchema() {
         SET business_name = CONCAT('Tenant ', id::text)
         WHERE business_name IS NULL
            OR btrim(business_name) = ''
+    `);
+
+    await db.query(`
+        UPDATE conversation_state
+        SET workflow_step = state
+        WHERE workflow_step IS NULL
+          AND state IS NOT NULL
+    `);
+
+    await db.query(`
+        UPDATE conversation_state
+        SET workflow_context = jsonb_strip_nulls(
+            jsonb_build_object(
+                'service_name', service_name,
+                'date', date,
+                'time', time
+            )
+        )
+        WHERE workflow_context IS NULL
+           OR workflow_context = '{}'::jsonb
+    `);
+
+    await db.query(`
+        UPDATE bookings
+        SET workflow_answers = '{}'::jsonb
+        WHERE workflow_answers IS NULL
     `);
 
     await db.query(`

@@ -204,10 +204,20 @@
                                 <input type="number" id="parallelInput" min="1" step="1" value="1">
                             </label>
 
+                            <label>
+                                <span>Workflow configuration (JSON)</span>
+                                <textarea id="workflowConfigInput" rows="20" placeholder='{"start_step":"service","steps":[]}'></textarea>
+                            </label>
+
+                            <p class="status-note">
+                                Custom tenant questions can use a step like:
+                                <code>{"id":"branch","kind":"custom_choice","answer_key":"branch","question":{"body":"Which branch?"},"options":[{"id":"north","title":"North Branch","next":"date"}]}</code>
+                            </p>
+
                             <button class="primary settings-submit" id="saveSettingsButton" type="submit">Save settings</button>
                         </form>
 
-                        <p id="settingsStatus" class="status-note">Only slots with remaining capacity are shown to users.</p>
+                        <p id="settingsStatus" class="status-note">Edit the tenant workflow JSON to control question text, answer style, and flow order for this business.</p>
                     </section>
                 </section>
 

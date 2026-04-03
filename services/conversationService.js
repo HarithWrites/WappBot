@@ -11,6 +11,7 @@ const {
     SlotAlreadyBookedError
 } = require("./bookingService");
 const { getServices } = require("./serviceService");
+const { getWorkflowDefinition } = require("./workflowService");
 const {
     addDays,
     formatDisplayDate,
@@ -19,33 +20,39 @@ const {
     toDisplayDate
 } = require("../utils/validators");
 
-async function getState(phone, tenant_id) {
+async function getState(phone, tenantId) {
     const res = await db.query(
         "SELECT * FROM conversation_state WHERE phone=$1 AND tenant_id=$2",
-        [phone, tenant_id]
+        [phone, tenantId]
     );
     return res.rows[0];
 }
 
-async function setState(phone, tenant_id, data) {
+async function setState(phone, tenantId, data = {}) {
+    const context = data.context || {};
+
     await db.query(
         `INSERT INTO conversation_state
-        (phone, tenant_id, state, service_name, date, time)
-        VALUES ($1,$2,$3,$4,$5,$6)
+        (phone, tenant_id, state, workflow_step, workflow_context, service_name, date, time)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
         ON CONFLICT (phone, tenant_id)
         DO UPDATE SET
             state = $3,
-            service_name = $4,
-            date = $5,
-            time = $6
+            workflow_step = $4,
+            workflow_context = $5,
+            service_name = $6,
+            date = $7,
+            time = $8
         `,
         [
             phone,
-            tenant_id,
-            data.state || null,
-            data.service_name || null,
-            data.date || null,
-            data.time || null
+            tenantId,
+            data.step || null,
+            data.step || null,
+            JSON.stringify(context),
+            context.service_name || null,
+            context.date || null,
+            context.time || null
         ]
     );
 }
@@ -58,7 +65,6 @@ function format12Hour(hours, minutes) {
 
 function buildTimeSlots(tenant) {
     const slots = [];
-
     const open = tenant?.opening_hour || 9;
     const close = tenant?.closing_hour || 21;
     const interval = tenant?.slot_duration || 30;
@@ -87,17 +93,13 @@ function groupSlotsIntoPeriods(slots) {
     ];
 
     return periods
-        .map((period) => {
-            const periodSlots = slots.filter((slot) => {
+        .map((period) => ({
+            ...period,
+            slots: slots.filter((slot) => {
                 const hour = Number(slot.dbValue.slice(0, 2));
                 return hour >= period.startHour && hour <= period.endHour;
-            });
-
-            return {
-                ...period,
-                slots: periodSlots
-            };
-        })
+            })
+        }))
         .filter((period) => period.slots.length > 0);
 }
 
@@ -111,10 +113,10 @@ async function getAvailableTimeSlots(tenant, bookingDate) {
     });
 }
 
-function getOtherDateOptions(tenant) {
+function getRelativeDateOptions(tenant, offsets = [2, 3, 4]) {
     const timeZone = tenant?.timezone;
 
-    return [2, 3, 4].map((offset) => {
+    return offsets.map((offset) => {
         const date = addDays(getDateInTimeZone(timeZone), offset);
         const display = toDisplayDate(date);
         return {
@@ -134,34 +136,96 @@ function getCurrentWeekRange(timeZone) {
     return { start, end };
 }
 
-async function promptServiceSelection({ tenant, phone, tenant_id }) {
-    const services = await getServices(tenant_id);
+function getStepById(workflow, stepId) {
+    return workflow.steps.find((step) => step.id === stepId) || null;
+}
 
-    if (!services.length) {
-        return sendMessage({
-            tenant,
-            to: phone,
-            text: "No services are configured right now. Please try again later."
-        });
-    }
+function buildPromptText(template, fallback, values) {
+    const rawTemplate = String(template || fallback || "").trim();
 
-    await setState(phone, tenant_id, {
-        state: "SERVICE_SELECTION",
-        service_name: null,
-        date: null,
-        time: null
+    return rawTemplate.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, token) => {
+        const value = values[token];
+        return value == null ? "" : String(value);
+    });
+}
+
+function getTemplateValues({ tenant, context }) {
+    const timeSlot = context.time
+        ? buildTimeSlots(tenant).find((slot) => slot.dbValue === context.time)
+        : null;
+    const week = context.date ? getCurrentWeekRange(tenant?.timezone) : null;
+    const bookingDate = context.date ? new Date(`${context.date}T00:00:00`) : null;
+    const isThisWeek = week && bookingDate && bookingDate >= week.start && bookingDate <= week.end;
+    const capacity = getSlotCapacity(tenant);
+    const openingHour = tenant?.opening_hour || 9;
+    const closingHour = tenant?.closing_hour || 21;
+
+    const templateValues = {
+        welcome_message: tenant?.welcome_message || "Choose an option to continue.",
+        service_name: context.service_name || "",
+        date: context.date || "",
+        time: context.time || "",
+        display_date: context.date ? formatDisplayDate(context.date) : "",
+        display_time: timeSlot ? timeSlot.title : (context.time || ""),
+        period_title: context.period_title || "",
+        slot_duration: tenant?.slot_duration || 30,
+        opening_hours: `${format12Hour(openingHour, 0)} to ${format12Hour(closingHour, 0)}`,
+        capacity_note: capacity > 1 ? ` Parallel appointments allowed: ${capacity}.` : "",
+        week_note: isThisWeek ? "\nThis booking is in this week." : ""
+    };
+    const customAnswers = context.custom_answers || {};
+
+    Object.entries(customAnswers).forEach(([key, answer]) => {
+        if (answer && typeof answer === "object" && !Array.isArray(answer)) {
+            templateValues[key] = answer.title || answer.text || answer.value || "";
+            templateValues[`${key}_text`] = answer.title || answer.text || "";
+            templateValues[`${key}_value`] = answer.value || "";
+            templateValues[`${key}_id`] = answer.option_id || "";
+            return;
+        }
+
+        templateValues[key] = answer == null ? "" : String(answer);
     });
 
-    if (services.length <= 3) {
+    return templateValues;
+}
+
+function buildQuestion(step, tenant, context) {
+    const values = getTemplateValues({ tenant, context });
+    return {
+        header: buildPromptText(step.question?.header, "", values),
+        body: buildPromptText(step.question?.body, "", values),
+        footer: buildPromptText(step.question?.footer, "", values)
+    };
+}
+
+function buildInteractiveId(stepId, optionId) {
+    return `${stepId}__${optionId}`;
+}
+
+function chooseAnswerMode(step, items) {
+    const explicitMode = step.answer_mode || "auto";
+
+    if (explicitMode === "buttons" || explicitMode === "list") {
+        return explicitMode === "buttons" && items.length > 3 ? "list" : explicitMode;
+    }
+
+    return items.length <= 3 ? "buttons" : "list";
+}
+
+async function sendInteractiveStep({ tenant, phone, step, question, items, listTitle, buttonText }) {
+    const answerMode = chooseAnswerMode(step, items);
+
+    if (answerMode === "buttons") {
         return sendButtonsMessage({
             tenant,
             to: phone,
-            header: "Book a service",
-            body: tenant.welcome_message || "Choose a service to continue.",
-            footer: "Tap one option",
-            buttons: services.map((service) => ({
-                id: `service_${service.id}`,
-                title: service.name.slice(0, 20)
+            header: question.header,
+            body: question.body,
+            footer: question.footer,
+            buttons: items.map((item) => ({
+                id: item.id,
+                title: item.title.slice(0, 20)
             }))
         });
     }
@@ -169,185 +233,300 @@ async function promptServiceSelection({ tenant, phone, tenant_id }) {
     return sendListMessage({
         tenant,
         to: phone,
-        header: "Book a service",
-        body: tenant.welcome_message || "Choose a service to continue.",
-        footer: "Select one service",
-        buttonText: "View services",
+        header: question.header,
+        body: question.body,
+        footer: question.footer,
+        buttonText: (buttonText || step.button_text || "View options").slice(0, 20),
         sections: [
             {
-                title: "Available services",
-                rows: services.map((service) => ({
-                    id: `service_${service.id}`,
-                    title: service.name.slice(0, 24),
-                    description: "Tap to select"
+                title: (listTitle || step.list_title || "Available options").slice(0, 24),
+                rows: items.map((item) => ({
+                    id: item.id,
+                    title: item.title.slice(0, 24),
+                    description: (item.description || "Tap to select").slice(0, 72)
                 }))
             }
         ]
     });
 }
 
-async function promptDateSelection({ tenant, phone, tenant_id, service_name }) {
-    await setState(phone, tenant_id, {
-        state: "DATE_SELECTION",
-        service_name,
-        date: null,
-        time: null
+async function startWorkflow({ tenant, phone, tenantId, workflow }) {
+    await setState(phone, tenantId, {
+        step: workflow.start_step,
+        context: {}
     });
 
-    return sendButtonsMessage({
+    return promptStep({
         tenant,
-        to: phone,
-        header: "Choose a date",
-        body: `Service: ${service_name}\nPick one date option.`,
-        footer: "Today, tomorrow, or another date",
-        buttons: [
-            { id: "date_today", title: "Today" },
-            { id: "date_tomorrow", title: "Tomorrow" },
-            { id: "date_other", title: "Other date" }
-        ]
+        phone,
+        tenantId,
+        workflow,
+        stepId: workflow.start_step,
+        context: {}
     });
 }
 
-async function promptOtherDateSelection({ tenant, phone, tenant_id, service_name }) {
-    await setState(phone, tenant_id, {
-        state: "OTHER_DATE_SELECTION",
-        service_name,
-        date: null,
-        time: null
+async function promptStep({ tenant, phone, tenantId, workflow, stepId, context }) {
+    const step = getStepById(workflow, stepId);
+
+    if (!step) {
+        return startWorkflow({ tenant, phone, tenantId, workflow });
+    }
+
+    await setState(phone, tenantId, {
+        step: step.id,
+        context
     });
 
-    const options = getOtherDateOptions(tenant);
+    const question = buildQuestion(step, tenant, context);
 
-    return sendListMessage({
-        tenant,
-        to: phone,
-        header: "Choose another date",
-        body: `Service: ${service_name}\nSelect one of the next available dates.`,
-        footer: "Dates shown as DD/MM/YYYY",
-        buttonText: "View dates",
-        sections: [
-            {
-                title: "Next 3 dates",
-                rows: options.map((option) => ({
-                    id: option.id,
+    switch (step.kind) {
+        case "service": {
+            const services = await getServices(tenantId);
+
+            if (!services.length) {
+                return sendMessage({
+                    tenant,
+                    to: phone,
+                    text: "No services are configured right now. Please try again later."
+                });
+            }
+
+            return sendInteractiveStep({
+                tenant,
+                phone,
+                step,
+                question,
+                listTitle: step.list_title || "Available services",
+                buttonText: step.button_text || "View services",
+                items: services.map((service) => ({
+                    id: buildInteractiveId(step.id, String(service.id)),
+                    title: service.name,
+                    description: "Tap to select"
+                }))
+            });
+        }
+
+        case "date_choice": {
+            return sendInteractiveStep({
+                tenant,
+                phone,
+                step,
+                question,
+                items: step.options.map((option) => ({
+                    id: buildInteractiveId(step.id, option.id),
+                    title: option.title,
+                    description: option.description || "Tap to select"
+                }))
+            });
+        }
+
+        case "relative_date_list": {
+            const options = getRelativeDateOptions(tenant, step.offsets);
+
+            return sendInteractiveStep({
+                tenant,
+                phone,
+                step,
+                question,
+                listTitle: step.list_title || "Available dates",
+                buttonText: step.button_text || "View dates",
+                items: options.map((option) => ({
+                    id: buildInteractiveId(step.id, option.value),
                     title: option.title,
                     description: "Tap to select"
                 }))
+            });
+        }
+
+        case "time_period": {
+            const slots = await getAvailableTimeSlots(tenant, context.date);
+            const periods = groupSlotsIntoPeriods(slots);
+
+            if (!periods.length) {
+                await sendMessage({
+                    tenant,
+                    to: phone,
+                    text: "No appointment times are available on that date. Please choose another date."
+                });
+
+                const dateStep = workflow.steps.find((item) => item.kind === "date_choice");
+                return promptStep({
+                    tenant,
+                    phone,
+                    tenantId,
+                    workflow,
+                    stepId: dateStep?.id || workflow.start_step,
+                    context: {
+                        ...context,
+                        date: null,
+                        time: null,
+                        period_id: null,
+                        period_title: null
+                    }
+                });
             }
-        ]
-    });
-}
 
-async function promptTimePeriodSelection({ tenant, phone, tenant_id, service_name, date }) {
-    await setState(phone, tenant_id, {
-        state: "TIME_PERIOD_SELECTION",
-        service_name,
-        date,
-        time: null
-    });
+            return sendInteractiveStep({
+                tenant,
+                phone,
+                step,
+                question,
+                items: periods.map((period) => ({
+                    id: buildInteractiveId(step.id, period.id),
+                    title: period.title,
+                    description: `${period.slots.length} slot(s) available`
+                }))
+            });
+        }
 
-    const slots = await getAvailableTimeSlots(tenant, date);
-    const periods = groupSlotsIntoPeriods(slots);
+        case "time_slot": {
+            const slots = await getAvailableTimeSlots(tenant, context.date);
+            const periods = groupSlotsIntoPeriods(slots);
+            const period = periods.find((item) => item.id === context.period_id) || periods[0];
 
-    if (!periods.length) {
-        return sendMessage({
-            tenant,
-            to: phone,
-            text: "No appointment times are available on that date. Please choose another date."
-        });
-    }
+            if (!period) {
+                const periodStep = workflow.steps.find((item) => item.kind === "time_period");
+                return promptStep({
+                    tenant,
+                    phone,
+                    tenantId,
+                    workflow,
+                    stepId: periodStep?.id || workflow.start_step,
+                    context
+                });
+            }
 
-    const openingHour = tenant?.opening_hour || 9;
-    const closingHour = tenant?.closing_hour || 21;
-    const capacity = getSlotCapacity(tenant);
-    const capacityNote = capacity > 1 ? `\nParallel appointments allowed: ${capacity}.` : "";
-
-    return sendButtonsMessage({
-        tenant,
-        to: phone,
-        header: "Choose a time window",
-        body: `Service: ${service_name}\nDate: ${formatDisplayDate(date)}\nAvailable hours: ${format12Hour(openingHour, 0)} to ${format12Hour(closingHour, 0)}.${capacityNote}`,
-        footer: "Pick a period first",
-        buttons: periods.map((period) => ({
-            id: period.id,
-            title: period.title
-        }))
-    });
-}
-
-async function promptTimeSelection({ tenant, phone, tenant_id, service_name, date, periodId }) {
-    await setState(phone, tenant_id, {
-        state: "TIME_SELECTION",
-        service_name,
-        date,
-        time: null
-    });
-
-    const availableSlots = await getAvailableTimeSlots(tenant, date);
-    const periods = groupSlotsIntoPeriods(availableSlots);
-    const period = periods.find((item) => item.id === periodId) || periods[0];
-
-    if (!period) {
-        return promptTimePeriodSelection({
-            tenant,
-            phone,
-            tenant_id,
-            service_name,
-            date
-        });
-    }
-
-    const slotDuration = tenant?.slot_duration || 30;
-
-    return sendListMessage({
-        tenant,
-        to: phone,
-        header: `${period.title} slots`,
-        body: `Service: ${service_name}\nDate: ${formatDisplayDate(date)}\nChoose one ${slotDuration}-minute slot.`,
-        footer: "Only slots with remaining capacity are shown",
-        buttonText: "View times",
-        sections: [
-            {
-                title: period.title,
-                rows: period.slots.map((slot) => ({
-                    id: slot.id,
+            return sendInteractiveStep({
+                tenant,
+                phone,
+                step,
+                question: buildQuestion(step, tenant, {
+                    ...context,
+                    period_title: period.title
+                }),
+                listTitle: period.title,
+                buttonText: step.button_text || "View times",
+                items: period.slots.map((slot) => ({
+                    id: buildInteractiveId(step.id, slot.dbValue),
                     title: slot.title,
                     description: "Tap to select"
                 }))
-            }
-        ]
-    });
+            });
+        }
+
+        case "confirmation": {
+            return sendInteractiveStep({
+                tenant,
+                phone,
+                step,
+                question,
+                items: step.options.map((option) => ({
+                    id: buildInteractiveId(step.id, option.id),
+                    title: option.title,
+                    description: option.description || "Tap to select"
+                }))
+            });
+        }
+
+        case "custom_choice": {
+            return sendInteractiveStep({
+                tenant,
+                phone,
+                step,
+                question,
+                listTitle: step.list_title || "Available options",
+                buttonText: step.button_text || "View options",
+                items: step.options.map((option) => ({
+                    id: buildInteractiveId(step.id, option.id),
+                    title: option.title,
+                    description: option.description || "Tap to select"
+                }))
+            });
+        }
+
+        default:
+            return sendMessage({
+                tenant,
+                to: phone,
+                text: question.body || "This step is not configured correctly. Type Hi to restart."
+            });
+    }
 }
 
-async function promptConfirmation({ tenant, phone, tenant_id, service_name, date, time }) {
-    await setState(phone, tenant_id, {
-        state: "CONFIRMATION",
-        service_name,
-        date,
-        time
-    });
+function matchStaticOption(step, input) {
+    return step.options.find((option) => {
+        const tokens = [
+            buildInteractiveId(step.id, option.id),
+            option.id,
+            option.value,
+            option.title
+        ];
 
-    const timeSlot = buildTimeSlots(tenant).find((slot) => slot.dbValue === time);
-    const week = getCurrentWeekRange(tenant?.timezone);
-    const bookingDate = new Date(`${date}T00:00:00`);
-    const isThisWeek = bookingDate >= week.start && bookingDate <= week.end;
-    const weekNote = isThisWeek ? "\nThis booking is in this week." : "";
+        return tokens.some((token) => String(token || "").trim().toLowerCase() === input);
+    }) || null;
+}
 
-    return sendButtonsMessage({
+async function completeBooking({ tenant, phone, tenantId, workflow, context }) {
+    if (!context.service_name || !context.date || !context.time) {
+        await sendMessage({
+            tenant,
+            to: phone,
+            text: "I could not complete the booking because some details are missing. Type Hi to start again."
+        });
+
+        return startWorkflow({ tenant, phone, tenantId, workflow });
+    }
+
+    let booking;
+
+    try {
+            booking = await createBooking({
+                tenant,
+                tenant_id: tenantId,
+                phone,
+                service_name: context.service_name,
+                booking_date: context.date,
+                booking_time: context.time,
+                workflow_answers: context.custom_answers || {}
+            });
+    } catch (err) {
+        if (err instanceof SlotAlreadyBookedError) {
+            await sendMessage({
+                tenant,
+                to: phone,
+                text: "That slot is no longer available. Please choose another time."
+            });
+
+            const periodStep = workflow.steps.find((item) => item.kind === "time_period");
+            return promptStep({
+                tenant,
+                phone,
+                tenantId,
+                workflow,
+                stepId: periodStep?.id || workflow.start_step,
+                context: {
+                    ...context,
+                    time: null
+                }
+            });
+        }
+
+        throw err;
+    }
+
+    await sendMessage({
         tenant,
         to: phone,
-        header: "Confirm booking",
-        body: `Service: ${service_name}\nDate: ${formatDisplayDate(date)}\nTime: ${timeSlot ? timeSlot.title : time}${weekNote}`,
-        footer: "Please confirm",
-        buttons: [
-            { id: "confirm_yes", title: "Yes" },
-            { id: "confirm_no", title: "No" }
-        ]
+        text: `Booking confirmed.\nID: ${booking.id}\nService: ${booking.service_name}\nDate: ${formatDisplayDate(booking.booking_date) || booking.booking_date}\nTime: ${buildTimeSlots(tenant).find((slot) => slot.dbValue === booking.booking_time)?.title || booking.booking_time}`
     });
+
+    return startWorkflow({ tenant, phone, tenantId, workflow });
 }
 
 async function processMessage({ tenant, phone, text, payload }) {
-    const tenant_id = tenant.id;
+    const tenantId = tenant.id;
+    const workflow = getWorkflowDefinition(tenant);
     const normalizedText = (text || "").trim().toLowerCase();
     const normalizedPayload = (payload || "").trim().toLowerCase();
     const input = normalizedPayload || normalizedText;
@@ -355,203 +534,250 @@ async function processMessage({ tenant, phone, text, payload }) {
     console.log("INPUT:", { phone, text: normalizedText, payload: normalizedPayload });
 
     if (normalizedText === "hi" || normalizedText === "hello" || input === "restart") {
-        return promptServiceSelection({ tenant, phone, tenant_id });
+        return startWorkflow({ tenant, phone, tenantId, workflow });
     }
 
-    const stateData = await getState(phone, tenant_id);
-    const state = stateData?.state || "SERVICE_SELECTION";
+    const stateData = await getState(phone, tenantId);
+    const currentStepId = stateData?.workflow_step || stateData?.state || workflow.start_step;
+    const context = {
+        service_name: stateData?.workflow_context?.service_name || stateData?.service_name || null,
+        date: stateData?.workflow_context?.date || stateData?.date || null,
+        time: stateData?.workflow_context?.time || stateData?.time || null,
+        custom_answers: stateData?.workflow_context?.custom_answers || {},
+        period_id: stateData?.workflow_context?.period_id || null,
+        period_title: stateData?.workflow_context?.period_title || null
+    };
+    const step = getStepById(workflow, currentStepId);
 
-    console.log("STATE:", state, stateData);
+    console.log("STATE:", currentStepId, context);
 
-    switch (state) {
-        case "SERVICE_SELECTION": {
-            const services = await getServices(tenant_id);
-            const service = services.find((item) => `service_${item.id}` === input);
+    if (!step) {
+        return startWorkflow({ tenant, phone, tenantId, workflow });
+    }
+
+    switch (step.kind) {
+        case "service": {
+            const services = await getServices(tenantId);
+            const service = services.find((item) => {
+                const serviceId = String(item.id);
+                return [
+                    buildInteractiveId(step.id, serviceId),
+                    `service_${serviceId}`,
+                    serviceId,
+                    item.name
+                ].some((token) => String(token || "").trim().toLowerCase() === input);
+            });
 
             if (!service) {
-                return promptServiceSelection({ tenant, phone, tenant_id });
+                return promptStep({ tenant, phone, tenantId, workflow, stepId: step.id, context });
             }
 
-            return promptDateSelection({
+            return promptStep({
                 tenant,
                 phone,
-                tenant_id,
-                service_name: service.name
+                tenantId,
+                workflow,
+                stepId: step.next,
+                context: {
+                    ...context,
+                    service_name: service.name,
+                    date: null,
+                    time: null,
+                    period_id: null,
+                    period_title: null
+                }
             });
         }
 
-        case "DATE_SELECTION": {
-            if (input === "date_other") {
-                return promptOtherDateSelection({
-                    tenant,
-                    phone,
-                    tenant_id,
-                    service_name: stateData.service_name
-                });
-            }
-
-            if (input === "date_today" || input === "today") {
-                return promptTimePeriodSelection({
-                    tenant,
-                    phone,
-                    tenant_id,
-                    service_name: stateData.service_name,
-                    date: parseDate("today", tenant?.timezone)
-                });
-            }
-
-            if (input === "date_tomorrow" || input === "tomorrow") {
-                return promptTimePeriodSelection({
-                    tenant,
-                    phone,
-                    tenant_id,
-                    service_name: stateData.service_name,
-                    date: parseDate("tomorrow", tenant?.timezone)
-                });
-            }
-
-            return promptDateSelection({
-                tenant,
-                phone,
-                tenant_id,
-                service_name: stateData.service_name
-            });
-        }
-
-        case "OTHER_DATE_SELECTION": {
-            const option = getOtherDateOptions(tenant).find((item) => item.id.toLowerCase() === input);
+        case "date_choice": {
+            const option = matchStaticOption(step, input);
 
             if (!option) {
-                return promptOtherDateSelection({
+                return promptStep({ tenant, phone, tenantId, workflow, stepId: step.id, context });
+            }
+
+            if (option.value === "other") {
+                return promptStep({
                     tenant,
                     phone,
-                    tenant_id,
-                    service_name: stateData.service_name
+                    tenantId,
+                    workflow,
+                    stepId: option.next || step.next,
+                    context: {
+                        ...context,
+                        date: null,
+                        time: null,
+                        period_id: null,
+                        period_title: null
+                    }
                 });
             }
 
-            return promptTimePeriodSelection({
+            return promptStep({
                 tenant,
                 phone,
-                tenant_id,
-                service_name: stateData.service_name,
-                date: option.value
+                tenantId,
+                workflow,
+                stepId: option.next || step.next,
+                context: {
+                    ...context,
+                    date: parseDate(option.value, tenant?.timezone),
+                    time: null,
+                    period_id: null,
+                    period_title: null
+                }
             });
         }
 
-        case "TIME_PERIOD_SELECTION": {
-            const availableSlots = await getAvailableTimeSlots(tenant, stateData.date);
-            const period = groupSlotsIntoPeriods(availableSlots).find((item) => item.id.toLowerCase() === input);
+        case "relative_date_list": {
+            const option = getRelativeDateOptions(tenant, step.offsets).find((item) => {
+                return [
+                    buildInteractiveId(step.id, item.value),
+                    item.id,
+                    item.value,
+                    item.title
+                ].some((token) => String(token || "").trim().toLowerCase() === input);
+            });
+
+            if (!option) {
+                return promptStep({ tenant, phone, tenantId, workflow, stepId: step.id, context });
+            }
+
+            return promptStep({
+                tenant,
+                phone,
+                tenantId,
+                workflow,
+                stepId: step.next,
+                context: {
+                    ...context,
+                    date: option.value,
+                    time: null,
+                    period_id: null,
+                    period_title: null
+                }
+            });
+        }
+
+        case "time_period": {
+            const availableSlots = await getAvailableTimeSlots(tenant, context.date);
+            const period = groupSlotsIntoPeriods(availableSlots).find((item) => {
+                return [
+                    buildInteractiveId(step.id, item.id),
+                    item.id,
+                    item.title
+                ].some((token) => String(token || "").trim().toLowerCase() === input);
+            });
 
             if (!period) {
-                return promptTimePeriodSelection({
-                    tenant,
-                    phone,
-                    tenant_id,
-                    service_name: stateData.service_name,
-                    date: stateData.date
-                });
+                return promptStep({ tenant, phone, tenantId, workflow, stepId: step.id, context });
             }
 
-            return promptTimeSelection({
+            return promptStep({
                 tenant,
                 phone,
-                tenant_id,
-                service_name: stateData.service_name,
-                date: stateData.date,
-                periodId: period.id
+                tenantId,
+                workflow,
+                stepId: step.next,
+                context: {
+                    ...context,
+                    period_id: period.id,
+                    period_title: period.title,
+                    time: null
+                }
             });
         }
 
-        case "TIME_SELECTION": {
-            const availableSlots = await getAvailableTimeSlots(tenant, stateData.date);
-            const timeSlot = availableSlots.find((slot) => slot.id.toLowerCase() === input);
+        case "time_slot": {
+            const availableSlots = await getAvailableTimeSlots(tenant, context.date);
+            const periods = groupSlotsIntoPeriods(availableSlots);
+            const period = periods.find((item) => item.id === context.period_id) || periods[0];
+            const timeSlot = period?.slots.find((slot) => {
+                return [
+                    buildInteractiveId(step.id, slot.dbValue),
+                    slot.id,
+                    slot.dbValue,
+                    slot.title
+                ].some((token) => String(token || "").trim().toLowerCase() === input);
+            });
 
             if (!timeSlot) {
-                return promptTimePeriodSelection({
+                const periodStep = workflow.steps.find((item) => item.kind === "time_period");
+                return promptStep({
                     tenant,
                     phone,
-                    tenant_id,
-                    service_name: stateData.service_name,
-                    date: stateData.date
+                    tenantId,
+                    workflow,
+                    stepId: periodStep?.id || step.id,
+                    context
                 });
             }
 
-            return promptConfirmation({
+            return promptStep({
                 tenant,
                 phone,
-                tenant_id,
-                service_name: stateData.service_name,
-                date: stateData.date,
-                time: timeSlot.dbValue
+                tenantId,
+                workflow,
+                stepId: step.next,
+                context: {
+                    ...context,
+                    time: timeSlot.dbValue
+                }
             });
         }
 
-        case "CONFIRMATION": {
-            if (input !== "confirm_yes" && normalizedText !== "yes") {
+        case "confirmation": {
+            const option = matchStaticOption(step, input);
+
+            if (!option) {
+                return promptStep({ tenant, phone, tenantId, workflow, stepId: step.id, context });
+            }
+
+            if (option.action === "cancel") {
                 await sendMessage({
                     tenant,
                     to: phone,
                     text: "Booking cancelled. Type Hi when you want to start again."
                 });
 
-                return setState(phone, tenant_id, {
-                    state: "SERVICE_SELECTION",
-                    service_name: null,
-                    date: null,
-                    time: null
-                });
+                return startWorkflow({ tenant, phone, tenantId, workflow });
             }
 
-            let booking;
+            return completeBooking({ tenant, phone, tenantId, workflow, context });
+        }
 
-            try {
-                booking = await createBooking({
-                    tenant,
-                    tenant_id,
-                    phone,
-                    service_name: stateData.service_name,
-                    booking_date: stateData.date,
-                    booking_time: stateData.time
-                });
-            } catch (err) {
-                if (err instanceof SlotAlreadyBookedError) {
-                    await sendMessage({
-                        tenant,
-                        to: phone,
-                        text: "That slot is no longer available. Please choose another time."
-                    });
+        case "custom_choice": {
+            const option = matchStaticOption(step, input);
 
-                    return promptTimePeriodSelection({
-                        tenant,
-                        phone,
-                        tenant_id,
-                        service_name: stateData.service_name,
-                        date: stateData.date
-                    });
-                }
-
-                throw err;
+            if (!option) {
+                return promptStep({ tenant, phone, tenantId, workflow, stepId: step.id, context });
             }
 
-            await sendMessage({
+            const answerKey = step.answer_key || step.id;
+
+            return promptStep({
                 tenant,
-                to: phone,
-                text: `Booking confirmed.\nID: ${booking.id}\nService: ${booking.service_name}\nDate: ${formatDisplayDate(booking.booking_date) || booking.booking_date}\nTime: ${buildTimeSlots(tenant).find((slot) => slot.dbValue === booking.booking_time)?.title || booking.booking_time}`
+                phone,
+                tenantId,
+                workflow,
+                stepId: option.next || step.next,
+                context: {
+                    ...context,
+                    custom_answers: {
+                        ...(context.custom_answers || {}),
+                        [answerKey]: {
+                            step_id: step.id,
+                            option_id: option.id,
+                            title: option.title,
+                            value: option.value || option.title
+                        }
+                    }
+                }
             });
-
-            await setState(phone, tenant_id, {
-                state: "SERVICE_SELECTION",
-                service_name: null,
-                date: null,
-                time: null
-            });
-
-            return;
         }
 
         default:
-            return promptServiceSelection({ tenant, phone, tenant_id });
+            return startWorkflow({ tenant, phone, tenantId, workflow });
     }
 }
 

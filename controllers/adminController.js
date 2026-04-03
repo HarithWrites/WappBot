@@ -5,6 +5,7 @@ const {
     updateBookingStatus
 } = require("../services/bookingService");
 const { updateTenantSettings } = require("../services/tenantService");
+const { normalizeWorkflowConfig } = require("../services/workflowService");
 const { sendMessage } = require("../services/whatsappService");
 const { formatDisplayDate } = require("../utils/validators");
 const db = require("../db");
@@ -32,7 +33,8 @@ exports.getSettings = async (req, res) => {
         id: req.tenant.id,
         business_name: req.tenant.business_name || `Tenant ${req.tenant.id}`,
         timezone: req.tenant.timezone || "UTC",
-        max_parallel_appointments: getSlotCapacity(req.tenant)
+        max_parallel_appointments: getSlotCapacity(req.tenant),
+        workflow_config: normalizeWorkflowConfig(req.tenant.workflow_config)
     });
 };
 
@@ -43,10 +45,12 @@ exports.updateSettings = async (req, res) => {
             1,
             Number.parseInt(req.body.max_parallel_appointments, 10) || 1
         );
+        const workflowConfig = normalizeWorkflowConfig(req.body.workflow_config);
 
         const tenant = await updateTenantSettings(req.tenant.id, {
             timezone,
-            max_parallel_appointments: maxParallelAppointments
+            max_parallel_appointments: maxParallelAppointments,
+            workflow_config: workflowConfig
         });
 
         return res.json({
@@ -55,7 +59,8 @@ exports.updateSettings = async (req, res) => {
                 id: tenant.id,
                 business_name: tenant.business_name || `Tenant ${tenant.id}`,
                 timezone: tenant.timezone || "UTC",
-                max_parallel_appointments: getSlotCapacity(tenant)
+                max_parallel_appointments: getSlotCapacity(tenant),
+                workflow_config: normalizeWorkflowConfig(tenant.workflow_config)
             }
         });
     } catch (err) {

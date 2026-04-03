@@ -20,10 +20,16 @@ async function updateTenantSettings(tenantId, settings) {
     const res = await db.query(
         `UPDATE tenants
          SET timezone = $2,
-             max_parallel_appointments = $3
+             max_parallel_appointments = $3,
+             workflow_config = $4
          WHERE id = $1
          RETURNING *`,
-        [tenantId, settings.timezone, settings.max_parallel_appointments]
+        [
+            tenantId,
+            settings.timezone,
+            settings.max_parallel_appointments,
+            settings.workflow_config || null
+        ]
     );
 
     return res.rows[0];

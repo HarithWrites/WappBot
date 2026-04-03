@@ -36,7 +36,8 @@ async function createBooking({
     phone,
     service_name,
     booking_date,
-    booking_time
+    booking_time,
+    workflow_answers = {}
 }) {
     const client = await db.connect();
     const slotKey = `${tenant_id}:${booking_date}:${booking_time}`;
@@ -64,10 +65,10 @@ async function createBooking({
 
         const res = await client.query(
             `INSERT INTO bookings
-            (tenant_id, phone, service_name, booking_date, booking_time, status)
-            VALUES ($1, $2, $3, $4, $5, 'pending')
+            (tenant_id, phone, service_name, booking_date, booking_time, status, workflow_answers)
+            VALUES ($1, $2, $3, $4, $5, 'pending', $6)
             RETURNING *`,
-            [tenant_id, phone, service_name, booking_date, booking_time]
+            [tenant_id, phone, service_name, booking_date, booking_time, JSON.stringify(workflow_answers || {})]
         );
 
         await client.query("COMMIT");
