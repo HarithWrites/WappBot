@@ -1,57 +1,72 @@
-let allBookings = [];
-let currentFilter = "all";
-let searchTerm = "";
-let stream;
-let streamTenantToken = null;
 let adminToken = "";
-let tenantSettings = null;
-let activeScreen = "manageAppointments";
-let closeBookingId = null;
-
-const DEFAULT_TENANT_SETTINGS = {
-    id: "",
-    business_name: "Manage Appointments",
-    timezone: "UTC",
-    max_parallel_appointments: 1,
-    workflow_config: null
+let stream = null;
+let streamTenantToken = null;
+let portalData = { scope: "tenant", tenants: [] };
+let selectedTenantId = null;
+let currentFilter = "all";
+let currentPage = 1;
+let pageSize = 14;
+let currentScreen = "overviewScreen";
+let summaryCounts = {
+    all: 0,
+    pending: 0,
+    waiting: 0,
+    confirmed: 0,
+    rejected: 0,
+    closed: 0
 };
-
-function formatWorkflowConfig(value) {
-    return JSON.stringify(value || {}, null, 2);
-}
+let bookingsResponse = {
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize
+};
+let closeBookingMeta = null;
 
 const loginScreen = document.getElementById("loginScreen");
 const dashboardShell = document.getElementById("dashboardShell");
 const loginForm = document.getElementById("loginForm");
 const tenantInput = document.getElementById("tenantId");
-const dateInput = document.getElementById("dateFilter");
-const searchInput = document.getElementById("searchInput");
-const bookingsTableBody = document.getElementById("bookingsTableBody");
-const weeklyBookingsTableBody = document.getElementById("weeklyBookingsTableBody");
-const archiveTableBody = document.getElementById("archiveTableBody");
-const dashboardEmpty = document.getElementById("dashboardEmpty");
-const weeklyEmpty = document.getElementById("weeklyEmpty");
-const archiveEmpty = document.getElementById("archiveEmpty");
-const connectionStatus = document.getElementById("connectionStatus");
 const loginStatus = document.getElementById("loginStatus");
 const logoutButton = document.getElementById("logoutButton");
-const settingsForm = document.getElementById("settingsForm");
-const timezoneInput = document.getElementById("timezoneInput");
-const parallelInput = document.getElementById("parallelInput");
-const workflowConfigInput = document.getElementById("workflowConfigInput");
-const settingsStatus = document.getElementById("settingsStatus");
+const sidebar = document.getElementById("sidebar");
+const sidebarToggle = document.getElementById("sidebarToggle");
 const tenantName = document.getElementById("tenantName");
 const sidebarBusinessName = document.getElementById("sidebarBusinessName");
+const connectionStatus = document.getElementById("connectionStatus");
+const overviewStatus = document.getElementById("overviewStatus");
+const homeConnectionLabel = document.getElementById("homeConnectionLabel");
+const tenantOverviewList = document.getElementById("tenantOverviewList");
+const overviewTenantCount = document.getElementById("overviewTenantCount");
 const screenButtons = document.querySelectorAll("[data-screen-target]");
 const screens = document.querySelectorAll(".workspace-screen");
-const homeRefreshButton = document.getElementById("homeRefreshButton");
-const homeSearchButton = document.getElementById("homeSearchButton");
-const homeWeekCount = document.getElementById("homeWeekCount");
-const homeConnectionLabel = document.getElementById("homeConnectionLabel");
-const archiveCount = document.getElementById("archiveCount");
-const homeTableStatus = document.getElementById("homeTableStatus");
-const searchTableStatus = document.getElementById("searchTableStatus");
-const archiveTableStatus = document.getElementById("archiveTableStatus");
+const refreshOverviewButton = document.getElementById("refreshOverviewButton");
+const refreshBookingsButton = document.getElementById("refreshBookingsButton");
+const bookingsTableBody = document.getElementById("bookingsTableBody");
+const dashboardEmpty = document.getElementById("dashboardEmpty");
+const bookingsStatus = document.getElementById("bookingsStatus");
+const searchInput = document.getElementById("searchInput");
+const dateInput = document.getElementById("dateFilter");
+const tenantFilter = document.getElementById("tenantFilter");
+const prevPageButton = document.getElementById("prevPageButton");
+const nextPageButton = document.getElementById("nextPageButton");
+const pageLabel = document.getElementById("pageLabel");
+const settingsForm = document.getElementById("settingsForm");
+const businessNameInput = document.getElementById("businessNameInput");
+const timezoneInput = document.getElementById("timezoneInput");
+const parallelInput = document.getElementById("parallelInput");
+const tenantIdDisplay = document.getElementById("tenantIdDisplay");
+const workflowConfigInput = document.getElementById("workflowConfigInput");
+const settingsStatus = document.getElementById("settingsStatus");
+const tenantList = document.getElementById("tenantList");
+const servicesList = document.getElementById("servicesList");
+const providersList = document.getElementById("providersList");
+const tenantEditorTitle = document.getElementById("tenantEditorTitle");
+const stepSelector = document.getElementById("stepSelector");
+const insertBeforeSelector = document.getElementById("insertBeforeSelector");
+const addQuestionButton = document.getElementById("addQuestionButton");
+const addAnswerButton = document.getElementById("addAnswerButton");
+const removeStepButton = document.getElementById("removeStepButton");
 const closeModal = document.getElementById("closeModal");
 const closeForm = document.getElementById("closeForm");
 const closeRemarks = document.getElementById("closeRemarks");
@@ -83,10 +98,14 @@ function normalizeTimeValue(value) {
 
 function formatDisplayDate(dateString) {
     const normalizedDate = normalizeDateValue(dateString);
+    if (!normalizedDate) {
+        return "No date";
+    }
+
     const date = new Date(`${normalizedDate}T00:00:00`);
 
     if (Number.isNaN(date.getTime())) {
-        return normalizedDate || "No date";
+        return normalizedDate;
     }
 
     return new Intl.DateTimeFormat("en-GB", {
@@ -117,266 +136,45 @@ function formatDisplayTime(timeString) {
     }).format(date);
 }
 
-function getWeekRange() {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const day = today.getDay();
-    const diffToMonday = day === 0 ? -6 : 1 - day;
-    const start = new Date(today);
-    start.setDate(today.getDate() + diffToMonday);
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
-    end.setHours(23, 59, 59, 999);
-    return { start, end };
+function safeJsonParse(value, fallback = null) {
+    try {
+        return JSON.parse(value);
+    } catch (err) {
+        return fallback;
+    }
 }
 
-function isThisWeek(dateString) {
-    const normalizedDate = normalizeDateValue(dateString);
-    const date = new Date(`${normalizedDate}T00:00:00`);
+function formatWorkflowConfig(value) {
+    return JSON.stringify(value || {}, null, 2);
+}
 
-    if (Number.isNaN(date.getTime())) {
-        return false;
+function getSelectedTenant() {
+    if (!portalData.tenants.length) {
+        return null;
     }
 
-    const { start, end } = getWeekRange();
-    return date >= start && date <= end;
+    return portalData.tenants.find((tenant) => String(tenant.id) === String(selectedTenantId))
+        || portalData.tenants[0];
 }
 
-function getTenantSettings() {
-    return tenantSettings || DEFAULT_TENANT_SETTINGS;
+function getTenantLabel(tenant) {
+    return tenant?.business_name || `Tenant ${tenant?.id || ""}`;
 }
 
-function getActiveBookings() {
-    return allBookings.filter((booking) => booking.status !== "closed");
-}
+function updateHeaderLabels() {
+    const selectedTenant = getSelectedTenant();
+    const portalTitle = portalData.scope === "global"
+        ? "All Tenant Control Center"
+        : (selectedTenant ? getTenantLabel(selectedTenant) : "WappBot Control Center");
 
-function getCurrentWeekBookings() {
-    return getActiveBookings().filter((booking) => isThisWeek(booking.booking_date));
-}
-
-function getArchivedBookings() {
-    return allBookings.filter((booking) => booking.status === "closed");
-}
-
-function setStats() {
-    const activeBookings = getActiveBookings();
-    const weekCount = getCurrentWeekBookings().length;
-    const pendingCount = activeBookings.filter((booking) => booking.status === "pending").length;
-
-    document.getElementById("statTotal").textContent = activeBookings.length;
-    document.getElementById("statWeek").textContent = weekCount;
-    document.getElementById("statPending").textContent = pendingCount;
-    homeWeekCount.textContent = `${weekCount} appointments`;
-    archiveCount.textContent = `${getArchivedBookings().length} archived appointments`;
-}
-
-function getFilteredBookings() {
-    const normalizedSearch = searchTerm.trim().toLowerCase();
-
-    return allBookings.filter((booking) => {
-        if (currentFilter !== "all" && booking.status !== currentFilter) {
-            return false;
-        }
-
-        if (dateInput.value && normalizeDateValue(booking.booking_date) !== dateInput.value) {
-            return false;
-        }
-
-        if (!normalizedSearch) {
-            return true;
-        }
-
-        return [
-            booking.service_name,
-            booking.phone,
-            booking.status,
-            booking.booking_date,
-            booking.booking_time,
-            booking.tenant_name,
-            booking.close_remarks
-        ].some((value) => String(value || "").toLowerCase().includes(normalizedSearch));
-    });
-}
-
-function getBusinessLabel(booking) {
-    return booking.tenant_name || getTenantSettings().business_name || `Tenant ${booking.tenant_id}`;
-}
-
-function getActionMarkup(booking) {
-    if (booking.status === "closed") {
-        return '<span class="cell-copy">Archived</span>';
-    }
-
-    return `
-        <div class="action-stack">
-            <button class="approve" data-action="approve" data-id="${booking.id}" type="button">Confirm</button>
-            <button class="pending" data-action="pending" data-id="${booking.id}" type="button">Pending</button>
-            <button class="reject" data-action="reject" data-id="${booking.id}" type="button">Reject</button>
-            <button class="secondary" data-action="close" data-id="${booking.id}" type="button">Close</button>
-        </div>
-    `;
-}
-
-function createBookingRow(booking) {
-    const row = document.createElement("tr");
-    const businessLabel = getBusinessLabel(booking);
-    const serviceName = booking.service_name || "Unnamed service";
-    const phone = booking.phone || "No phone";
-    const dateLabel = booking.booking_date ? formatDisplayDate(booking.booking_date) : "No date";
-    const timeLabel = booking.booking_time ? formatDisplayTime(booking.booking_time) : "No time";
-    const status = booking.status || "pending";
-    const createdAtLabel = booking.created_at ? new Date(booking.created_at).toLocaleString("en-IN") : "";
-
-    row.innerHTML = `
-        <td>
-            <div class="cell-title">${businessLabel}</div>
-            <div class="cell-copy">Tenant ID ${booking.tenant_id}</div>
-        </td>
-        <td>
-            <div class="cell-title">${serviceName}</div>
-            <div class="cell-copy">Booking #${booking.id}</div>
-        </td>
-        <td>
-            <div class="cell-title">${phone}</div>
-            <div class="cell-copy">${booking.close_remarks || "No remarks"}</div>
-        </td>
-        <td>
-            <div class="cell-title">${dateLabel}</div>
-            <div class="cell-copy">${timeLabel}</div>
-        </td>
-        <td>
-            <span class="status-badge status-${status}">${status}</span>
-            <div class="cell-copy">${createdAtLabel}</div>
-        </td>
-        <td>${getActionMarkup(booking)}</td>
-    `;
-
-    return row;
-}
-
-function createArchiveRow(booking) {
-    const row = document.createElement("tr");
-    const businessLabel = getBusinessLabel(booking);
-    const serviceName = booking.service_name || "Unnamed service";
-    const phone = booking.phone || "No phone";
-    const dateLabel = booking.booking_date ? formatDisplayDate(booking.booking_date) : "No date";
-    const timeLabel = booking.booking_time ? formatDisplayTime(booking.booking_time) : "No time";
-
-    row.innerHTML = `
-        <td>
-            <div class="cell-title">${businessLabel}</div>
-            <div class="cell-copy">Tenant ID ${booking.tenant_id}</div>
-        </td>
-        <td>
-            <div class="cell-title">${serviceName}</div>
-            <div class="cell-copy">Booking #${booking.id}</div>
-        </td>
-        <td>
-            <div class="cell-title">${phone}</div>
-            <div class="cell-copy">${dateLabel} at ${timeLabel}</div>
-        </td>
-        <td>
-            <div class="cell-title">${booking.close_remarks || "No remarks provided"}</div>
-            <div class="cell-copy">${booking.closed_at ? new Date(booking.closed_at).toLocaleString("en-IN") : "Closed timestamp unavailable"}</div>
-        </td>
-        <td>
-            <span class="status-badge status-closed">closed</span>
-        </td>
-    `;
-
-    return row;
-}
-
-function renderTableBody(target, bookings, emptyState) {
-    target.innerHTML = "";
-
-    if (!bookings.length) {
-        emptyState.classList.remove("hidden");
-        return;
-    }
-
-    emptyState.classList.add("hidden");
-    bookings.forEach((booking) => {
-        try {
-            target.appendChild(createBookingRow(booking));
-        } catch (err) {
-            console.error("render booking row error:", booking, err);
-        }
-    });
-}
-
-function renderManageScreen() {
-    const weeklyBookings = getCurrentWeekBookings();
-    const activeBookings = getActiveBookings();
-    renderTableBody(weeklyBookingsTableBody, weeklyBookings, weeklyEmpty);
-
-    if (!weeklyBookings.length && allBookings.length > 0) {
-        weeklyEmpty.textContent = `No current week appointments found. ${allBookings.length} booking(s) are available in Search appointments.`;
-        homeTableStatus.textContent = `Loaded ${activeBookings.length} active booking(s). None fall within the current week, so this screen stays empty. Open Search appointments to see all records.`;
-        return;
-    }
-
-    weeklyEmpty.textContent = "No current week appointments found.";
-    homeTableStatus.textContent = weeklyBookings.length
-        ? `Showing ${weeklyBookings.length} current-week appointment(s) out of ${activeBookings.length} active booking(s).`
-        : "No active bookings are available yet.";
-}
-
-function renderSearchScreen() {
-    const filteredBookings = getFilteredBookings();
-    renderTableBody(bookingsTableBody, filteredBookings, dashboardEmpty);
-    searchTableStatus.textContent = filteredBookings.length
-        ? `Showing ${filteredBookings.length} booking(s) from ${allBookings.length} loaded record(s).`
-        : allBookings.length
-            ? `Loaded ${allBookings.length} booking(s), but none match the current search and filter selection.`
-            : "No bookings have been loaded yet.";
-}
-
-function renderArchiveScreen() {
-    archiveTableBody.innerHTML = "";
-    const archivedBookings = getArchivedBookings();
-
-    if (!archivedBookings.length) {
-        archiveEmpty.classList.remove("hidden");
-        archiveTableStatus.textContent = allBookings.length
-            ? "No appointments have been archived yet."
-            : "No bookings have been loaded yet.";
-        return;
-    }
-
-    archiveEmpty.classList.add("hidden");
-    archiveTableStatus.textContent = `Showing ${archivedBookings.length} archived appointment(s).`;
-    archivedBookings.forEach((booking) => {
-        try {
-            archiveTableBody.appendChild(createArchiveRow(booking));
-        } catch (err) {
-            console.error("render archive row error:", booking, err);
-        }
-    });
-}
-
-function renderTenantSettings() {
-    const settings = getTenantSettings();
-    const displayName = settings.business_name
-        || (settings.id ? `Tenant ${settings.id}` : DEFAULT_TENANT_SETTINGS.business_name);
-
-    tenantName.textContent = displayName;
-    sidebarBusinessName.textContent = displayName;
-    timezoneInput.value = settings.timezone || DEFAULT_TENANT_SETTINGS.timezone;
-    parallelInput.value = settings.max_parallel_appointments || DEFAULT_TENANT_SETTINGS.max_parallel_appointments;
-    workflowConfigInput.value = formatWorkflowConfig(settings.workflow_config);
-}
-
-function render() {
-    setStats();
-    renderTenantSettings();
-    renderManageScreen();
-    renderSearchScreen();
-    renderArchiveScreen();
+    tenantName.textContent = portalTitle;
+    sidebarBusinessName.textContent = portalData.scope === "global"
+        ? "Master admin session"
+        : `${portalTitle} admin session`;
 }
 
 function setActiveScreen(screenId) {
-    activeScreen = screenId;
+    currentScreen = screenId;
 
     screenButtons.forEach((button) => {
         button.classList.toggle("active", button.dataset.screenTarget === screenId);
@@ -385,18 +183,6 @@ function setActiveScreen(screenId) {
     screens.forEach((screen) => {
         screen.classList.toggle("hidden", screen.id !== screenId);
     });
-}
-
-function buildBookingsUrl() {
-    const params = new URLSearchParams();
-    params.set("token", adminToken);
-    return `/admin/bookings?${params.toString()}`;
-}
-
-function buildSettingsUrl() {
-    const params = new URLSearchParams();
-    params.set("token", adminToken);
-    return `/admin/settings?${params.toString()}`;
 }
 
 function closeStream() {
@@ -408,37 +194,23 @@ function closeStream() {
     streamTenantToken = null;
 }
 
-function closeArchiveModal() {
-    closeBookingId = null;
+function closeCloseModal() {
+    closeBookingMeta = null;
     closeRemarks.value = "";
     closeModal.classList.add("hidden");
 }
 
-function openCloseModal(bookingId) {
-    const booking = allBookings.find((item) => String(item.id) === String(bookingId));
-
-    if (!booking) {
-        return;
-    }
-
-    closeBookingId = bookingId;
-    closeModalSummary.textContent = `${booking.service_name} for ${booking.phone} on ${formatDisplayDate(booking.booking_date)} at ${formatDisplayTime(booking.booking_time)}.`;
-    closeRemarks.value = booking.close_remarks || "";
-    closeModal.classList.remove("hidden");
-    closeRemarks.focus();
-}
-
 function showLogin(message = "Your token stays saved on this browser until you sign out.") {
     closeStream();
-    closeArchiveModal();
-    allBookings = [];
-    tenantSettings = null;
+    closeCloseModal();
+    portalData = { scope: "tenant", tenants: [] };
+    selectedTenantId = null;
+    bookingsResponse = { items: [], total: 0, page: 1, pageSize };
+    summaryCounts = { all: 0, pending: 0, waiting: 0, confirmed: 0, rejected: 0, closed: 0 };
     render();
     loginScreen.classList.remove("hidden");
     dashboardShell.classList.add("hidden");
     loginStatus.textContent = message;
-    connectionStatus.textContent = "Signed out.";
-    homeConnectionLabel.textContent = "Signed out";
     tenantInput.focus();
 }
 
@@ -480,149 +252,629 @@ async function fetchJson(url, options = {}) {
     return data;
 }
 
-async function loadBookings() {
+function getTokenQuery() {
+    const params = new URLSearchParams();
+    params.set("token", adminToken);
+    return params;
+}
+
+function buildPortalDataUrl() {
+    return `/admin/portal-data?${getTokenQuery().toString()}`;
+}
+
+function buildBookingsUrl() {
+    const params = getTokenQuery();
+    const selectedTenant = tenantFilter.value || "";
+
+    if (selectedTenant) {
+        params.set("tenantId", selectedTenant);
+    }
+
+    if (currentFilter && currentFilter !== "all") {
+        params.set("status", currentFilter);
+    }
+
+    if (searchInput.value.trim()) {
+        params.set("search", searchInput.value.trim());
+    }
+
+    if (dateInput.value) {
+        params.set("date", dateInput.value);
+    }
+
+    params.set("page", String(currentPage));
+    params.set("pageSize", String(pageSize));
+
+    return `/admin/bookings?${params.toString()}`;
+}
+
+function buildSettingsUrl(tenantId) {
+    const params = getTokenQuery();
+
+    if (tenantId) {
+        params.set("tenantId", String(tenantId));
+    }
+
+    return `/admin/settings?${params.toString()}`;
+}
+
+async function loadPortalData(options = {}) {
     if (!adminToken) {
-        showLogin();
         return;
     }
 
-    connectionStatus.textContent = "Loading bookings...";
-    homeConnectionLabel.textContent = "Loading";
+    if (!options.silent) {
+        overviewStatus.textContent = "Loading tenant controls and workflow data...";
+    }
 
+    const data = await fetchJson(buildPortalDataUrl());
+    portalData = {
+        scope: data.scope || "tenant",
+        tenants: Array.isArray(data.tenants) ? data.tenants : []
+    };
+
+    if (!selectedTenantId || !portalData.tenants.some((tenant) => String(tenant.id) === String(selectedTenantId))) {
+        selectedTenantId = portalData.tenants[0]?.id || null;
+    }
+
+    updateTenantFilterOptions();
+    updateHeaderLabels();
+    renderTenantOverview();
+    renderTenantDirectory();
+    renderSelectedTenant();
+}
+
+async function refreshSummaryCounts() {
+    if (!adminToken) {
+        return;
+    }
+
+    const statuses = ["all", "pending", "waiting", "confirmed", "rejected", "closed"];
+    const selectedTenant = tenantFilter.value || "";
+
+    const results = await Promise.all(statuses.map(async (status) => {
+        const params = getTokenQuery();
+
+        if (selectedTenant) {
+            params.set("tenantId", selectedTenant);
+        }
+
+        params.set("page", "1");
+        params.set("pageSize", "1");
+
+        if (status !== "all") {
+            params.set("status", status);
+        }
+
+        const response = await fetchJson(`/admin/bookings?${params.toString()}`);
+        return [status, response.total || 0];
+    }));
+
+    summaryCounts = Object.fromEntries(results);
+}
+
+async function loadBookings() {
+    if (!adminToken) {
+        return;
+    }
+
+    bookingsStatus.textContent = "Loading bookings...";
+    const response = await fetchJson(buildBookingsUrl());
+    bookingsResponse = {
+        items: Array.isArray(response.items) ? response.items : [],
+        total: response.total || 0,
+        page: response.page || currentPage,
+        pageSize: response.pageSize || pageSize
+    };
+    currentPage = bookingsResponse.page;
+    await refreshSummaryCounts();
+    renderOverviewStats();
+    renderBookingsTable();
+}
+
+async function refreshPortal() {
     try {
-        const bookings = await fetchJson(buildBookingsUrl());
-        let settings = null;
-
-        try {
-            settings = await fetchJson(buildSettingsUrl());
-        } catch (settingsError) {
-            if (settingsError.message !== "Unauthorized") {
-                console.error("settings load error:", settingsError);
-            } else {
-                throw settingsError;
-            }
-        }
-
-        allBookings = Array.isArray(bookings) ? bookings : [];
-        tenantSettings = {
-            ...DEFAULT_TENANT_SETTINGS,
-            ...(tenantSettings || {}),
-            ...(settings || {})
-        };
-
         showDashboard();
-        const shouldOpenSearch = activeScreen === "manageAppointments"
-            && allBookings.length > 0
-            && getCurrentWeekBookings().length === 0;
-
-        if (shouldOpenSearch) {
-            setActiveScreen("searchAppointments");
-        }
-
-        try {
-            render();
-        } catch (renderError) {
-            console.error("render error:", renderError);
-        }
-        connectionStatus.textContent = `Live updates connected. Loaded ${allBookings.length} bookings.`;
+        await loadPortalData();
+        await loadBookings();
+        overviewStatus.textContent = `Portal ready. Managing ${portalData.tenants.length} tenant(s).`;
+        connectionStatus.textContent = "Live updates connected.";
         homeConnectionLabel.textContent = "Connected";
-        settingsStatus.textContent = settings
-            ? `Settings loaded. Current parallel limit: ${tenantSettings.max_parallel_appointments}.`
-            : "Bookings loaded. Settings could not be loaded, so the dashboard is using fallback values.";
         connectStream(adminToken);
     } catch (err) {
         if (err.message !== "Unauthorized") {
-            console.error("loadBookings error:", err);
-            if (allBookings.length > 0) {
-                connectionStatus.textContent = `Showing ${allBookings.length} cached bookings. Latest refresh failed.`;
-                homeConnectionLabel.textContent = "Cached";
-            } else {
-                connectionStatus.textContent = "Could not load bookings right now.";
-                homeConnectionLabel.textContent = "Error";
-            }
+            console.error("refreshPortal error:", err);
+            overviewStatus.textContent = "Could not load portal data right now.";
+            connectionStatus.textContent = "Live connection unavailable.";
+            homeConnectionLabel.textContent = "Error";
         }
     }
 }
 
-async function updateBookingStatus(bookingId, status, options = {}) {
-    const endpoint = status === "confirmed"
-        ? "/admin/approve"
-        : status === "pending"
-            ? "/admin/pending"
-            : status === "closed"
-                ? "/admin/close"
-                : "/admin/reject";
-    const button = document.querySelector(`[data-id="${bookingId}"][data-action="${options.actionName || status}"]`);
+function renderOverviewStats() {
+    document.getElementById("statTotal").textContent = summaryCounts.all || 0;
+    document.getElementById("statPending").textContent = summaryCounts.pending || 0;
+    document.getElementById("statWaiting").textContent = summaryCounts.waiting || 0;
+    document.getElementById("statConfirmed").textContent = summaryCounts.confirmed || 0;
+    document.getElementById("statRejected").textContent = summaryCounts.rejected || 0;
+    document.getElementById("statClosed").textContent = summaryCounts.closed || 0;
+    overviewTenantCount.textContent = `${portalData.tenants.length} tenant${portalData.tenants.length === 1 ? "" : "s"}`;
+}
 
-    if (button) {
-        button.disabled = true;
+function renderTenantOverview() {
+    tenantOverviewList.innerHTML = "";
+
+    if (!portalData.tenants.length) {
+        tenantOverviewList.innerHTML = '<p class="status-note">No tenants available.</p>';
+        return;
     }
 
+    portalData.tenants.forEach((tenant) => {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = "tenant-overview-item";
+        item.innerHTML = `
+            <span class="tenant-overview-title">${getTenantLabel(tenant)}</span>
+            <span class="tenant-overview-copy">${tenant.services.length} services, ${tenant.providers.length} providers</span>
+        `;
+        item.addEventListener("click", () => {
+            selectedTenantId = tenant.id;
+            renderSelectedTenant();
+            renderTenantDirectory();
+            setActiveScreen("tenantControlsScreen");
+        });
+        tenantOverviewList.appendChild(item);
+    });
+}
+
+function updateTenantFilterOptions() {
+    tenantFilter.innerHTML = "";
+
+    const allOption = document.createElement("option");
+    allOption.value = "";
+    allOption.textContent = portalData.scope === "global" ? "All tenants" : "Current tenant";
+    tenantFilter.appendChild(allOption);
+
+    portalData.tenants.forEach((tenant) => {
+        const option = document.createElement("option");
+        option.value = String(tenant.id);
+        option.textContent = getTenantLabel(tenant);
+        tenantFilter.appendChild(option);
+    });
+
+    if (portalData.scope !== "global") {
+        tenantFilter.value = portalData.tenants[0] ? String(portalData.tenants[0].id) : "";
+        tenantFilter.disabled = true;
+    } else if (!portalData.tenants.some((tenant) => String(tenant.id) === tenantFilter.value)) {
+        tenantFilter.value = "";
+        tenantFilter.disabled = false;
+    }
+}
+
+function renderTenantDirectory() {
+    tenantList.innerHTML = "";
+
+    portalData.tenants.forEach((tenant) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `tenant-list-item${String(tenant.id) === String(selectedTenantId) ? " active" : ""}`;
+        button.innerHTML = `
+            <span class="tenant-list-title">${getTenantLabel(tenant)}</span>
+            <span class="tenant-list-copy">ID ${tenant.id} - ${tenant.services.length} services - ${tenant.providers.length} providers</span>
+        `;
+        button.addEventListener("click", () => {
+            selectedTenantId = tenant.id;
+            renderSelectedTenant();
+            renderTenantDirectory();
+        });
+        tenantList.appendChild(button);
+    });
+}
+
+function renderTokenList(target, items, emptyMessage) {
+    target.innerHTML = "";
+
+    if (!items.length) {
+        const empty = document.createElement("p");
+        empty.className = "status-note";
+        empty.textContent = emptyMessage;
+        target.appendChild(empty);
+        return;
+    }
+
+    items.forEach((item) => {
+        const token = document.createElement("span");
+        token.className = "data-token";
+        token.textContent = item.name || item.title || "Unnamed";
+        target.appendChild(token);
+    });
+}
+
+function parseWorkflowEditor() {
+    return safeJsonParse(workflowConfigInput.value, null);
+}
+
+function refreshWorkflowSelectors() {
+    const workflow = parseWorkflowEditor();
+    const steps = Array.isArray(workflow?.steps) ? workflow.steps : [];
+
+    stepSelector.innerHTML = "";
+    insertBeforeSelector.innerHTML = "";
+
+    steps.forEach((step) => {
+        const option = document.createElement("option");
+        option.value = step.id;
+        option.textContent = `${step.id} (${step.kind})`;
+        stepSelector.appendChild(option);
+
+        const insertOption = option.cloneNode(true);
+        insertBeforeSelector.appendChild(insertOption);
+    });
+}
+
+function renderSelectedTenant() {
+    const tenant = getSelectedTenant();
+
+    if (!tenant) {
+        tenantEditorTitle.textContent = "Choose a tenant";
+        businessNameInput.value = "";
+        timezoneInput.value = "";
+        parallelInput.value = "1";
+        tenantIdDisplay.value = "";
+        workflowConfigInput.value = "";
+        servicesList.innerHTML = "";
+        providersList.innerHTML = "";
+        refreshWorkflowSelectors();
+        return;
+    }
+
+    tenantEditorTitle.textContent = getTenantLabel(tenant);
+    businessNameInput.value = tenant.business_name || "";
+    timezoneInput.value = tenant.timezone || "UTC";
+    parallelInput.value = String(tenant.max_parallel_appointments || 1);
+    tenantIdDisplay.value = String(tenant.id);
+    workflowConfigInput.value = formatWorkflowConfig(tenant.workflow_config);
+    renderTokenList(servicesList, tenant.services || [], "No services configured for this tenant.");
+    renderTokenList(providersList, tenant.providers || [], "No providers configured for this tenant.");
+    refreshWorkflowSelectors();
+}
+
+function formatWorkflowAnswers(answers) {
+    if (!answers || typeof answers !== "object") {
+        return "No extra answers";
+    }
+
+    const lines = Object.entries(answers).map(([key, value]) => {
+        if (value && typeof value === "object") {
+            return `${key}: ${value.title || value.value || value.option_id || "-"}`;
+        }
+
+        return `${key}: ${value}`;
+    });
+
+    return lines.length ? lines.join("\n") : "No extra answers";
+}
+
+function getActionMarkup(booking) {
+    const status = booking.status || "pending";
+    const tenantId = booking.tenant_id;
+
+    if (status === "confirmed") {
+        return `
+            <div class="action-stack">
+                <button class="secondary" data-action="close" data-id="${booking.id}" data-tenant-id="${tenantId}" type="button">Close</button>
+            </div>
+        `;
+    }
+
+    if (status === "pending") {
+        return `
+            <div class="action-stack">
+                <button class="approve" data-action="approve" data-id="${booking.id}" data-tenant-id="${tenantId}" type="button">Confirm</button>
+                <button class="waiting" data-action="waiting" data-id="${booking.id}" data-tenant-id="${tenantId}" type="button">Waiting</button>
+                <button class="reject" data-action="reject" data-id="${booking.id}" data-tenant-id="${tenantId}" type="button">Reject</button>
+            </div>
+        `;
+    }
+
+    if (status === "waiting") {
+        return `
+            <div class="action-stack">
+                <button class="approve" data-action="approve" data-id="${booking.id}" data-tenant-id="${tenantId}" type="button">Confirm</button>
+                <button class="reject" data-action="reject" data-id="${booking.id}" data-tenant-id="${tenantId}" type="button">Reject</button>
+            </div>
+        `;
+    }
+
+    return '<span class="cell-copy">No actions</span>';
+}
+
+function renderBookingsTable() {
+    bookingsTableBody.innerHTML = "";
+    const bookings = bookingsResponse.items || [];
+
+    if (!bookings.length) {
+        dashboardEmpty.classList.remove("hidden");
+        bookingsStatus.textContent = "No bookings found for the current view.";
+        pageLabel.textContent = "Page 1";
+        prevPageButton.disabled = true;
+        nextPageButton.disabled = true;
+        return;
+    }
+
+    dashboardEmpty.classList.add("hidden");
+
+    bookings.forEach((booking) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+            <td>
+                <div class="cell-title">${booking.tenant_name || getTenantLabel(getSelectedTenant())}</div>
+                <div class="cell-copy">Tenant ID ${booking.tenant_id}</div>
+            </td>
+            <td>
+                <div class="cell-title">${booking.service_name || "Unnamed service"}</div>
+                <div class="cell-copy">Booking #${booking.id}</div>
+            </td>
+            <td>
+                <div class="cell-title">${booking.provider_name || "Not selected"}</div>
+                <div class="cell-copy">${booking.provider_id ? `Provider #${booking.provider_id}` : "Configured via workflow"}</div>
+            </td>
+            <td>
+                <div class="cell-title">${booking.phone || "No phone"}</div>
+            </td>
+            <td>
+                <div class="cell-title">${formatDisplayDate(booking.booking_date)}</div>
+            </td>
+            <td>
+                <div class="cell-title">${formatDisplayTime(booking.booking_time)}</div>
+            </td>
+            <td>
+                <span class="status-badge status-${booking.status || "pending"}">${booking.status || "pending"}</span>
+            </td>
+            <td>
+                <pre class="inline-pre">${formatWorkflowAnswers(booking.workflow_answers)}</pre>
+            </td>
+            <td>
+                <div class="cell-copy">${booking.close_remarks || "-"}</div>
+            </td>
+            <td>
+                <div class="cell-copy">${booking.created_at ? new Date(booking.created_at).toLocaleString("en-IN") : "-"}</div>
+            </td>
+            <td>${getActionMarkup(booking)}</td>
+        `;
+        bookingsTableBody.appendChild(row);
+    });
+
+    const totalPages = Math.max(1, Math.ceil((bookingsResponse.total || 0) / bookingsResponse.pageSize));
+    bookingsStatus.textContent = `Showing ${bookings.length} booking(s) on page ${bookingsResponse.page} of ${totalPages}. Total ${bookingsResponse.total} booking(s).`;
+    pageLabel.textContent = `Page ${bookingsResponse.page} of ${totalPages}`;
+    prevPageButton.disabled = bookingsResponse.page <= 1;
+    nextPageButton.disabled = bookingsResponse.page >= totalPages;
+}
+
+async function updateBookingStatus(bookingId, action, options = {}) {
+    const endpoint = action === "approve"
+        ? "/admin/approve"
+        : action === "reject"
+            ? "/admin/reject"
+            : action === "waiting"
+                ? "/admin/waiting"
+                : "/admin/close";
+
+    bookingsStatus.textContent = "Updating booking...";
+
     try {
-        const data = await fetchJson(endpoint, {
+        await fetchJson(endpoint, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                bookingId,
                 token: adminToken,
+                tenantId: options.tenantId,
+                bookingId,
                 remarks: options.remarks || ""
             })
         });
 
-        if (!data.success) {
-            throw new Error("Status update failed");
-        }
-
-        closeArchiveModal();
-        await loadBookings();
+        closeCloseModal();
+        await refreshPortal();
     } catch (err) {
         if (err.message !== "Unauthorized") {
-            console.error(err);
-            connectionStatus.textContent = "Status update failed. Please retry.";
-        }
-    } finally {
-        if (button) {
-            button.disabled = false;
+            console.error("updateBookingStatus error:", err);
+            bookingsStatus.textContent = "Could not update the booking right now.";
         }
     }
 }
 
-async function saveSettings(event) {
+function openCloseModal(booking) {
+    closeBookingMeta = booking;
+    closeRemarks.value = booking.close_remarks || "";
+    closeModalSummary.textContent = `${booking.service_name} - ${booking.phone} - ${formatDisplayDate(booking.booking_date)} at ${formatDisplayTime(booking.booking_time)}`;
+    closeModal.classList.remove("hidden");
+    closeRemarks.focus();
+}
+
+function createCustomStepTemplate() {
+    const workflow = parseWorkflowEditor();
+
+    if (!workflow || !Array.isArray(workflow.steps)) {
+        settingsStatus.textContent = "Workflow JSON must be valid before adding a question step.";
+        return;
+    }
+
+    const insertBeforeId = insertBeforeSelector.value || "confirm";
+    const newStepId = `custom_${Date.now()}`;
+    const newStep = {
+        id: newStepId,
+        kind: "custom_choice",
+        answer_mode: "buttons",
+        answer_key: newStepId,
+        question: {
+            header: "Custom question",
+            body: "Edit this question for the tenant.",
+            footer: "Choose one option"
+        },
+        options: [
+            {
+                id: "option_1",
+                title: "Option 1",
+                value: "option_1",
+                next: insertBeforeId
+            },
+            {
+                id: "option_2",
+                title: "Option 2",
+                value: "option_2",
+                next: insertBeforeId
+            }
+        ],
+        next: insertBeforeId
+    };
+
+    const insertIndex = workflow.steps.findIndex((step) => step.id === insertBeforeId);
+
+    if (insertIndex === -1) {
+        workflow.steps.push(newStep);
+    } else {
+        workflow.steps.splice(insertIndex, 0, newStep);
+    }
+
+    const previousStep = workflow.steps.find((step) => step.next === insertBeforeId && step.id !== newStepId);
+    if (previousStep) {
+        previousStep.next = newStepId;
+    }
+
+    workflowConfigInput.value = formatWorkflowConfig(workflow);
+    refreshWorkflowSelectors();
+    stepSelector.value = newStepId;
+    settingsStatus.textContent = `Added custom question step "${newStepId}". Review the workflow JSON before saving.`;
+}
+
+function addAnswerOptionTemplate() {
+    const workflow = parseWorkflowEditor();
+    const selectedStepId = stepSelector.value;
+
+    if (!workflow || !Array.isArray(workflow.steps)) {
+        settingsStatus.textContent = "Workflow JSON must be valid before adding an answer option.";
+        return;
+    }
+
+    const step = workflow.steps.find((item) => item.id === selectedStepId);
+
+    if (!step) {
+        settingsStatus.textContent = "Select a step before adding an answer option.";
+        return;
+    }
+
+    if (!Array.isArray(step.options)) {
+        step.options = [];
+    }
+
+    const nextId = step.next || insertBeforeSelector.value || "confirm";
+    const nextIndex = step.options.length + 1;
+
+    step.options.push({
+        id: `option_${nextIndex}`,
+        title: `Option ${nextIndex}`,
+        value: `option_${nextIndex}`,
+        next: nextId
+    });
+
+    workflowConfigInput.value = formatWorkflowConfig(workflow);
+    refreshWorkflowSelectors();
+    stepSelector.value = selectedStepId;
+    settingsStatus.textContent = `Added a new answer option to "${selectedStepId}".`;
+}
+
+function removeSelectedStep() {
+    const workflow = parseWorkflowEditor();
+    const selectedStepId = stepSelector.value;
+
+    if (!workflow || !Array.isArray(workflow.steps)) {
+        settingsStatus.textContent = "Workflow JSON must be valid before removing a step.";
+        return;
+    }
+
+    if (!selectedStepId) {
+        settingsStatus.textContent = "Select a step before removing it.";
+        return;
+    }
+
+    if (workflow.start_step === selectedStepId) {
+        settingsStatus.textContent = "You cannot remove the workflow start step from this helper. Edit the JSON manually if needed.";
+        return;
+    }
+
+    workflow.steps = workflow.steps.filter((step) => step.id !== selectedStepId);
+
+    workflow.steps.forEach((step) => {
+        if (step.next === selectedStepId) {
+            step.next = "confirm";
+        }
+
+        if (Array.isArray(step.options)) {
+            step.options.forEach((option) => {
+                if (option.next === selectedStepId) {
+                    option.next = "confirm";
+                }
+            });
+        }
+    });
+
+    workflowConfigInput.value = formatWorkflowConfig(workflow);
+    refreshWorkflowSelectors();
+    settingsStatus.textContent = `Removed step "${selectedStepId}". Review the workflow transitions before saving.`;
+}
+
+async function saveTenantSettings(event) {
     event.preventDefault();
 
-    settingsStatus.textContent = "Saving settings...";
+    const tenant = getSelectedTenant();
+
+    if (!tenant) {
+        settingsStatus.textContent = "Choose a tenant before saving.";
+        return;
+    }
+
+    const workflowConfig = parseWorkflowEditor();
+
+    if (!workflowConfig) {
+        settingsStatus.textContent = "Workflow JSON is invalid. Fix it before saving.";
+        return;
+    }
+
+    settingsStatus.textContent = "Saving tenant controls...";
 
     try {
-        const workflowConfig = JSON.parse(workflowConfigInput.value || "{}");
-        const data = await fetchJson("/admin/settings", {
+        const response = await fetchJson(buildSettingsUrl(tenant.id), {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
                 token: adminToken,
+                tenantId: tenant.id,
+                business_name: businessNameInput.value.trim(),
                 timezone: timezoneInput.value.trim(),
                 max_parallel_appointments: parallelInput.value,
                 workflow_config: workflowConfig
             })
         });
 
-        tenantSettings = {
-            ...DEFAULT_TENANT_SETTINGS,
-            ...(tenantSettings || {}),
-            ...(data.tenant || {})
-        };
-        renderTenantSettings();
-        settingsStatus.textContent = `Saved. Workflow and scheduling rules are now live for ${tenantSettings.business_name}.`;
-        await loadBookings();
+        portalData.tenants = portalData.tenants.map((item) => (
+            String(item.id) === String(response.tenant.id) ? response.tenant : item
+        ));
+
+        renderTenantOverview();
+        renderTenantDirectory();
+        renderSelectedTenant();
+        updateHeaderLabels();
+        settingsStatus.textContent = `Saved tenant controls for ${getTenantLabel(response.tenant)}.`;
     } catch (err) {
         if (err.message !== "Unauthorized") {
-            console.error(err);
-            settingsStatus.textContent = err instanceof SyntaxError
-                ? "Workflow JSON is invalid. Fix the JSON and try again."
-                : "Could not save settings right now.";
+            console.error("saveTenantSettings error:", err);
+            settingsStatus.textContent = "Could not save tenant controls right now.";
         }
     }
 }
@@ -633,7 +885,6 @@ function connectStream(token) {
     }
 
     closeStream();
-
     streamTenantToken = token;
     stream = new EventSource(`/admin/bookings/stream?token=${encodeURIComponent(token)}`);
 
@@ -642,18 +893,17 @@ function connectStream(token) {
         homeConnectionLabel.textContent = "Connected";
     };
 
-    stream.onmessage = (event) => {
+    stream.onmessage = async (event) => {
         try {
             const payload = JSON.parse(event.data);
-
             if (payload.type === "connected") {
                 return;
             }
         } catch (err) {
-            console.error(err);
+            console.error("stream parse error:", err);
         }
 
-        loadBookings();
+        await refreshPortal();
     };
 
     stream.onerror = () => {
@@ -662,14 +912,13 @@ function connectStream(token) {
     };
 }
 
-function resetFilters() {
-    dateInput.value = "";
-    searchInput.value = "";
-    searchTerm = "";
-    currentFilter = "all";
-    document.querySelectorAll(".pill").forEach((pill) => {
-        pill.classList.toggle("active", pill.dataset.filter === "all");
-    });
+function render() {
+    updateHeaderLabels();
+    renderOverviewStats();
+    renderTenantOverview();
+    renderTenantDirectory();
+    renderSelectedTenant();
+    renderBookingsTable();
 }
 
 loginForm.addEventListener("submit", async (event) => {
@@ -683,18 +932,16 @@ loginForm.addEventListener("submit", async (event) => {
 
     loginStatus.textContent = "Signing you in...";
     saveToken(token);
-    await loadBookings();
+    await refreshPortal();
 });
 
-settingsForm.addEventListener("submit", saveSettings);
-document.getElementById("loadButton").addEventListener("click", loadBookings);
-document.getElementById("clearButton").addEventListener("click", () => {
-    resetFilters();
-    renderSearchScreen();
+logoutButton.addEventListener("click", () => {
+    clearToken();
+    showLogin("Signed out. Enter your admin token to open the portal again.");
 });
-homeRefreshButton.addEventListener("click", loadBookings);
-homeSearchButton.addEventListener("click", () => {
-    setActiveScreen("searchAppointments");
+
+sidebarToggle.addEventListener("click", () => {
+    sidebar.classList.toggle("collapsed");
 });
 
 screenButtons.forEach((button) => {
@@ -703,82 +950,115 @@ screenButtons.forEach((button) => {
     });
 });
 
-logoutButton.addEventListener("click", () => {
-    clearToken();
-    resetFilters();
-    showLogin("Signed out. Enter your admin token to open the dashboard again.");
+refreshOverviewButton.addEventListener("click", refreshPortal);
+refreshBookingsButton.addEventListener("click", loadBookings);
+
+searchInput.addEventListener("input", async () => {
+    currentPage = 1;
+    await loadBookings();
+});
+
+dateInput.addEventListener("change", async () => {
+    currentPage = 1;
+    await loadBookings();
+});
+
+tenantFilter.addEventListener("change", async () => {
+    currentPage = 1;
+    await loadBookings();
 });
 
 document.querySelectorAll(".pill").forEach((pill) => {
-    pill.addEventListener("click", () => {
+    pill.addEventListener("click", async () => {
         currentFilter = pill.dataset.filter;
-        document.querySelectorAll(".pill").forEach((item) => {
-            item.classList.toggle("active", item === pill);
-        });
-        renderSearchScreen();
+        currentPage = 1;
+        document.querySelectorAll(".pill").forEach((item) => item.classList.toggle("active", item === pill));
+        await loadBookings();
     });
 });
 
-searchInput.addEventListener("input", (event) => {
-    searchTerm = event.target.value;
-    renderSearchScreen();
+document.getElementById("clearButton").addEventListener("click", async () => {
+    searchInput.value = "";
+    dateInput.value = "";
+    if (portalData.scope === "global") {
+        tenantFilter.value = "";
+    }
+    currentFilter = "all";
+    currentPage = 1;
+    document.querySelectorAll(".pill").forEach((item) => item.classList.toggle("active", item.dataset.filter === "all"));
+    await loadBookings();
 });
 
-dateInput.addEventListener("change", renderSearchScreen);
+prevPageButton.addEventListener("click", async () => {
+    if (currentPage > 1) {
+        currentPage -= 1;
+        await loadBookings();
+    }
+});
 
-function handleTableAction(event) {
+nextPageButton.addEventListener("click", async () => {
+    const totalPages = Math.max(1, Math.ceil((bookingsResponse.total || 0) / bookingsResponse.pageSize));
+    if (currentPage < totalPages) {
+        currentPage += 1;
+        await loadBookings();
+    }
+});
+
+bookingsTableBody.addEventListener("click", async (event) => {
     const actionButton = event.target.closest("[data-action]");
 
     if (!actionButton) {
         return;
     }
 
-    const { action, id } = actionButton.dataset;
+    const action = actionButton.dataset.action;
+    const bookingId = actionButton.dataset.id;
+    const tenantId = actionButton.dataset.tenantId;
 
     if (action === "close") {
-        openCloseModal(id);
+        const booking = (bookingsResponse.items || []).find((item) => String(item.id) === String(bookingId));
+        if (booking) {
+            openCloseModal(booking);
+        }
         return;
     }
 
-    const nextStatus = action === "approve"
-        ? "confirmed"
-        : action === "pending"
-            ? "pending"
-            : "rejected";
-    updateBookingStatus(id, nextStatus, { actionName: action });
-}
+    await updateBookingStatus(bookingId, action, { tenantId });
+});
 
-bookingsTableBody.addEventListener("click", handleTableAction);
-weeklyBookingsTableBody.addEventListener("click", handleTableAction);
-
-closeModalDismiss.addEventListener("click", closeArchiveModal);
+closeModalDismiss.addEventListener("click", closeCloseModal);
 closeModal.addEventListener("click", (event) => {
     if (event.target === closeModal) {
-        closeArchiveModal();
+        closeCloseModal();
     }
 });
 
 closeForm.addEventListener("submit", async (event) => {
     event.preventDefault();
 
-    if (!closeBookingId) {
+    if (!closeBookingMeta) {
         return;
     }
 
-    await updateBookingStatus(closeBookingId, "closed", {
-        actionName: "close",
+    await updateBookingStatus(closeBookingMeta.id, "close", {
+        tenantId: closeBookingMeta.tenant_id,
         remarks: closeRemarks.value.trim()
     });
 });
 
+workflowConfigInput.addEventListener("input", refreshWorkflowSelectors);
+addQuestionButton.addEventListener("click", createCustomStepTemplate);
+addAnswerButton.addEventListener("click", addAnswerOptionTemplate);
+removeStepButton.addEventListener("click", removeSelectedStep);
+settingsForm.addEventListener("submit", saveTenantSettings);
+
 tenantInput.value = localStorage.getItem("adminToken") || "";
-renderTenantSettings();
-setActiveScreen(activeScreen);
+setActiveScreen(currentScreen);
 
 if (tenantInput.value.trim()) {
     saveToken(tenantInput.value.trim());
     loginStatus.textContent = "Restoring your session...";
-    loadBookings();
+    refreshPortal();
 } else {
     showLogin();
 }

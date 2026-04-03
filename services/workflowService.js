@@ -11,6 +11,18 @@ const DEFAULT_WORKFLOW = {
                 body: "{{welcome_message}}",
                 footer: "Choose a service to continue."
             },
+            next: "service_provider"
+        },
+        {
+            id: "service_provider",
+            kind: "service_provider",
+            answer_mode: "auto",
+            answer_key: "provider",
+            question: {
+                header: "Choose a service provider",
+                body: "Service: {{service_name}}\nSelect your preferred provider.",
+                footer: "Choose one provider"
+            },
             next: "date"
         },
         {

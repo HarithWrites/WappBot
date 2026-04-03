@@ -4,24 +4,82 @@ const {
     getSlotCapacity,
     updateBookingStatus
 } = require("../services/bookingService");
-const { updateTenantSettings } = require("../services/tenantService");
+const {
+    getAllTenants,
+    getTenantById,
+    updateTenantSettings
+} = require("../services/tenantService");
+const { getServices } = require("../services/serviceService");
+const { getProvidersByTenant } = require("../services/providerService");
 const { normalizeWorkflowConfig } = require("../services/workflowService");
 const { sendMessage } = require("../services/whatsappService");
 const { formatDisplayDate } = require("../utils/validators");
-const db = require("../db");
+
+function getTargetTenantId(req) {
+    if (req.adminScope === "global") {
+        return Number.parseInt(req.query.tenantId || req.body?.tenantId, 10) || null;
+    }
+
+    return req.tenant.id;
+}
+
+async function loadTenantPortalRecord(tenant) {
+    const [services, providers] = await Promise.all([
+        getServices(tenant.id),
+        getProvidersByTenant(tenant.id)
+    ]);
+
+    return {
+        id: tenant.id,
+        business_name: tenant.business_name || `Tenant ${tenant.id}`,
+        timezone: tenant.timezone || "UTC",
+        max_parallel_appointments: getSlotCapacity(tenant),
+        workflow_config: normalizeWorkflowConfig(tenant.workflow_config),
+        phone_number_id: tenant.phone_number_id || "",
+        services,
+        providers
+    };
+}
+
+exports.getPortalData = async (req, res) => {
+    try {
+        const tenants = req.adminScope === "global"
+            ? await getAllTenants()
+            : [req.tenant];
+
+        const records = await Promise.all(tenants.map(loadTenantPortalRecord));
+
+        return res.json({
+            scope: req.adminScope,
+            tenants: records
+        });
+    } catch (err) {
+        console.error("getPortalData error:", err);
+        return res.status(500).json({ error: "Internal server error" });
+    }
+};
 
 exports.getBookings = async (req, res) => {
     try {
-        const tenant_id = req.tenant.id;
-        const { date, time, range } = req.query;
-        const tenantName = req.tenant.business_name || `Tenant ${req.tenant.id}`;
-        const data = await getAllBookings(tenant_id, { date, time, range });
+        const targetTenantId = getTargetTenantId(req);
+        const { date, time, range, status, search, page, pageSize } = req.query;
+        const result = await getAllBookings(req.adminScope === "global" ? null : req.tenant.id, {
+            tenantId: req.adminScope === "global" ? targetTenantId : undefined,
+            date,
+            time,
+            range,
+            status,
+            search,
+            page,
+            pageSize
+        });
 
-        const normalized = data.map((booking) => ({
-            ...booking,
-            tenant_name: tenantName
-        }));
-        return res.json(normalized);
+        return res.json({
+            items: result.rows,
+            total: result.total,
+            page: result.page,
+            pageSize: result.pageSize
+        });
     } catch (err) {
         console.error("getBookings error:", err);
         return res.status(500).json({ error: "Internal server error" });
@@ -29,17 +87,32 @@ exports.getBookings = async (req, res) => {
 };
 
 exports.getSettings = async (req, res) => {
-    return res.json({
-        id: req.tenant.id,
-        business_name: req.tenant.business_name || `Tenant ${req.tenant.id}`,
-        timezone: req.tenant.timezone || "UTC",
-        max_parallel_appointments: getSlotCapacity(req.tenant),
-        workflow_config: normalizeWorkflowConfig(req.tenant.workflow_config)
-    });
+    try {
+        const targetTenantId = getTargetTenantId(req);
+        const tenant = req.adminScope === "global"
+            ? await getTenantById(targetTenantId)
+            : req.tenant;
+
+        if (!tenant) {
+            return res.status(404).json({ error: "Tenant not found" });
+        }
+
+        return res.json(await loadTenantPortalRecord(tenant));
+    } catch (err) {
+        console.error("getSettings error:", err);
+        return res.status(500).json({ error: "Internal server error" });
+    }
 };
 
 exports.updateSettings = async (req, res) => {
     try {
+        const targetTenantId = getTargetTenantId(req);
+
+        if (!targetTenantId) {
+            return res.status(400).json({ error: "tenantId required" });
+        }
+
+        const businessName = String(req.body.business_name || `Tenant ${targetTenantId}`).trim() || `Tenant ${targetTenantId}`;
         const timezone = String(req.body.timezone || "UTC").trim() || "UTC";
         const maxParallelAppointments = Math.max(
             1,
@@ -47,21 +120,20 @@ exports.updateSettings = async (req, res) => {
         );
         const workflowConfig = normalizeWorkflowConfig(req.body.workflow_config);
 
-        const tenant = await updateTenantSettings(req.tenant.id, {
+        const tenant = await updateTenantSettings(targetTenantId, {
+            business_name: businessName,
             timezone,
             max_parallel_appointments: maxParallelAppointments,
             workflow_config: workflowConfig
         });
 
+        if (!tenant) {
+            return res.status(404).json({ error: "Tenant not found" });
+        }
+
         return res.json({
             success: true,
-            tenant: {
-                id: tenant.id,
-                business_name: tenant.business_name || `Tenant ${tenant.id}`,
-                timezone: tenant.timezone || "UTC",
-                max_parallel_appointments: getSlotCapacity(tenant),
-                workflow_config: normalizeWorkflowConfig(tenant.workflow_config)
-            }
+            tenant: await loadTenantPortalRecord(tenant)
         });
     } catch (err) {
         console.error("updateSettings error:", err);
@@ -70,7 +142,7 @@ exports.updateSettings = async (req, res) => {
 };
 
 exports.streamBookings = async (req, res) => {
-    const tenant_id = req.tenant.id;
+    const targetTenantId = getTargetTenantId(req);
 
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
@@ -81,21 +153,25 @@ exports.streamBookings = async (req, res) => {
         res.write(`data: ${JSON.stringify(payload)}\n\n`);
     };
 
-    sendEvent({ type: "connected", tenant_id });
+    sendEvent({
+        type: "connected",
+        scope: req.adminScope,
+        tenant_id: targetTenantId || null
+    });
 
     const heartbeat = setInterval(() => {
         res.write(": keep-alive\n\n");
     }, 15000);
 
     const listener = (event) => {
-        if (String(event.tenant_id) !== String(tenant_id)) {
+        if (targetTenantId && String(event.tenant_id) !== String(targetTenantId)) {
             return;
         }
 
         sendEvent({
             type: event.type,
             bookingId: event.bookingId,
-            tenant_id
+            tenant_id: event.tenant_id
         });
     };
 
@@ -109,59 +185,58 @@ exports.streamBookings = async (req, res) => {
 };
 
 async function getTenantByBooking(booking) {
-    const tenantRes = await db.query(
-        "SELECT * FROM tenants WHERE id=$1",
-        [booking.tenant_id]
-    );
+    if (!booking?.tenant_id) {
+        return null;
+    }
 
-    return tenantRes.rows[0];
+    return getTenantById(booking.tenant_id);
 }
 
 function buildStatusMessage(status, booking, comment) {
     const commentLine = comment ? `\nComment: ${comment}` : "";
+    const providerLine = booking.provider_name ? `\nProvider: ${booking.provider_name}` : "";
     const dateText = formatDisplayDate(booking.booking_date) || booking.booking_date;
 
     if (status === "confirmed") {
-        return `Booking CONFIRMED.
-Service: ${booking.service_name}
-Date: ${dateText}
-Time: ${booking.booking_time}${commentLine}`;
+        return `Booking CONFIRMED.\nService: ${booking.service_name}${providerLine}\nDate: ${dateText}\nTime: ${booking.booking_time}${commentLine}`;
     }
 
     if (status === "rejected") {
-        return `Booking REJECTED.
-Service: ${booking.service_name}
-Date: ${dateText}
-Time: ${booking.booking_time}${commentLine}`;
+        return `Booking REJECTED.\nService: ${booking.service_name}${providerLine}\nDate: ${dateText}\nTime: ${booking.booking_time}${commentLine}`;
     }
 
     if (status === "closed") {
-        return `Booking CLOSED.
-Service: ${booking.service_name}
-Date: ${dateText}
-Time: ${booking.booking_time}${commentLine}`;
+        return `Booking CLOSED.\nService: ${booking.service_name}${providerLine}\nDate: ${dateText}\nTime: ${booking.booking_time}${commentLine}`;
     }
 
-    return `Booking is still PENDING.
-Service: ${booking.service_name}
-Date: ${dateText}
-Time: ${booking.booking_time}${commentLine}`;
+    if (status === "waiting") {
+        return "Please wait, we are working on your booking request.";
+    }
+
+    return `Booking is still PENDING.\nService: ${booking.service_name}${providerLine}\nDate: ${dateText}\nTime: ${booking.booking_time}${commentLine}`;
 }
 
 async function handleStatusUpdate(req, res, status, logLabel) {
     try {
-        const { bookingId, comment, remarks } = req.body;
+        const { bookingId, comment, remarks, tenantId } = req.body;
         const statusComment = String(remarks || comment || "").trim();
+        const scopedTenantId = req.adminScope === "global"
+            ? (Number.parseInt(tenantId, 10) || null)
+            : req.tenant.id;
 
         if (!bookingId) {
             return res.status(400).json({ error: "bookingId required" });
+        }
+
+        if (!scopedTenantId) {
+            return res.status(400).json({ error: "tenantId required" });
         }
 
         if (status === "closed" && !statusComment) {
             return res.status(400).json({ error: "remarks required" });
         }
 
-        const booking = await updateBookingStatus(bookingId, status, req.tenant.id, {
+        const booking = await updateBookingStatus(bookingId, status, scopedTenantId, {
             remarks: statusComment
         });
 
@@ -184,20 +259,9 @@ async function handleStatusUpdate(req, res, status, logLabel) {
         console.error(`${logLabel} error:`, err);
         return res.status(500).json({ error: "Internal server error" });
     }
-}
-
-exports.approveBooking = (req, res) => {
-    return handleStatusUpdate(req, res, "confirmed", "approveBooking");
 };
 
-exports.rejectBooking = (req, res) => {
-    return handleStatusUpdate(req, res, "rejected", "rejectBooking");
-};
-
-exports.markPendingBooking = (req, res) => {
-    return handleStatusUpdate(req, res, "pending", "markPendingBooking");
-};
-
-exports.closeBooking = (req, res) => {
-    return handleStatusUpdate(req, res, "closed", "closeBooking");
-};
+exports.approveBooking = (req, res) => handleStatusUpdate(req, res, "confirmed", "approveBooking");
+exports.rejectBooking = (req, res) => handleStatusUpdate(req, res, "rejected", "rejectBooking");
+exports.markWaitingBooking = (req, res) => handleStatusUpdate(req, res, "waiting", "markWaitingBooking");
+exports.closeBooking = (req, res) => handleStatusUpdate(req, res, "closed", "closeBooking");

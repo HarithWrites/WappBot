@@ -20,7 +20,7 @@ async function getBookedSlotCounts(tenant_id, booking_date) {
          FROM bookings
          WHERE tenant_id = $1
            AND booking_date = $2
-           AND status IN ('pending', 'confirmed')
+           AND status IN ('pending', 'waiting', 'confirmed')
          GROUP BY booking_time`,
         [tenant_id, booking_date]
     );
@@ -37,7 +37,9 @@ async function createBooking({
     service_name,
     booking_date,
     booking_time,
-    workflow_answers = {}
+    workflow_answers = {},
+    provider_id = null,
+    provider_name = null
 }) {
     const client = await db.connect();
     const slotKey = `${tenant_id}:${booking_date}:${booking_time}`;
@@ -53,7 +55,7 @@ async function createBooking({
              WHERE tenant_id = $1
                AND booking_date = $2
                AND booking_time = $3
-               AND status IN ('pending', 'confirmed')`,
+               AND status IN ('pending', 'waiting', 'confirmed')`,
             [tenant_id, booking_date, booking_time]
         );
 
@@ -65,10 +67,19 @@ async function createBooking({
 
         const res = await client.query(
             `INSERT INTO bookings
-            (tenant_id, phone, service_name, booking_date, booking_time, status, workflow_answers)
-            VALUES ($1, $2, $3, $4, $5, 'pending', $6)
+            (tenant_id, phone, service_name, booking_date, booking_time, status, workflow_answers, provider_id, provider_name)
+            VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7, $8)
             RETURNING *`,
-            [tenant_id, phone, service_name, booking_date, booking_time, JSON.stringify(workflow_answers || {})]
+            [
+                tenant_id,
+                phone,
+                service_name,
+                booking_date,
+                booking_time,
+                JSON.stringify(workflow_answers || {}),
+                provider_id,
+                provider_name
+            ]
         );
 
         await client.query("COMMIT");
@@ -94,32 +105,102 @@ async function createBooking({
 }
 
 async function getAllBookings(tenant_id, filters = {}) {
-    let query = "SELECT * FROM bookings WHERE 1=1";
-    let values = [];
+    const values = [];
+    let where = "WHERE 1=1";
 
     if (tenant_id) {
         values.push(tenant_id);
-        query += ` AND tenant_id=$${values.length}`;
+        where += ` AND b.tenant_id=$${values.length}`;
     }
 
     if (filters.range === "upcoming_30_days") {
-        query += " AND booking_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '29 days'";
+        where += " AND b.booking_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '29 days'";
     }
 
     if (filters.date) {
         values.push(filters.date);
-        query += ` AND booking_date=$${values.length}`;
+        where += ` AND b.booking_date=$${values.length}`;
     }
 
     if (filters.time) {
         values.push(filters.time);
-        query += ` AND booking_time=$${values.length}`;
+        where += ` AND b.booking_time=$${values.length}`;
     }
 
-    query += " ORDER BY booking_date ASC, booking_time ASC, created_at DESC";
+    if (filters.status && filters.status !== "all") {
+        values.push(filters.status);
+        where += ` AND b.status=$${values.length}`;
+    }
 
-    const res = await db.query(query, values);
-    return res.rows;
+    if (filters.tenantId) {
+        values.push(filters.tenantId);
+        where += ` AND b.tenant_id=$${values.length}`;
+    }
+
+    if (filters.search) {
+        values.push(`%${String(filters.search).trim().toLowerCase()}%`);
+        where += ` AND (
+            LOWER(COALESCE(t.business_name, '')) LIKE $${values.length}
+            OR LOWER(COALESCE(b.service_name, '')) LIKE $${values.length}
+            OR LOWER(COALESCE(b.phone, '')) LIKE $${values.length}
+            OR LOWER(COALESCE(b.status, '')) LIKE $${values.length}
+            OR LOWER(COALESCE(b.provider_name, '')) LIKE $${values.length}
+            OR LOWER(COALESCE(b.close_remarks, '')) LIKE $${values.length}
+        )`;
+    }
+
+    const page = Math.max(1, Number.parseInt(filters.page, 10) || 1);
+    const pageSize = Math.max(1, Math.min(100, Number.parseInt(filters.pageSize, 10) || 20));
+    const offset = (page - 1) * pageSize;
+
+    values.push(pageSize);
+    const limitParam = `$${values.length}`;
+    values.push(offset);
+    const offsetParam = `$${values.length}`;
+
+    const baseFrom = `
+        FROM bookings b
+        LEFT JOIN tenants t ON t.id = b.tenant_id
+        ${where}
+    `;
+
+    const rowsQuery = `
+        SELECT
+            b.*,
+            COALESCE(t.business_name, CONCAT('Tenant ', b.tenant_id::text)) AS tenant_name
+        ${baseFrom}
+        ORDER BY
+            CASE b.status
+                WHEN 'pending' THEN 0
+                WHEN 'waiting' THEN 1
+                WHEN 'confirmed' THEN 2
+                WHEN 'rejected' THEN 3
+                WHEN 'closed' THEN 4
+                ELSE 5
+            END,
+            b.booking_date ASC,
+            b.booking_time ASC,
+            b.created_at DESC
+        LIMIT ${limitParam}
+        OFFSET ${offsetParam}
+    `;
+
+    const countQuery = `
+        SELECT COUNT(*)::int AS total
+        ${baseFrom}
+    `;
+
+    const [rowsRes, countRes] = await Promise.all([
+        db.query(rowsQuery, values),
+        db.query(countQuery, values.slice(0, values.length - 2))
+    ]);
+
+    return {
+        rows: rowsRes.rows,
+        total: countRes.rows[0]?.total || 0,
+        page,
+        pageSize
+    };
 }
 
 async function updateBookingStatus(id, status, tenant_id, options = {}) {

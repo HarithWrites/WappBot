@@ -3,25 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Booking Dashboard</title>
+    <title>WappBot Control Center</title>
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
     <div class="app-shell">
         <section id="loginScreen" class="login-screen">
             <div class="login-card">
-                <p class="eyebrow">Admin access</p>
-                <h1>Manage appointments</h1>
+                <p class="eyebrow">Unified Admin Portal</p>
+                <h1>WappBot Control Center</h1>
                 <p class="hero-copy">
-                    Sign in with your admin token to manage bookings, search appointment history, archive closed items, and control scheduling rules.
+                    Sign in with a tenant admin token or your master admin token to manage bookings, workflows, tenants, and provider visibility from one place.
                 </p>
 
                 <form id="loginForm" class="login-form">
                     <label>
                         <span>Admin token</span>
-                        <input type="password" id="tenantId" placeholder="Enter your admin security token" autocomplete="current-password">
+                        <input type="password" id="tenantId" placeholder="Enter admin token" autocomplete="current-password">
                     </label>
-                    <button id="loginButton" class="primary" type="submit">Open dashboard</button>
+                    <button id="loginButton" class="primary" type="submit">Open portal</button>
                 </form>
 
                 <p id="loginStatus" class="status-note">Your token stays saved on this browser until you sign out.</p>
@@ -29,230 +29,275 @@
         </section>
 
         <div id="dashboardShell" class="dashboard-shell hidden">
-            <aside class="sidebar">
+            <aside id="sidebar" class="sidebar">
                 <div class="sidebar-top">
-                    <div class="brand-block">
-                        <div class="brand-mark">WB</div>
-                        <div>
-                            <p class="eyebrow light">Dashboard</p>
-                            <h1 id="tenantName">Manage Appointments</h1>
+                    <div class="brand-row">
+                        <button id="sidebarToggle" class="icon-button ghost" type="button" aria-label="Toggle sidebar">☰</button>
+                        <div class="brand-block">
+                            <div class="brand-mark">WB</div>
+                            <div class="brand-copy">
+                                <p class="eyebrow light">Enterprise Portal</p>
+                                <h1 id="tenantName">WappBot</h1>
+                            </div>
                         </div>
                     </div>
 
                     <nav class="menu-list">
-                        <button class="menu-item active" type="button" data-screen-target="manageAppointments">
-                            <span class="menu-icon">1</span>
-                            <span>Manage appointments</span>
+                        <button class="menu-item active" type="button" data-screen-target="overviewScreen">
+                            <span class="menu-icon">01</span>
+                            <span class="menu-label">Overview</span>
                         </button>
-                        <button class="menu-item" type="button" data-screen-target="searchAppointments">
-                            <span class="menu-icon">2</span>
-                            <span>Search appointments</span>
+                        <button class="menu-item" type="button" data-screen-target="bookingsScreen">
+                            <span class="menu-icon">02</span>
+                            <span class="menu-label">Bookings</span>
                         </button>
-                        <button class="menu-item" type="button" data-screen-target="adminSettings">
-                            <span class="menu-icon">3</span>
-                            <span>Admin settings</span>
-                        </button>
-                        <button class="menu-item" type="button" data-screen-target="archiveAppointments">
-                            <span class="menu-icon">4</span>
-                            <span>Archive appointments</span>
+                        <button class="menu-item" type="button" data-screen-target="tenantControlsScreen">
+                            <span class="menu-icon">03</span>
+                            <span class="menu-label">Tenant Controls</span>
                         </button>
                     </nav>
                 </div>
 
                 <div class="sidebar-bottom">
                     <div class="profile-card">
-                        <p class="section-label light">Profile</p>
-                        <p class="profile-name" id="sidebarBusinessName">Tenant admin</p>
-                        <p class="profile-copy">Live booking controls, archive actions, and scheduling capacity.</p>
+                        <p class="section-label light">Session</p>
+                        <p class="profile-name" id="sidebarBusinessName">Portal session</p>
+                        <p class="profile-copy" id="connectionStatus">Checking live connection.</p>
                     </div>
                     <button id="logoutButton" class="ghost wide" type="button">Log out</button>
                 </div>
             </aside>
 
             <main class="workspace">
-                <section id="manageAppointments" class="workspace-panel workspace-screen">
+                <section id="overviewScreen" class="workspace-screen">
                     <header class="workspace-header">
                         <div>
-                            <p class="section-label">Home</p>
-                            <h2>Manage appointments</h2>
+                            <p class="section-label">Overview</p>
+                            <h2>Operations snapshot</h2>
+                            <p class="hero-copy">Monitor all booking queues, tenant coverage, and live portal status at a glance.</p>
                         </div>
-                        <div class="top-stats">
-                            <article>
-                                <span id="statTotal">0</span>
-                                <label>Total</label>
-                            </article>
-                            <article>
-                                <span id="statWeek">0</span>
-                                <label>This week</label>
-                            </article>
-                            <article>
-                                <span id="statPending">0</span>
-                                <label>Pending</label>
-                            </article>
+                        <div class="header-actions">
+                            <button class="secondary" id="refreshOverviewButton" type="button">Refresh</button>
                         </div>
                     </header>
 
-                    <div class="home-grid">
-                        <article class="summary-card">
-                            <p class="section-label">Current week</p>
-                            <h3 id="homeWeekCount">0 appointments</h3>
-                            <p class="hero-copy">This view shows the current week's active appointments for quick operations.</p>
+                    <div class="stats-grid">
+                        <article class="stat-card">
+                            <span id="statTotal">0</span>
+                            <label>Total bookings</label>
                         </article>
-                        <article class="summary-card">
-                            <p class="section-label">Live status</p>
-                            <h3 id="homeConnectionLabel">Connected</h3>
-                            <p id="connectionStatus" class="status-note">Checking your live connection.</p>
+                        <article class="stat-card">
+                            <span id="statPending">0</span>
+                            <label>Pending</label>
+                        </article>
+                        <article class="stat-card">
+                            <span id="statWaiting">0</span>
+                            <label>Waiting</label>
+                        </article>
+                        <article class="stat-card">
+                            <span id="statConfirmed">0</span>
+                            <label>Confirmed</label>
+                        </article>
+                        <article class="stat-card">
+                            <span id="statRejected">0</span>
+                            <label>Rejected</label>
+                        </article>
+                        <article class="stat-card">
+                            <span id="statClosed">0</span>
+                            <label>Closed</label>
                         </article>
                     </div>
 
-                    <div class="screen-actions">
-                        <button class="primary" id="homeRefreshButton" type="button">Refresh current week</button>
-                        <button class="secondary" id="homeSearchButton" type="button">Go to search</button>
+                    <div class="overview-grid">
+                        <article class="panel-card">
+                            <div class="panel-header">
+                                <div>
+                                    <p class="section-label">Tenants</p>
+                                    <h3 id="overviewTenantCount">0 tenants</h3>
+                                </div>
+                            </div>
+                            <div id="tenantOverviewList" class="tenant-overview-list"></div>
+                        </article>
+
+                        <article class="panel-card">
+                            <div class="panel-header">
+                                <div>
+                                    <p class="section-label">Live feed</p>
+                                    <h3 id="homeConnectionLabel">Connected</h3>
+                                </div>
+                            </div>
+                            <p id="overviewStatus" class="status-note">Loading portal data.</p>
+                        </article>
                     </div>
-
-                    <p id="homeTableStatus" class="status-note"></p>
-
-                    <div class="table-shell">
-                        <table class="booking-table">
-                            <thead>
-                                <tr>
-                                    <th>Business</th>
-                                    <th>Service</th>
-                                    <th>Phone Number</th>
-                                    <th>Appointment Date &amp; Time</th>
-                                    <th>Status</th>
-                                    <th>Action</th>
-                                </tr>
-                            </thead>
-                            <tbody id="weeklyBookingsTableBody"></tbody>
-                        </table>
-                    </div>
-
-                    <div id="weeklyEmpty" class="empty-state hidden">No current week appointments found.</div>
                 </section>
 
-                <section id="searchAppointments" class="workspace-panel workspace-screen hidden">
+                <section id="bookingsScreen" class="workspace-screen hidden">
                     <header class="workspace-header">
                         <div>
-                            <p class="section-label">Search</p>
-                            <h2>Search appointments</h2>
+                            <p class="section-label">Bookings</p>
+                            <h2>Booking operations</h2>
+                            <p class="hero-copy">Compact, paginated tables for high-volume booking operations across statuses and tenants.</p>
+                        </div>
+                        <div class="header-actions">
+                            <button class="secondary" id="refreshBookingsButton" type="button">Refresh</button>
                         </div>
                     </header>
 
-                    <div class="toolbar">
+                    <div class="toolbar dense-toolbar">
                         <div class="search-wrap">
-                            <input type="search" id="searchInput" placeholder="Search by phone, service, status, remarks, or business">
+                            <input type="search" id="searchInput" placeholder="Search by tenant, service, provider, phone, status, or remarks">
                         </div>
                         <div class="toolbar-actions">
+                            <select id="tenantFilter"></select>
                             <input type="date" id="dateFilter">
-                            <button id="loadButton" class="primary" type="button">Refresh</button>
                             <button id="clearButton" class="secondary" type="button">Clear</button>
                         </div>
                     </div>
 
-                    <div class="filter-pills">
+                    <div class="status-tabs">
                         <button class="pill active" data-filter="all" type="button">All</button>
                         <button class="pill" data-filter="pending" type="button">Pending</button>
+                        <button class="pill" data-filter="waiting" type="button">Waiting</button>
                         <button class="pill" data-filter="confirmed" type="button">Confirmed</button>
                         <button class="pill" data-filter="rejected" type="button">Rejected</button>
                         <button class="pill" data-filter="closed" type="button">Closed</button>
                     </div>
 
-                    <p id="searchTableStatus" class="status-note"></p>
+                    <div class="table-card">
+                        <div class="table-header">
+                            <p id="bookingsStatus" class="status-note">Loading bookings.</p>
+                            <div class="pagination-controls">
+                                <button id="prevPageButton" class="secondary" type="button">Previous</button>
+                                <span id="pageLabel" class="page-label">Page 1</span>
+                                <button id="nextPageButton" class="secondary" type="button">Next</button>
+                            </div>
+                        </div>
 
-                    <div class="table-shell">
-                        <table class="booking-table">
-                            <thead>
-                                <tr>
-                                    <th>Business</th>
-                                    <th>Service</th>
-                                    <th>Phone Number</th>
-                                    <th>Appointment Date &amp; Time</th>
-                                    <th>Status</th>
-                                    <th>Action</th>
-                                </tr>
-                            </thead>
-                            <tbody id="bookingsTableBody"></tbody>
-                        </table>
+                        <div class="table-shell">
+                            <table class="booking-table dense">
+                                <thead>
+                                    <tr>
+                                        <th>Tenant</th>
+                                        <th>Service</th>
+                                        <th>Provider</th>
+                                        <th>Phone</th>
+                                        <th>Date</th>
+                                        <th>Time</th>
+                                        <th>Status</th>
+                                        <th>Workflow Answers</th>
+                                        <th>Remarks</th>
+                                        <th>Created</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="bookingsTableBody"></tbody>
+                            </table>
+                        </div>
+
+                        <div id="dashboardEmpty" class="empty-state hidden">No bookings found for the current status and filters.</div>
                     </div>
-
-                    <div id="dashboardEmpty" class="empty-state hidden">No bookings found for the selected filters.</div>
                 </section>
 
-                <section id="adminSettings" class="workspace-panel workspace-screen hidden">
+                <section id="tenantControlsScreen" class="workspace-screen hidden">
                     <header class="workspace-header">
                         <div>
-                            <p class="section-label">Configuration</p>
-                            <h2>Admin settings</h2>
+                            <p class="section-label">Tenant Controls</p>
+                            <h2>Workflow and tenant management</h2>
+                            <p class="hero-copy">View, add, update, and remove tenant questions and answers from a single portal.</p>
                         </div>
                     </header>
 
-                    <section class="settings-page-card">
-                        <div class="settings-heading">
-                            <p class="section-label">Scheduling</p>
-                            <h2>Tenant settings</h2>
-                        </div>
+                    <div class="tenant-controls-layout">
+                        <aside class="tenant-directory panel-card">
+                            <div class="panel-header">
+                                <div>
+                                    <p class="section-label">Tenants</p>
+                                    <h3>Directory</h3>
+                                </div>
+                            </div>
+                            <div id="tenantList" class="tenant-list"></div>
+                        </aside>
 
-                        <form id="settingsForm" class="settings-form settings-form-page">
-                            <label>
-                                <span>Timezone</span>
-                                <input type="text" id="timezoneInput" placeholder="Asia/Kolkata">
-                            </label>
+                        <section class="tenant-editor panel-card">
+                            <div class="panel-header">
+                                <div>
+                                    <p class="section-label">Selected tenant</p>
+                                    <h3 id="tenantEditorTitle">Choose a tenant</h3>
+                                </div>
+                            </div>
 
-                            <label>
-                                <span>Parallel appointments</span>
-                                <input type="number" id="parallelInput" min="1" step="1" value="1">
-                            </label>
+                            <form id="settingsForm" class="settings-form">
+                                <div class="form-grid">
+                                    <label>
+                                        <span>Business name</span>
+                                        <input type="text" id="businessNameInput" placeholder="Business name">
+                                    </label>
 
-                            <label>
-                                <span>Workflow configuration (JSON)</span>
-                                <textarea id="workflowConfigInput" rows="20" placeholder='{"start_step":"service","steps":[]}'></textarea>
-                            </label>
+                                    <label>
+                                        <span>Timezone</span>
+                                        <input type="text" id="timezoneInput" placeholder="Asia/Kolkata">
+                                    </label>
 
-                            <p class="status-note">
-                                Custom tenant questions can use a step like:
-                                <code>{"id":"branch","kind":"custom_choice","answer_key":"branch","question":{"body":"Which branch?"},"options":[{"id":"north","title":"North Branch","next":"date"}]}</code>
-                            </p>
+                                    <label>
+                                        <span>Parallel appointments</span>
+                                        <input type="number" id="parallelInput" min="1" step="1" value="1">
+                                    </label>
 
-                            <button class="primary settings-submit" id="saveSettingsButton" type="submit">Save settings</button>
-                        </form>
+                                    <label>
+                                        <span>Tenant ID</span>
+                                        <input type="text" id="tenantIdDisplay" disabled>
+                                    </label>
+                                </div>
 
-                        <p id="settingsStatus" class="status-note">Edit the tenant workflow JSON to control question text, answer style, and flow order for this business.</p>
-                    </section>
-                </section>
+                                <div class="split-grid">
+                                    <article class="mini-panel">
+                                        <div class="mini-panel-header">
+                                            <p class="section-label">Services</p>
+                                            <h4>Configured in DB</h4>
+                                        </div>
+                                        <div id="servicesList" class="token-list"></div>
+                                    </article>
 
-                <section id="archiveAppointments" class="workspace-panel workspace-screen hidden">
-                    <header class="workspace-header">
-                        <div>
-                            <p class="section-label">Archive</p>
-                            <h2>Archive appointments</h2>
-                        </div>
-                    </header>
+                                    <article class="mini-panel">
+                                        <div class="mini-panel-header">
+                                            <p class="section-label">Providers</p>
+                                            <h4>Configured in DB</h4>
+                                        </div>
+                                        <div id="providersList" class="token-list"></div>
+                                    </article>
+                                </div>
 
-                    <article class="summary-card archive-card">
-                        <p class="section-label">Closed records</p>
-                        <h3 id="archiveCount">0 archived appointments</h3>
-                        <p class="hero-copy">Closed appointments with remarks stay here for reference and audit history.</p>
-                    </article>
+                                <div class="workflow-tools">
+                                    <div class="tool-row">
+                                        <button id="addQuestionButton" class="secondary" type="button">Add question step</button>
+                                        <button id="addAnswerButton" class="secondary" type="button">Add answer option</button>
+                                        <button id="removeStepButton" class="secondary" type="button">Remove selected step</button>
+                                    </div>
+                                    <div class="tool-row">
+                                        <label class="inline-label">
+                                            <span>Selected step</span>
+                                            <select id="stepSelector"></select>
+                                        </label>
+                                        <label class="inline-label">
+                                            <span>Insert before</span>
+                                            <select id="insertBeforeSelector"></select>
+                                        </label>
+                                    </div>
+                                </div>
 
-                    <p id="archiveTableStatus" class="status-note"></p>
+                                <label>
+                                    <span>Workflow configuration (JSON)</span>
+                                    <textarea id="workflowConfigInput" rows="24" placeholder='{"start_step":"service","steps":[]}'></textarea>
+                                </label>
 
-                    <div class="table-shell">
-                        <table class="booking-table">
-                            <thead>
-                                <tr>
-                                    <th>Business</th>
-                                    <th>Service</th>
-                                    <th>Phone Number</th>
-                                    <th>Appointment Date &amp; Time</th>
-                                    <th>Archive Details</th>
-                                </tr>
-                            </thead>
-                            <tbody id="archiveTableBody"></tbody>
-                        </table>
+                                <div class="form-actions">
+                                    <button class="primary" id="saveSettingsButton" type="submit">Save tenant controls</button>
+                                </div>
+                            </form>
+
+                            <p id="settingsStatus" class="status-note">Select a tenant to manage workflow questions and answers.</p>
+                        </section>
                     </div>
-
-                    <div id="archiveEmpty" class="empty-state hidden">No archived appointments yet.</div>
                 </section>
             </main>
         </div>
@@ -262,20 +307,20 @@
         <div class="modal-card">
             <div class="modal-header">
                 <div>
-                    <p class="section-label">Archive appointment</p>
-                    <h2>Close appointment</h2>
+                    <p class="section-label">Close booking</p>
+                    <h2>Archive booking</h2>
                 </div>
                 <button id="closeModalDismiss" class="secondary" type="button">Cancel</button>
             </div>
 
-            <p id="closeModalSummary" class="status-note">Add remarks before moving this appointment to archive.</p>
+            <p id="closeModalSummary" class="status-note">Add remarks before closing this booking.</p>
 
             <form id="closeForm" class="settings-form">
                 <label>
                     <span>Remarks</span>
-                    <textarea id="closeRemarks" rows="5" placeholder="Add the reason or closure note"></textarea>
+                    <textarea id="closeRemarks" rows="5" placeholder="Add the closure note"></textarea>
                 </label>
-                <button id="closeSubmitButton" class="primary" type="submit">Close appointment</button>
+                <button id="closeSubmitButton" class="primary" type="submit">Close booking</button>
             </form>
         </div>
     </div>

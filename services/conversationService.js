@@ -11,6 +11,7 @@ const {
     SlotAlreadyBookedError
 } = require("./bookingService");
 const { getServices } = require("./serviceService");
+const { getProvidersByTenantAndService } = require("./providerService");
 const { getWorkflowDefinition } = require("./workflowService");
 const {
     addDays,
@@ -163,8 +164,12 @@ function getTemplateValues({ tenant, context }) {
     const templateValues = {
         welcome_message: tenant?.welcome_message || "Choose an option to continue.",
         service_name: context.service_name || "",
+        service_id: context.service_id || "",
         date: context.date || "",
         time: context.time || "",
+        provider: context.provider_name || "",
+        provider_name: context.provider_name || "",
+        provider_id: context.provider_id || "",
         display_date: context.date ? formatDisplayDate(context.date) : "",
         display_time: timeSlot ? timeSlot.title : (context.time || ""),
         period_title: context.period_title || "",
@@ -251,10 +256,18 @@ async function sendInteractiveStep({ tenant, phone, step, question, items, listT
 }
 
 async function startWorkflow({ tenant, phone, tenantId, workflow }) {
+    return resetWorkflowState({ phone, tenantId, workflow, tenant, sendPrompt: true });
+}
+
+async function resetWorkflowState({ phone, tenantId, workflow, tenant, sendPrompt }) {
     await setState(phone, tenantId, {
         step: workflow.start_step,
         context: {}
     });
+
+    if (!sendPrompt) {
+        return;
+    }
 
     return promptStep({
         tenant,
@@ -317,6 +330,39 @@ async function promptStep({ tenant, phone, tenantId, workflow, stepId, context }
                     id: buildInteractiveId(step.id, option.id),
                     title: option.title,
                     description: option.description || "Tap to select"
+                }))
+            });
+        }
+
+        case "service_provider": {
+            const providers = await getProvidersByTenantAndService(tenantId, context.service_id);
+
+            if (!providers.length) {
+                return promptStep({
+                    tenant,
+                    phone,
+                    tenantId,
+                    workflow,
+                    stepId: step.next,
+                    context: {
+                        ...context,
+                        provider_id: null,
+                        provider_name: null
+                    }
+                });
+            }
+
+            return sendInteractiveStep({
+                tenant,
+                phone,
+                step,
+                question,
+                listTitle: step.list_title || "Available providers",
+                buttonText: step.button_text || "View providers",
+                items: providers.map((provider) => ({
+                    id: buildInteractiveId(step.id, String(provider.id)),
+                    title: provider.name,
+                    description: "Tap to select"
                 }))
             });
         }
@@ -488,7 +534,9 @@ async function completeBooking({ tenant, phone, tenantId, workflow, context }) {
                 service_name: context.service_name,
                 booking_date: context.date,
                 booking_time: context.time,
-                workflow_answers: context.custom_answers || {}
+                workflow_answers: context.custom_answers || {},
+                provider_id: context.provider_id || null,
+                provider_name: context.provider_name || null
             });
     } catch (err) {
         if (err instanceof SlotAlreadyBookedError) {
@@ -518,10 +566,11 @@ async function completeBooking({ tenant, phone, tenantId, workflow, context }) {
     await sendMessage({
         tenant,
         to: phone,
-        text: `Booking confirmed.\nID: ${booking.id}\nService: ${booking.service_name}\nDate: ${formatDisplayDate(booking.booking_date) || booking.booking_date}\nTime: ${buildTimeSlots(tenant).find((slot) => slot.dbValue === booking.booking_time)?.title || booking.booking_time}`
+        text: `Booking confirmed.\nID: ${booking.id}\nService: ${booking.service_name}${booking.provider_name ? `\nProvider: ${booking.provider_name}` : ""}\nDate: ${formatDisplayDate(booking.booking_date) || booking.booking_date}\nTime: ${buildTimeSlots(tenant).find((slot) => slot.dbValue === booking.booking_time)?.title || booking.booking_time}`
     });
 
-    return startWorkflow({ tenant, phone, tenantId, workflow });
+    await resetWorkflowState({ phone, tenantId, workflow, tenant, sendPrompt: false });
+    return;
 }
 
 async function processMessage({ tenant, phone, text, payload }) {
@@ -541,8 +590,11 @@ async function processMessage({ tenant, phone, text, payload }) {
     const currentStepId = stateData?.workflow_step || stateData?.state || workflow.start_step;
     const context = {
         service_name: stateData?.workflow_context?.service_name || stateData?.service_name || null,
+        service_id: stateData?.workflow_context?.service_id || null,
         date: stateData?.workflow_context?.date || stateData?.date || null,
         time: stateData?.workflow_context?.time || stateData?.time || null,
+        provider_id: stateData?.workflow_context?.provider_id || null,
+        provider_name: stateData?.workflow_context?.provider_name || null,
         custom_answers: stateData?.workflow_context?.custom_answers || {},
         period_id: stateData?.workflow_context?.period_id || null,
         period_title: stateData?.workflow_context?.period_title || null
@@ -580,7 +632,10 @@ async function processMessage({ tenant, phone, text, payload }) {
                 stepId: step.next,
                 context: {
                     ...context,
+                    service_id: service.id,
                     service_name: service.name,
+                    provider_id: null,
+                    provider_name: null,
                     date: null,
                     time: null,
                     period_id: null,
@@ -625,6 +680,50 @@ async function processMessage({ tenant, phone, text, payload }) {
                     time: null,
                     period_id: null,
                     period_title: null
+                }
+            });
+        }
+
+        case "service_provider": {
+            const providers = await getProvidersByTenantAndService(tenantId, context.service_id);
+            const provider = providers.find((item) => {
+                const providerId = String(item.id);
+                return [
+                    buildInteractiveId(step.id, providerId),
+                    providerId,
+                    item.name
+                ].some((token) => String(token || "").trim().toLowerCase() === input);
+            });
+
+            if (!providers.length) {
+                return promptStep({
+                    tenant,
+                    phone,
+                    tenantId,
+                    workflow,
+                    stepId: step.next,
+                    context: {
+                        ...context,
+                        provider_id: null,
+                        provider_name: null
+                    }
+                });
+            }
+
+            if (!provider) {
+                return promptStep({ tenant, phone, tenantId, workflow, stepId: step.id, context });
+            }
+
+            return promptStep({
+                tenant,
+                phone,
+                tenantId,
+                workflow,
+                stepId: step.next,
+                context: {
+                    ...context,
+                    provider_id: provider.id,
+                    provider_name: provider.name
                 }
             });
         }
@@ -740,7 +839,8 @@ async function processMessage({ tenant, phone, text, payload }) {
                     text: "Booking cancelled. Type Hi when you want to start again."
                 });
 
-                return startWorkflow({ tenant, phone, tenantId, workflow });
+                await resetWorkflowState({ phone, tenantId, workflow, tenant, sendPrompt: false });
+                return;
             }
 
             return completeBooking({ tenant, phone, tenantId, workflow, context });

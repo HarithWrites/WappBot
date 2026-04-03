@@ -37,6 +37,16 @@ async function ensureDatabaseSchema() {
     `);
 
     await db.query(`
+        ALTER TABLE bookings
+        ADD COLUMN IF NOT EXISTS provider_id INTEGER
+    `);
+
+    await db.query(`
+        ALTER TABLE bookings
+        ADD COLUMN IF NOT EXISTS provider_name TEXT
+    `);
+
+    await db.query(`
         ALTER TABLE conversation_state
         ADD COLUMN IF NOT EXISTS workflow_step TEXT
     `);
@@ -104,6 +114,22 @@ async function ensureDatabaseSchema() {
     await db.query(`
         CREATE INDEX IF NOT EXISTS bookings_slot_lookup_idx
         ON bookings (tenant_id, booking_date, booking_time, status)
+    `);
+
+    await db.query(`
+        CREATE TABLE IF NOT EXISTS service_providers (
+            id SERIAL PRIMARY KEY,
+            tenant_id INTEGER NOT NULL,
+            service_id INTEGER,
+            name TEXT NOT NULL,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+
+    await db.query(`
+        CREATE INDEX IF NOT EXISTS service_providers_tenant_service_idx
+        ON service_providers (tenant_id, service_id, is_active, name)
     `);
 
     await db.query(`
