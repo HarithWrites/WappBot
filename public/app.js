@@ -1,3 +1,6 @@
+// ==========================================
+// 1. STATE & CONFIGURATION
+// ==========================================
 let adminToken = "";
 let stream = null;
 let streamTenantToken = null;
@@ -22,6 +25,9 @@ let bookingsResponse = {
 };
 let closeBookingMeta = null;
 
+// ==========================================
+// 2. DOM ELEMENTS
+// ==========================================
 const loginScreen = document.getElementById("loginScreen");
 const dashboardShell = document.getElementById("dashboardShell");
 const loginForm = document.getElementById("loginForm");
@@ -69,6 +75,9 @@ const closeRemarks = document.getElementById("closeRemarks");
 const closeModalDismiss = document.getElementById("closeModalDismiss");
 const closeModalSummary = document.getElementById("closeModalSummary");
 
+// ==========================================
+// 3. UTILITIES & HELPERS
+// ==========================================
 function showToast(message, type = "success") {
     const container = document.getElementById("toastContainer");
     if (!container) return;
@@ -173,40 +182,39 @@ function getTenantLabel(tenant) {
     return tenant?.business_name || `Tenant ${tenant?.id || ""}`;
 }
 
-function updateHeaderLabels() {
-    const selectedTenant = getSelectedTenant();
-    const portalTitle = portalData.scope === "global"
-        ? "All Tenant Control Center"
-        : (selectedTenant ? getTenantLabel(selectedTenant) : "WappBot Control Center");
-
-    tenantName.textContent = portalTitle;
-}
-
-function setActiveScreen(screenId) {
-    currentScreen = screenId;
-
-    screenButtons.forEach((button) => {
-        button.classList.toggle("active", button.dataset.screenTarget === screenId);
-    });
-
-    screens.forEach((screen) => {
-        screen.classList.toggle("hidden", screen.id !== screenId);
-    });
-}
-
-function closeStream() {
-    if (stream) {
-        stream.close();
-        stream = null;
+function formatWorkflowAnswers(answers) {
+    if (!answers || typeof answers !== "object") {
+        return "No extra answers";
     }
 
-    streamTenantToken = null;
+    const lines = Object.entries(answers).map(([key, value]) => {
+        if (value && typeof value === "object") {
+            return `${key}: ${value.title || value.value || value.option_id || "-"}`;
+        }
+
+        return `${key}: ${value}`;
+    });
+
+    return lines.length ? lines.join("\n") : "No extra answers";
 }
 
-function closeCloseModal() {
-    closeBookingMeta = null;
-    closeRemarks.value = "";
-    closeModal.classList.add("hidden");
+// ==========================================
+// 4. AUTH & SESSION MANAGEMENT
+// ==========================================
+function saveToken(token) {
+    adminToken = token;
+    localStorage.setItem("adminToken", token);
+}
+
+function clearToken() {
+    adminToken = "";
+    localStorage.removeItem("adminToken");
+    tenantInput.value = "";
+}
+
+function handleUnauthorized() {
+    clearToken();
+    showLogin("Your session expired or the token was invalid. Sign in again to continue.");
 }
 
 function showLogin(message = "Your token stays saved on this browser until you sign out.") {
@@ -228,39 +236,9 @@ function showDashboard() {
     dashboardShell.classList.remove("hidden");
 }
 
-function saveToken(token) {
-    adminToken = token;
-    localStorage.setItem("adminToken", token);
-}
-
-function clearToken() {
-    adminToken = "";
-    localStorage.removeItem("adminToken");
-    tenantInput.value = "";
-}
-
-function handleUnauthorized() {
-    clearToken();
-    showLogin("Your session expired or the token was invalid. Sign in again to continue.");
-}
-
-async function fetchJson(url, options = {}) {
-    const res = await fetch(url, options);
-
-    if (res.status === 401 || res.status === 403) {
-        handleUnauthorized();
-        throw new Error("Unauthorized");
-    }
-
-    const data = await res.json().catch(() => null);
-
-    if (!res.ok) {
-        throw new Error(data?.error || "Request failed");
-    }
-
-    return data;
-}
-
+// ==========================================
+// 5. API SERVICE (Data & URLs)
+// ==========================================
 function getTokenQuery() {
     const params = new URLSearchParams();
     params.set("token", adminToken);
@@ -309,6 +287,23 @@ function buildSettingsUrl(tenantId) {
     }
 
     return `/admin/settings?${params.toString()}`;
+}
+
+async function fetchJson(url, options = {}) {
+    const res = await fetch(url, options);
+
+    if (res.status === 401 || res.status === 403) {
+        handleUnauthorized();
+        throw new Error("Unauthorized");
+    }
+
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok) {
+        throw new Error(data?.error || "Request failed");
+    }
+
+    return data;
 }
 
 async function loadPortalData(silent = false) {
@@ -407,6 +402,80 @@ async function refreshPortal(silent = false) {
             homeConnectionLabel.textContent = "Error";
         }
     }
+}
+
+// ==========================================
+// 6. REAL-TIME SERVICE (SSE)
+// ==========================================
+function connectStream(token) {
+    if (!token || (stream && streamTenantToken === token)) {
+        return;
+    }
+
+    closeStream();
+    streamTenantToken = token;
+    stream = new EventSource(`/admin/bookings/stream?token=${encodeURIComponent(token)}`);
+
+    stream.onopen = () => {
+        connectionStatus.textContent = "Live updates connected.";
+        homeConnectionLabel.textContent = "Connected";
+    };
+
+    stream.onmessage = async (event) => {
+        try {
+            const payload = JSON.parse(event.data);
+            if (payload.type === "connected") {
+                return;
+            }
+            
+            if (payload.type === "created") {
+                showToast(`New booking received! (#${payload.bookingId})`, "success");
+            } else if (payload.type === "updated") {
+                showToast(`Booking #${payload.bookingId} was updated.`, "success");
+            }
+        } catch (err) {
+            console.error("stream parse error:", err);
+        }
+
+        await refreshPortal(true); // Silent background refresh so UI doesn't flash
+    };
+
+    stream.onerror = () => {
+        connectionStatus.textContent = "Live connection interrupted. Retrying...";
+        homeConnectionLabel.textContent = "Retrying";
+    };
+}
+
+function closeStream() {
+    if (stream) {
+        stream.close();
+        stream = null;
+    }
+    streamTenantToken = null;
+}
+
+// ==========================================
+// 7. UI & RENDERERS
+// ==========================================
+function setActiveScreen(screenId) {
+    currentScreen = screenId;
+
+    screenButtons.forEach((button) => {
+        button.classList.toggle("active", button.dataset.screenTarget === screenId);
+    });
+
+    screens.forEach((screen) => {
+        screen.classList.toggle("hidden", screen.id !== screenId);
+    });
+}
+
+function updateHeaderLabels() {
+    const selectedTenant = getSelectedTenant();
+    const portalTitle = portalData.scope === "global"
+        ? "All Tenant Control Center"
+        : (selectedTenant ? getTenantLabel(selectedTenant) : "WappBot Control Center");
+
+    tenantName.textContent = portalTitle;
 }
 
 function renderOverviewStats() {
@@ -508,28 +577,6 @@ function renderTokenList(target, items, emptyMessage) {
     });
 }
 
-function parseWorkflowEditor() {
-    return safeJsonParse(workflowConfigInput.value, null);
-}
-
-function refreshWorkflowSelectors() {
-    const workflow = parseWorkflowEditor();
-    const steps = Array.isArray(workflow?.steps) ? workflow.steps : [];
-
-    stepSelector.innerHTML = "";
-    insertBeforeSelector.innerHTML = "";
-
-    steps.forEach((step) => {
-        const option = document.createElement("option");
-        option.value = step.id;
-        option.textContent = `${step.id} (${step.kind})`;
-        stepSelector.appendChild(option);
-
-        const insertOption = option.cloneNode(true);
-        insertBeforeSelector.appendChild(insertOption);
-    });
-}
-
 function renderSelectedTenant() {
     const tenant = getSelectedTenant();
 
@@ -555,22 +602,6 @@ function renderSelectedTenant() {
     renderTokenList(servicesList, tenant.services || [], "No services configured for this tenant.");
     renderTokenList(providersList, tenant.providers || [], "No providers configured for this tenant.");
     refreshWorkflowSelectors();
-}
-
-function formatWorkflowAnswers(answers) {
-    if (!answers || typeof answers !== "object") {
-        return "No extra answers";
-    }
-
-    const lines = Object.entries(answers).map(([key, value]) => {
-        if (value && typeof value === "object") {
-            return `${key}: ${value.title || value.value || value.option_id || "-"}`;
-        }
-
-        return `${key}: ${value}`;
-    });
-
-    return lines.length ? lines.join("\n") : "No extra answers";
 }
 
 function getActionMarkup(booking) {
@@ -670,6 +701,19 @@ function renderBookingsTable() {
     nextPageButton.disabled = bookingsResponse.page >= totalPages;
 }
 
+function render() {
+    updateHeaderLabels();
+    renderOverviewStats();
+    renderTenantOverview();
+    renderTenantDirectory();
+    renderSelectedTenant();
+    renderBookingsTable();
+}
+
+// ==========================================
+// 8. ACTIONS & BUSINESS LOGIC
+// ==========================================
+
 async function updateBookingStatus(bookingId, action, options = {}) {
     const endpoint = action === "approve"
         ? "/admin/approve"
@@ -712,6 +756,37 @@ function openCloseModal(booking) {
     closeModalSummary.textContent = `${booking.service_name} - ${booking.phone} - ${formatDisplayDate(booking.booking_date)} at ${formatDisplayTime(booking.booking_time)}`;
     closeModal.classList.remove("hidden");
     closeRemarks.focus();
+}
+
+function closeCloseModal() {
+    closeBookingMeta = null;
+    closeRemarks.value = "";
+    closeModal.classList.add("hidden");
+}
+
+// ==========================================
+// 9. WORKFLOW EDITOR
+// ==========================================
+function parseWorkflowEditor() {
+    return safeJsonParse(workflowConfigInput.value, null);
+}
+
+function refreshWorkflowSelectors() {
+    const workflow = parseWorkflowEditor();
+    const steps = Array.isArray(workflow?.steps) ? workflow.steps : [];
+
+    stepSelector.innerHTML = "";
+    insertBeforeSelector.innerHTML = "";
+
+    steps.forEach((step) => {
+        const option = document.createElement("option");
+        option.value = step.id;
+        option.textContent = `${step.id} (${step.kind})`;
+        stepSelector.appendChild(option);
+
+        const insertOption = option.cloneNode(true);
+        insertBeforeSelector.appendChild(insertOption);
+    });
 }
 
 function createCustomStepTemplate() {
@@ -858,8 +933,6 @@ async function saveTenantSettings(event) {
 
     const workflowConfig = parseWorkflowEditor();
 
-    if (!workflowConfig) {
-        settingsStatus.textContent = "Workflow JSON is invalid. Fix it before saving.";
     if (!workflowConfig || workflowConfig._error) {
         settingsStatus.textContent = `Workflow JSON is invalid: ${workflowConfig?._error || "Check syntax"}.`;
         return;
@@ -902,54 +975,9 @@ async function saveTenantSettings(event) {
     }
 }
 
-function connectStream(token) {
-    if (!token || (stream && streamTenantToken === token)) {
-        return;
-    }
-
-    closeStream();
-    streamTenantToken = token;
-    stream = new EventSource(`/admin/bookings/stream?token=${encodeURIComponent(token)}`);
-
-    stream.onopen = () => {
-        connectionStatus.textContent = "Live updates connected.";
-        homeConnectionLabel.textContent = "Connected";
-    };
-
-    stream.onmessage = async (event) => {
-        try {
-            const payload = JSON.parse(event.data);
-            if (payload.type === "connected") {
-                return;
-            }
-            
-            if (payload.type === "created") {
-                showToast(`New booking received! (#${payload.bookingId})`, "success");
-            } else if (payload.type === "updated") {
-                showToast(`Booking #${payload.bookingId} was updated.`, "success");
-            }
-        } catch (err) {
-            console.error("stream parse error:", err);
-        }
-
-        await refreshPortal(true); // Silent background refresh so UI doesn't flash
-    };
-
-    stream.onerror = () => {
-        connectionStatus.textContent = "Live connection interrupted. Retrying...";
-        homeConnectionLabel.textContent = "Retrying";
-    };
-}
-
-function render() {
-    updateHeaderLabels();
-    renderOverviewStats();
-    renderTenantOverview();
-    renderTenantDirectory();
-    renderSelectedTenant();
-    renderBookingsTable();
-}
-
+// ==========================================
+// 10. EVENT LISTENERS
+// ==========================================
 loginForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const token = tenantInput.value.trim();
@@ -1117,6 +1145,9 @@ addAnswerButton.addEventListener("click", addAnswerOptionTemplate);
 removeStepButton.addEventListener("click", removeSelectedStep);
 settingsForm.addEventListener("submit", saveTenantSettings);
 
+// ==========================================
+// 11. INITIALIZATION
+// ==========================================
 tenantInput.value = localStorage.getItem("adminToken") || "";
 setActiveScreen(currentScreen);
 
@@ -1126,5 +1157,4 @@ if (tenantInput.value.trim()) {
     refreshPortal();
 } else {
     showLogin();
-}
 }
