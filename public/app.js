@@ -1127,3 +1127,4 @@ if (tenantInput.value.trim()) {
 } else {
     showLogin();
 }
+}
