@@ -29,44 +29,21 @@
         </section>
 
         <div id="dashboardShell" class="dashboard-shell hidden">
-            <aside id="sidebar" class="sidebar">
-                <div class="sidebar-top">
-                    <div class="brand-row">
-                        <button id="sidebarToggle" class="icon-button ghost" type="button" aria-label="Toggle sidebar">☰</button>
-                        <div class="brand-block">
-                            <div class="brand-mark">WB</div>
-                            <div class="brand-copy">
-                                <p class="eyebrow light">Enterprise Portal</p>
-                                <h1 id="tenantName">WappBot</h1>
-                            </div>
-                        </div>
+            <header class="top-nav-header">
+                <div class="nav-top-row">
+                    <h1 id="tenantName">WappBot Control Center</h1>
+                    <div class="nav-actions">
+                        <span id="connectionStatus" class="status-badge">Disconnected</span>
+                        <button id="logoutButton" class="secondary">Sign Out</button>
                     </div>
-
-                    <nav class="menu-list">
-                        <button class="menu-item active" type="button" data-screen-target="overviewScreen">
-                            <span class="menu-icon">01</span>
-                            <span class="menu-label">Overview</span>
-                        </button>
-                        <button class="menu-item" type="button" data-screen-target="bookingsScreen">
-                            <span class="menu-icon">02</span>
-                            <span class="menu-label">Bookings</span>
-                        </button>
-                        <button class="menu-item" type="button" data-screen-target="tenantControlsScreen">
-                            <span class="menu-icon">03</span>
-                            <span class="menu-label">Tenant Controls</span>
-                        </button>
-                    </nav>
                 </div>
 
-                <div class="sidebar-bottom">
-                    <div class="profile-card">
-                        <p class="section-label light">Session</p>
-                        <p class="profile-name" id="sidebarBusinessName">Portal session</p>
-                        <p class="profile-copy" id="connectionStatus">Checking live connection.</p>
-                    </div>
-                    <button id="logoutButton" class="ghost wide" type="button">Log out</button>
-                </div>
-            </aside>
+                <nav class="nav-tabs">
+                    <button class="nav-tab active" data-screen-target="overviewScreen">Overview</button>
+                    <button class="nav-tab" data-screen-target="bookingsScreen">Bookings</button>
+                    <button class="nav-tab" data-screen-target="tenantControlsScreen">Settings</button>
+                </nav>
+            </header>
 
             <main class="workspace">
                 <section id="overviewScreen" class="workspace-screen">
@@ -81,30 +58,22 @@
                         </div>
                     </header>
 
-                    <div class="stats-grid">
-                        <article class="stat-card">
+                    <div class="stats-grid interactive-stats">
+                        <article class="stat-card" data-range="today">
+                            <span id="statToday">0</span>
+                            <label>Today</label>
+                        </article>
+                        <article class="stat-card" data-range="this_week">
+                            <span id="statThisWeek">0</span>
+                            <label>This week</label>
+                        </article>
+                        <article class="stat-card" data-range="this_month">
+                            <span id="statThisMonth">0</span>
+                            <label>This month</label>
+                        </article>
+                        <article class="stat-card" data-range="all">
                             <span id="statTotal">0</span>
-                            <label>Total bookings</label>
-                        </article>
-                        <article class="stat-card">
-                            <span id="statPending">0</span>
-                            <label>Pending</label>
-                        </article>
-                        <article class="stat-card">
-                            <span id="statWaiting">0</span>
-                            <label>Waiting</label>
-                        </article>
-                        <article class="stat-card">
-                            <span id="statConfirmed">0</span>
-                            <label>Confirmed</label>
-                        </article>
-                        <article class="stat-card">
-                            <span id="statRejected">0</span>
-                            <label>Rejected</label>
-                        </article>
-                        <article class="stat-card">
-                            <span id="statClosed">0</span>
-                            <label>Closed</label>
+                            <label>Total Till Now</label>
                         </article>
                     </div>
 
@@ -143,14 +112,14 @@
                         </div>
                     </header>
 
-                    <div class="toolbar dense-toolbar">
-                        <div class="search-wrap">
-                            <input type="search" id="searchInput" placeholder="Search by tenant, service, provider, phone, status, or remarks">
+                    <div class="toolbar compact-toolbar">
+                        <div class="search-wrap compact-search">
+                            <input type="search" id="searchInput" placeholder="Search bookings...">
                         </div>
-                        <div class="toolbar-actions">
+                        <div class="toolbar-actions compact-actions">
                             <select id="tenantFilter"></select>
-                            <input type="date" id="dateFilter">
-                            <button id="clearButton" class="secondary" type="button">Clear</button>
+                            <input type="text" id="dateFilter" placeholder="Select date..." onfocus="(this.type='date')" onblur="(this.type=this.value?'date':'text')">
+                            <button id="clearButton" class="secondary compact-btn" type="button">Clear</button>
                         </div>
                     </div>
 
@@ -324,6 +293,8 @@
             </form>
         </div>
     </div>
+
+    <div id="toastContainer" class="toast-container"></div>
 
     <script src="/app.js"></script>
 </body>

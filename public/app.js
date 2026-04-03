@@ -4,16 +4,15 @@ let streamTenantToken = null;
 let portalData = { scope: "tenant", tenants: [] };
 let selectedTenantId = null;
 let currentFilter = "all";
+let currentRange = "all";
 let currentPage = 1;
 let pageSize = 14;
 let currentScreen = "overviewScreen";
 let summaryCounts = {
+    today: 0,
+    this_week: 0,
+    this_month: 0,
     all: 0,
-    pending: 0,
-    waiting: 0,
-    confirmed: 0,
-    rejected: 0,
-    closed: 0
 };
 let bookingsResponse = {
     items: [],
@@ -29,10 +28,7 @@ const loginForm = document.getElementById("loginForm");
 const tenantInput = document.getElementById("tenantId");
 const loginStatus = document.getElementById("loginStatus");
 const logoutButton = document.getElementById("logoutButton");
-const sidebar = document.getElementById("sidebar");
-const sidebarToggle = document.getElementById("sidebarToggle");
 const tenantName = document.getElementById("tenantName");
-const sidebarBusinessName = document.getElementById("sidebarBusinessName");
 const connectionStatus = document.getElementById("connectionStatus");
 const overviewStatus = document.getElementById("overviewStatus");
 const homeConnectionLabel = document.getElementById("homeConnectionLabel");
@@ -72,6 +68,21 @@ const closeForm = document.getElementById("closeForm");
 const closeRemarks = document.getElementById("closeRemarks");
 const closeModalDismiss = document.getElementById("closeModalDismiss");
 const closeModalSummary = document.getElementById("closeModalSummary");
+
+function showToast(message, type = "success") {
+    const container = document.getElementById("toastContainer");
+    if (!container) return;
+    
+    const toast = document.createElement("div");
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.classList.add("fade-out");
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
+}
 
 function normalizeDateValue(value) {
     if (!value) {
@@ -140,7 +151,8 @@ function safeJsonParse(value, fallback = null) {
     try {
         return JSON.parse(value);
     } catch (err) {
-        return fallback;
+        console.error("JSON Parse Error:", err.message);
+        return { _error: err.message };
     }
 }
 
@@ -168,9 +180,6 @@ function updateHeaderLabels() {
         : (selectedTenant ? getTenantLabel(selectedTenant) : "WappBot Control Center");
 
     tenantName.textContent = portalTitle;
-    sidebarBusinessName.textContent = portalData.scope === "global"
-        ? "Master admin session"
-        : `${portalTitle} admin session`;
 }
 
 function setActiveScreen(screenId) {
@@ -206,7 +215,7 @@ function showLogin(message = "Your token stays saved on this browser until you s
     portalData = { scope: "tenant", tenants: [] };
     selectedTenantId = null;
     bookingsResponse = { items: [], total: 0, page: 1, pageSize };
-    summaryCounts = { all: 0, pending: 0, waiting: 0, confirmed: 0, rejected: 0, closed: 0 };
+    summaryCounts = { today: 0, this_week: 0, this_month: 0, all: 0 };
     render();
     loginScreen.classList.remove("hidden");
     dashboardShell.classList.add("hidden");
@@ -274,6 +283,10 @@ function buildBookingsUrl() {
         params.set("status", currentFilter);
     }
 
+    if (currentRange && currentRange !== "all") {
+        params.set("range", currentRange);
+    }
+
     if (searchInput.value.trim()) {
         params.set("search", searchInput.value.trim());
     }
@@ -298,12 +311,12 @@ function buildSettingsUrl(tenantId) {
     return `/admin/settings?${params.toString()}`;
 }
 
-async function loadPortalData(options = {}) {
+async function loadPortalData(silent = false) {
     if (!adminToken) {
         return;
     }
 
-    if (!options.silent) {
+    if (!silent) {
         overviewStatus.textContent = "Loading tenant controls and workflow data...";
     }
 
@@ -329,10 +342,10 @@ async function refreshSummaryCounts() {
         return;
     }
 
-    const statuses = ["all", "pending", "waiting", "confirmed", "rejected", "closed"];
+    const ranges = ["today", "this_week", "this_month", "all"];
     const selectedTenant = tenantFilter.value || "";
 
-    const results = await Promise.all(statuses.map(async (status) => {
+    const results = await Promise.all(ranges.map(async (range) => {
         const params = getTokenQuery();
 
         if (selectedTenant) {
@@ -342,23 +355,26 @@ async function refreshSummaryCounts() {
         params.set("page", "1");
         params.set("pageSize", "1");
 
-        if (status !== "all") {
-            params.set("status", status);
+        if (range !== "all") {
+            params.set("range", range);
         }
 
         const response = await fetchJson(`/admin/bookings?${params.toString()}`);
-        return [status, response.total || 0];
+        return [range, response.total || 0];
     }));
 
     summaryCounts = Object.fromEntries(results);
 }
 
-async function loadBookings() {
+async function loadBookings(silent = false) {
     if (!adminToken) {
         return;
     }
 
-    bookingsStatus.textContent = "Loading bookings...";
+    if (!silent) {
+        bookingsStatus.textContent = "Loading bookings...";
+    }
+    
     const response = await fetchJson(buildBookingsUrl());
     bookingsResponse = {
         items: Array.isArray(response.items) ? response.items : [],
@@ -372,14 +388,16 @@ async function loadBookings() {
     renderBookingsTable();
 }
 
-async function refreshPortal() {
+async function refreshPortal(silent = false) {
     try {
         showDashboard();
-        await loadPortalData();
-        await loadBookings();
-        overviewStatus.textContent = `Portal ready. Managing ${portalData.tenants.length} tenant(s).`;
-        connectionStatus.textContent = "Live updates connected.";
-        homeConnectionLabel.textContent = "Connected";
+        await loadPortalData(silent);
+        await loadBookings(silent);
+        if (!silent) {
+            overviewStatus.textContent = `Portal ready. Managing ${portalData.tenants.length} tenant(s).`;
+            connectionStatus.textContent = "Live updates connected.";
+            homeConnectionLabel.textContent = "Connected";
+        }
         connectStream(adminToken);
     } catch (err) {
         if (err.message !== "Unauthorized") {
@@ -392,12 +410,10 @@ async function refreshPortal() {
 }
 
 function renderOverviewStats() {
+    document.getElementById("statToday").textContent = summaryCounts.today || 0;
+    document.getElementById("statThisWeek").textContent = summaryCounts.this_week || 0;
+    document.getElementById("statThisMonth").textContent = summaryCounts.this_month || 0;
     document.getElementById("statTotal").textContent = summaryCounts.all || 0;
-    document.getElementById("statPending").textContent = summaryCounts.pending || 0;
-    document.getElementById("statWaiting").textContent = summaryCounts.waiting || 0;
-    document.getElementById("statConfirmed").textContent = summaryCounts.confirmed || 0;
-    document.getElementById("statRejected").textContent = summaryCounts.rejected || 0;
-    document.getElementById("statClosed").textContent = summaryCounts.closed || 0;
     overviewTenantCount.textContent = `${portalData.tenants.length} tenant${portalData.tenants.length === 1 ? "" : "s"}`;
 }
 
@@ -445,9 +461,11 @@ function updateTenantFilterOptions() {
     if (portalData.scope !== "global") {
         tenantFilter.value = portalData.tenants[0] ? String(portalData.tenants[0].id) : "";
         tenantFilter.disabled = true;
+        tenantFilter.style.display = "none";
     } else if (!portalData.tenants.some((tenant) => String(tenant.id) === tenantFilter.value)) {
         tenantFilter.value = "";
         tenantFilter.disabled = false;
+        tenantFilter.style.display = "inline-block";
     }
 }
 
@@ -678,11 +696,12 @@ async function updateBookingStatus(bookingId, action, options = {}) {
         });
 
         closeCloseModal();
-        await refreshPortal();
+        showToast("Booking updated successfully", "success");
+        await refreshPortal(true); // Silent refresh
     } catch (err) {
         if (err.message !== "Unauthorized") {
             console.error("updateBookingStatus error:", err);
-            bookingsStatus.textContent = "Could not update the booking right now.";
+            showToast(err.message || "Could not update the booking right now.", "error");
         }
     }
 }
@@ -841,6 +860,8 @@ async function saveTenantSettings(event) {
 
     if (!workflowConfig) {
         settingsStatus.textContent = "Workflow JSON is invalid. Fix it before saving.";
+    if (!workflowConfig || workflowConfig._error) {
+        settingsStatus.textContent = `Workflow JSON is invalid: ${workflowConfig?._error || "Check syntax"}.`;
         return;
     }
 
@@ -871,10 +892,12 @@ async function saveTenantSettings(event) {
         renderSelectedTenant();
         updateHeaderLabels();
         settingsStatus.textContent = `Saved tenant controls for ${getTenantLabel(response.tenant)}.`;
+        showToast("Settings saved successfully", "success");
     } catch (err) {
         if (err.message !== "Unauthorized") {
             console.error("saveTenantSettings error:", err);
             settingsStatus.textContent = "Could not save tenant controls right now.";
+            showToast(err.message || "Failed to save settings", "error");
         }
     }
 }
@@ -899,11 +922,17 @@ function connectStream(token) {
             if (payload.type === "connected") {
                 return;
             }
+            
+            if (payload.type === "created") {
+                showToast(`New booking received! (#${payload.bookingId})`, "success");
+            } else if (payload.type === "updated") {
+                showToast(`Booking #${payload.bookingId} was updated.`, "success");
+            }
         } catch (err) {
             console.error("stream parse error:", err);
         }
 
-        await refreshPortal();
+        await refreshPortal(true); // Silent background refresh so UI doesn't flash
     };
 
     stream.onerror = () => {
@@ -940,10 +969,6 @@ logoutButton.addEventListener("click", () => {
     showLogin("Signed out. Enter your admin token to open the portal again.");
 });
 
-sidebarToggle.addEventListener("click", () => {
-    sidebar.classList.toggle("collapsed");
-});
-
 screenButtons.forEach((button) => {
     button.addEventListener("click", () => {
         setActiveScreen(button.dataset.screenTarget);
@@ -953,9 +978,13 @@ screenButtons.forEach((button) => {
 refreshOverviewButton.addEventListener("click", refreshPortal);
 refreshBookingsButton.addEventListener("click", loadBookings);
 
-searchInput.addEventListener("input", async () => {
-    currentPage = 1;
-    await loadBookings();
+let searchTimeout = null;
+searchInput.addEventListener("input", () => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(async () => {
+        currentPage = 1;
+        await loadBookings();
+    }, 400); // Wait 400ms after user stops typing
 });
 
 dateInput.addEventListener("change", async () => {
@@ -977,6 +1006,22 @@ document.querySelectorAll(".pill").forEach((pill) => {
     });
 });
 
+document.querySelectorAll(".stat-card").forEach((card) => {
+    card.addEventListener("click", async () => {
+        currentRange = card.dataset.range || "all";
+        currentFilter = "all";
+        dateInput.value = "";
+        if (dateInput.type === "date") {
+            dateInput.type = "text"; 
+        }
+        document.querySelectorAll(".pill").forEach((item) => item.classList.toggle("active", item.dataset.filter === "all"));
+        
+        setActiveScreen("bookingsScreen");
+        currentPage = 1;
+        await loadBookings();
+    });
+});
+
 document.getElementById("clearButton").addEventListener("click", async () => {
     searchInput.value = "";
     dateInput.value = "";
@@ -984,6 +1029,7 @@ document.getElementById("clearButton").addEventListener("click", async () => {
         tenantFilter.value = "";
     }
     currentFilter = "all";
+    currentRange = "all";
     currentPage = 1;
     document.querySelectorAll(".pill").forEach((item) => item.classList.toggle("active", item.dataset.filter === "all"));
     await loadBookings();
@@ -1023,7 +1069,17 @@ bookingsTableBody.addEventListener("click", async (event) => {
         return;
     }
 
-    await updateBookingStatus(bookingId, action, { tenantId });
+    // Disable button to prevent double-clicks
+    actionButton.disabled = true;
+    const originalText = actionButton.textContent;
+    actionButton.textContent = "...";
+
+    try {
+        await updateBookingStatus(bookingId, action, { tenantId });
+    } finally {
+        actionButton.disabled = false;
+        actionButton.textContent = originalText;
+    }
 });
 
 closeModalDismiss.addEventListener("click", closeCloseModal);
@@ -1047,6 +1103,15 @@ closeForm.addEventListener("submit", async (event) => {
 });
 
 workflowConfigInput.addEventListener("input", refreshWorkflowSelectors);
+
+// Auto-format JSON when the user clicks out of the text area
+workflowConfigInput.addEventListener("blur", () => {
+    const parsed = safeJsonParse(workflowConfigInput.value);
+    if (parsed && !parsed._error) {
+        workflowConfigInput.value = formatWorkflowConfig(parsed);
+    }
+});
+
 addQuestionButton.addEventListener("click", createCustomStepTemplate);
 addAnswerButton.addEventListener("click", addAnswerOptionTemplate);
 removeStepButton.addEventListener("click", removeSelectedStep);

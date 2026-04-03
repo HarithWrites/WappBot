@@ -115,6 +115,12 @@ async function getAllBookings(tenant_id, filters = {}) {
 
     if (filters.range === "upcoming_30_days") {
         where += " AND b.booking_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '29 days'";
+    } else if (filters.range === "today") {
+        where += " AND b.booking_date = CURRENT_DATE";
+    } else if (filters.range === "this_week") {
+        where += " AND b.booking_date >= date_trunc('week', CURRENT_DATE) AND b.booking_date < date_trunc('week', CURRENT_DATE) + INTERVAL '1 week'";
+    } else if (filters.range === "this_month") {
+        where += " AND b.booking_date >= date_trunc('month', CURRENT_DATE) AND b.booking_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'";
     }
 
     if (filters.date) {
