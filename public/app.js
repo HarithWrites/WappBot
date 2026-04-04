@@ -201,11 +201,41 @@ function formatWorkflowAnswers(answers) {
 function customizeSingleTenantUI() {
     if (portalData.scope === "global") return;
 
-    // a. Hide workflow editor tools, make textarea read-only
-    if (workflowConfigInput) workflowConfigInput.readOnly = true;
+    // 1a. Hide workflow editor tools & JSON textarea
+    if (workflowConfigInput) {
+        workflowConfigInput.readOnly = true;
+        workflowConfigInput.style.display = 'none';
+        
+        // Add table container if missing
+        if (!document.getElementById('workflowTableContainer')) {
+            const tableContainer = document.createElement('div');
+            tableContainer.id = 'workflowTableContainer';
+            tableContainer.style.width = '100%';
+            tableContainer.style.marginTop = '15px';
+            tableContainer.style.overflowX = 'auto';
+            workflowConfigInput.parentElement.appendChild(tableContainer);
+        }
+    }
+    
     [stepSelector, insertBeforeSelector, addQuestionButton, addAnswerButton, removeStepButton].forEach(el => {
         if (el && el.parentElement) el.parentElement.style.display = 'none';
     });
+
+    // 1b. Center alignment for self-service settings properly
+    if (settingsForm) {
+        settingsForm.style.maxWidth = '900px';
+        settingsForm.style.margin = '0 auto';
+        settingsForm.style.display = 'flex';
+        settingsForm.style.flexDirection = 'column';
+        
+        const settingsSection = settingsForm.closest('.workspace-screen') || settingsForm.parentElement;
+        if (settingsSection) {
+            settingsSection.style.display = 'flex';
+            settingsSection.style.flexDirection = 'column';
+            settingsSection.style.alignItems = 'center';
+            settingsSection.style.width = '100%';
+        }
+    }
 
     // c. Remove Tenants Directory
     if (tenantList && tenantList.parentElement) tenantList.parentElement.style.display = 'none';
@@ -239,22 +269,32 @@ function customizeSingleTenantUI() {
     // i. Hide the tenant filter entirely
     if (tenantFilter) tenantFilter.style.display = 'none';
 
-    // j. Align search bar, date picker, and clear button
+    // 1c & 1d. Align search bar to right and toggles to the middle
     if (searchInput && searchInput.parentElement) {
         const container = searchInput.parentElement;
         container.style.display = 'flex';
-        container.style.justifyContent = 'flex-end';
+        container.style.justifyContent = 'space-between';
         container.style.alignItems = 'center';
-        container.style.gap = '10px';
+        container.style.gap = '15px';
         container.style.flexWrap = 'wrap';
+
+        // Left spacer for perfect flexbox centering
+        if (!document.getElementById('leftSpacer')) {
+            const spacer = document.createElement('div');
+            spacer.id = 'leftSpacer';
+            spacer.style.flex = '1';
+            container.appendChild(spacer);
+        }
     }
 
-    // k. Provide specific toggles replacing traditional filters
+    // Move toggles center
     if (!document.querySelector('.date-toggles') && searchInput && searchInput.parentElement) {
         const toggleGroup = document.createElement("div");
         toggleGroup.className = "date-toggles";
         toggleGroup.style.display = "flex";
         toggleGroup.style.gap = "5px";
+        toggleGroup.style.justifyContent = "center";
+        toggleGroup.style.flex = "1";
 
         ['today', 'tomorrow', 'future', 'past'].forEach(range => {
             const btn = document.createElement("button");
@@ -280,7 +320,26 @@ function customizeSingleTenantUI() {
             toggleGroup.appendChild(btn);
         });
 
-        searchInput.parentElement.insertBefore(toggleGroup, searchInput);
+        searchInput.parentElement.appendChild(toggleGroup);
+    }
+
+    // Wrap Search components and pull them to the right
+    if (searchInput && searchInput.parentElement && !document.getElementById('rightSearchWrapper')) {
+        const searchWrapper = document.createElement('div');
+        searchWrapper.id = 'rightSearchWrapper';
+        searchWrapper.style.display = 'flex';
+        searchWrapper.style.gap = '10px';
+        searchWrapper.style.alignItems = 'center';
+        searchWrapper.style.justifyContent = 'flex-end';
+        searchWrapper.style.flex = '1';
+        
+        if (searchInput) searchWrapper.appendChild(searchInput);
+        if (dateInput) searchWrapper.appendChild(dateInput);
+        const clearBtn = document.getElementById('clearButton');
+        if (clearBtn) searchWrapper.appendChild(clearBtn);
+        
+        // Append safely at the end of the flex container
+        document.querySelector('.workspace-screen:not(.hidden) .controls-bar')?.appendChild(searchWrapper) || container?.appendChild(searchWrapper);
     }
 }
 
@@ -444,7 +503,8 @@ async function refreshSummaryCounts() {
         const results = await Promise.all(statuses.map(async (status) => {
             const params = getTokenQuery();
             if (selectedTenant) params.set("tenantId", selectedTenant);
-            params.set("range", "today");
+            // 1e. Dynamically sync with the active range (fixes "today showing 0" when fetching Future/Past stats)
+            params.set("range", currentRange && currentRange !== "all" ? currentRange : "today");
             params.set("status", status);
             params.set("page", "1");
             params.set("pageSize", "1");
@@ -595,12 +655,16 @@ function renderOverviewStats() {
         // m. Render completely new layout elements dynamically strictly for single tenants
         const statsContainer = document.getElementById("statToday")?.closest('.stats-grid') || document.getElementById("statToday")?.parentElement;
         if (statsContainer) {
+            // 1e. Dynamically format label to reflect selected range
+            const rangeStr = (currentRange && currentRange !== "all") ? currentRange : "today";
+            const rangeLabel = rangeStr.charAt(0).toUpperCase() + rangeStr.slice(1);
+
             statsContainer.innerHTML = `
-                <div class="stat-card"><h3>Pending (Today)</h3><p class="stat-value">${summaryCounts.pending || 0}</p></div>
-                <div class="stat-card"><h3>Waiting (Today)</h3><p class="stat-value">${summaryCounts.waiting || 0}</p></div>
-                <div class="stat-card"><h3>Confirmed (Today)</h3><p class="stat-value">${summaryCounts.confirmed || 0}</p></div>
-                <div class="stat-card"><h3>Rejected (Today)</h3><p class="stat-value">${summaryCounts.rejected || 0}</p></div>
-                <div class="stat-card"><h3>Closed (Today)</h3><p class="stat-value">${summaryCounts.closed || 0}</p></div>
+                <div class="stat-card"><h3>Pending (${rangeLabel})</h3><p class="stat-value">${summaryCounts.pending || 0}</p></div>
+                <div class="stat-card"><h3>Waiting (${rangeLabel})</h3><p class="stat-value">${summaryCounts.waiting || 0}</p></div>
+                <div class="stat-card"><h3>Confirmed (${rangeLabel})</h3><p class="stat-value">${summaryCounts.confirmed || 0}</p></div>
+                <div class="stat-card"><h3>Rejected (${rangeLabel})</h3><p class="stat-value">${summaryCounts.rejected || 0}</p></div>
+                <div class="stat-card"><h3>Closed (${rangeLabel})</h3><p class="stat-value">${summaryCounts.closed || 0}</p></div>
             `;
             let lastUpdatedEl = document.getElementById("lastUpdatedTime");
             if (!lastUpdatedEl) {
@@ -927,6 +991,35 @@ function refreshWorkflowSelectors() {
         const insertOption = option.cloneNode(true);
         insertBeforeSelector.appendChild(insertOption);
     });
+
+    renderWorkflowTable(workflow);
+}
+
+function renderWorkflowTable(workflow) {
+    if (portalData.scope === "global") return;
+    let container = document.getElementById('workflowTableContainer');
+    if (!container) return;
+    
+    if (!workflow || !workflow.steps || !workflow.steps.length) {
+        container.innerHTML = '<p class="status-note">No workflow steps configured.</p>';
+        return;
+    }
+    
+    let html = '<table class="data-table" style="width:100%; border-collapse: collapse; margin-top: 10px; text-align: left; font-size: 0.9em;">';
+    html += '<thead><tr style="border-bottom: 2px solid #ccc;"><th style="padding: 10px;">Step ID</th><th style="padding: 10px;">Type</th><th style="padding: 10px;">Question</th><th style="padding: 10px;">Answer Options</th></tr></thead><tbody>';
+    
+    workflow.steps.forEach(step => {
+        let optionsText = (step.options || []).map(o => `• ${o.title}`).join('<br>');
+        let questionText = step.question ? `<strong>${step.question.header || ''}</strong><br><small>${step.question.body || ''}</small>` : '';
+        html += `<tr style="border-bottom: 1px solid #eee;">
+            <td style="padding: 10px; vertical-align: top;"><strong>${step.id}</strong></td>
+            <td style="padding: 10px; vertical-align: top;">${step.kind}</td>
+            <td style="padding: 10px; vertical-align: top;">${questionText}</td>
+            <td style="padding: 10px; vertical-align: top;">${optionsText || '-'}</td>
+        </tr>`;
+    });
+    html += '</tbody></table>';
+    container.innerHTML = html;
 }
 
 function createCustomStepTemplate() {
