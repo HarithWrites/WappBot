@@ -212,6 +212,9 @@ function customizeSingleTenantUI() {
 
     // Find specific elements to remove/change (b, d, e, g, l)
     document.querySelectorAll('h2, h3, p, span, div').forEach(el => {
+        // Prevent modifying/hiding large parent layout containers by skipping elements that have children
+        if (el.children.length > 0) return;
+
         if (!el.textContent) return;
         const text = el.textContent.trim();
         
