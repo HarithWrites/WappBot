@@ -924,6 +924,28 @@ document.getElementById("clearButton").addEventListener("click", async () => {
     await loadBookings();
 });
 
+// Use event delegation for stat cards to handle dynamically created elements
+document.body.addEventListener("click", async (event) => {
+    const card = event.target.closest('.stat-card');
+    // Only act on global-view cards that have a data-range attribute
+    if (!card || !card.dataset.range) return;
+
+    // This logic is for the global overview cards to switch date ranges
+    currentRange = card.dataset.range;
+    currentFilter = "all";
+    dateInput.value = "";
+    if (dateInput.type === "date") {
+        dateInput.type = "text";
+    }
+    document.querySelectorAll(".pill").forEach((item) => {
+        item.classList.toggle("active", item.dataset.filter === "all")
+    });
+
+    setActiveScreen("bookingsScreen");
+    currentPage = 1;
+    await loadBookings();
+});
+
 prevPageButton.addEventListener("click", async () => {
     if (currentPage > 1) {
         currentPage -= 1;

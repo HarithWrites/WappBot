@@ -205,5 +205,5 @@ async function handleStatusUpdate(req, res, status, logLabel) {
 
 exports.approveBooking = (req, res) => handleStatusUpdate(req, res, "confirmed", "approveBooking");
 exports.rejectBooking = (req, res) => handleStatusUpdate(req, res, "rejected", "rejectBooking");
-exports.markWaitingBooking = (req, res) => handleStatusUpdate(req, res, "waiting", "markWaitingBooking");
+exports.setWaitingBooking = (req, res) => handleStatusUpdate(req, res, "waiting", "setWaitingBooking");
 exports.closeBooking = (req, res) => handleStatusUpdate(req, res, "closed", "closeBooking");

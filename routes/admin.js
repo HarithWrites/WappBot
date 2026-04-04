@@ -47,10 +47,8 @@ router.use(async (req, res, next) => {
 router.get("/portal-data", controller.getPortalData);
 router.get("/bookings", controller.getBookings);
 router.get("/bookings/stream", controller.streamBookings);
-router.get("/settings", controller.getSettings);
-router.post("/settings", controller.updateSettings);
 router.post("/approve", controller.approveBooking);
-router.post("/waiting", controller.markWaitingBooking);
+router.post("/waiting", controller.setWaitingBooking);
 router.post("/close", controller.closeBooking);
 router.post("/reject", controller.rejectBooking);
 
