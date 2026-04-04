@@ -198,6 +198,89 @@ function formatWorkflowAnswers(answers) {
     return lines.length ? lines.join("\n") : "No extra answers";
 }
 
+function customizeSingleTenantUI() {
+    if (portalData.scope === "global") return;
+
+    // a. Hide workflow editor tools, make textarea read-only
+    if (workflowConfigInput) workflowConfigInput.readOnly = true;
+    [stepSelector, insertBeforeSelector, addQuestionButton, addAnswerButton, removeStepButton].forEach(el => {
+        if (el && el.parentElement) el.parentElement.style.display = 'none';
+    });
+
+    // c. Remove Tenants Directory
+    if (tenantList && tenantList.parentElement) tenantList.parentElement.style.display = 'none';
+
+    // Find specific elements to remove/change (b, d, e, g, l)
+    document.querySelectorAll('h2, h3, p, span, div').forEach(el => {
+        if (!el.textContent) return;
+        const text = el.textContent.trim();
+        
+        // d, e: Rename configuration settings
+        if (text === 'Workflow and tenant management') el.textContent = 'Business Management Settings';
+        
+        // b: Remove specific strings
+        if (text.includes('Selected tenant') || text.includes('Configured in DB')) el.style.display = 'none';
+
+        // g: Remove booking operation descriptions
+        if (text.includes('Booking operations') || text.includes('Compact, paginated tables for high-volume booking operations across statuses and tenants.')) el.style.display = 'none';
+        
+        // l: Remove operations snapshot descriptions
+        if (text.includes('Operations snapshot') || text.includes('Monitor all booking queues, tenant coverage, and live portal status at a glance.')) el.style.display = 'none';
+    });
+
+    // h. Move refresh button next to sign out button
+    if (refreshBookingsButton && logoutButton && logoutButton.parentNode) {
+        logoutButton.parentNode.insertBefore(refreshBookingsButton, logoutButton);
+    }
+
+    // i. Hide the tenant filter entirely
+    if (tenantFilter) tenantFilter.style.display = 'none';
+
+    // j. Align search bar, date picker, and clear button
+    if (searchInput && searchInput.parentElement) {
+        const container = searchInput.parentElement;
+        container.style.display = 'flex';
+        container.style.justifyContent = 'flex-end';
+        container.style.alignItems = 'center';
+        container.style.gap = '10px';
+        container.style.flexWrap = 'wrap';
+    }
+
+    // k. Provide specific toggles replacing traditional filters
+    if (!document.querySelector('.date-toggles') && searchInput && searchInput.parentElement) {
+        const toggleGroup = document.createElement("div");
+        toggleGroup.className = "date-toggles";
+        toggleGroup.style.display = "flex";
+        toggleGroup.style.gap = "5px";
+
+        ['today', 'tomorrow', 'future', 'past'].forEach(range => {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = `pill ${currentRange === range ? 'active' : ''}`;
+            btn.textContent = range.charAt(0).toUpperCase() + range.slice(1);
+            btn.dataset.range = range;
+            
+            btn.addEventListener("click", async () => {
+                currentRange = range;
+                currentFilter = "all";
+                if (dateInput) {
+                    dateInput.value = "";
+                    if (dateInput.type === "date") dateInput.type = "text";
+                }
+                
+                toggleGroup.querySelectorAll('.pill').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                
+                currentPage = 1;
+                await loadBookings();
+            });
+            toggleGroup.appendChild(btn);
+        });
+
+        searchInput.parentElement.insertBefore(toggleGroup, searchInput);
+    }
+}
+
 // ==========================================
 // 4. AUTH & SESSION MANAGEMENT
 // ==========================================
@@ -330,6 +413,7 @@ async function loadPortalData(silent = false) {
     renderTenantOverview();
     renderTenantDirectory();
     renderSelectedTenant();
+    customizeSingleTenantUI();
 }
 
 async function refreshSummaryCounts() {
@@ -337,28 +421,36 @@ async function refreshSummaryCounts() {
         return;
     }
 
-    const ranges = ["today", "this_week", "this_month", "all"];
     const selectedTenant = tenantFilter.value || "";
 
-    const results = await Promise.all(ranges.map(async (range) => {
-        const params = getTokenQuery();
-
-        if (selectedTenant) {
-            params.set("tenantId", selectedTenant);
-        }
-
-        params.set("page", "1");
-        params.set("pageSize", "1");
-
-        if (range !== "all") {
-            params.set("range", range);
-        }
-
-        const response = await fetchJson(`/admin/bookings?${params.toString()}`);
-        return [range, response.total || 0];
-    }));
-
-    summaryCounts = Object.fromEntries(results);
+    // m. Unique count summaries based on scope
+    if (portalData.scope === "global") {
+        const ranges = ["today", "this_week", "this_month", "all"];
+        const results = await Promise.all(ranges.map(async (range) => {
+            const params = getTokenQuery();
+            if (selectedTenant) params.set("tenantId", selectedTenant);
+            params.set("page", "1");
+            params.set("pageSize", "1");
+            if (range !== "all") params.set("range", range);
+            const response = await fetchJson(`/admin/bookings?${params.toString()}`);
+            return [range, response.total || 0];
+        }));
+        summaryCounts = Object.fromEntries(results);
+    } else {
+        const statuses = ["pending", "waiting", "confirmed", "rejected", "closed"];
+        const results = await Promise.all(statuses.map(async (status) => {
+            const params = getTokenQuery();
+            if (selectedTenant) params.set("tenantId", selectedTenant);
+            params.set("range", "today");
+            params.set("status", status);
+            params.set("page", "1");
+            params.set("pageSize", "1");
+            const response = await fetchJson(`/admin/bookings?${params.toString()}`);
+            return [status, response.total || 0];
+        }));
+        summaryCounts = Object.fromEntries(results);
+        summaryCounts.last_updated = new Date().toLocaleString();
+    }
 }
 
 async function loadBookings(silent = false) {
@@ -387,9 +479,16 @@ async function refreshPortal(silent = false) {
     try {
         showDashboard();
         await loadPortalData(silent);
+
+        // Enforce specific initial configuration per portal
+        if (portalData.scope !== "global" && currentRange === "all") {
+            currentRange = "today";
+        }
+
         await loadBookings(silent);
         if (!silent) {
-            overviewStatus.textContent = `Portal ready. Managing ${portalData.tenants.length} tenant(s).`;
+            // n. Dynamic text adjustment
+            overviewStatus.textContent = portalData.scope === "global" ? `Portal ready. Managing ${portalData.tenants.length} tenant(s).` : `Portal ready.`;
             connectionStatus.textContent = "Live updates connected.";
             homeConnectionLabel.textContent = "Connected";
         }
@@ -479,11 +578,38 @@ function updateHeaderLabels() {
 }
 
 function renderOverviewStats() {
-    document.getElementById("statToday").textContent = summaryCounts.today || 0;
-    document.getElementById("statThisWeek").textContent = summaryCounts.this_week || 0;
-    document.getElementById("statThisMonth").textContent = summaryCounts.this_month || 0;
-    document.getElementById("statTotal").textContent = summaryCounts.all || 0;
-    overviewTenantCount.textContent = `${portalData.tenants.length} tenant${portalData.tenants.length === 1 ? "" : "s"}`;
+    if (portalData.scope === "global") {
+        const elToday = document.getElementById("statToday");
+        if (elToday) elToday.textContent = summaryCounts.today || 0;
+        const elWeek = document.getElementById("statThisWeek");
+        if (elWeek) elWeek.textContent = summaryCounts.this_week || 0;
+        const elMonth = document.getElementById("statThisMonth");
+        if (elMonth) elMonth.textContent = summaryCounts.this_month || 0;
+        const elTotal = document.getElementById("statTotal");
+        if (elTotal) elTotal.textContent = summaryCounts.all || 0;
+        if (overviewTenantCount) overviewTenantCount.textContent = `${portalData.tenants.length} tenant${portalData.tenants.length === 1 ? "" : "s"}`;
+    } else {
+        // m. Render completely new layout elements dynamically strictly for single tenants
+        const statsContainer = document.getElementById("statToday")?.closest('.stats-grid') || document.getElementById("statToday")?.parentElement;
+        if (statsContainer) {
+            statsContainer.innerHTML = `
+                <div class="stat-card"><h3>Pending (Today)</h3><p class="stat-value">${summaryCounts.pending || 0}</p></div>
+                <div class="stat-card"><h3>Waiting (Today)</h3><p class="stat-value">${summaryCounts.waiting || 0}</p></div>
+                <div class="stat-card"><h3>Confirmed (Today)</h3><p class="stat-value">${summaryCounts.confirmed || 0}</p></div>
+                <div class="stat-card"><h3>Rejected (Today)</h3><p class="stat-value">${summaryCounts.rejected || 0}</p></div>
+                <div class="stat-card"><h3>Closed (Today)</h3><p class="stat-value">${summaryCounts.closed || 0}</p></div>
+            `;
+            let lastUpdatedEl = document.getElementById("lastUpdatedTime");
+            if (!lastUpdatedEl) {
+                lastUpdatedEl = document.createElement("p");
+                lastUpdatedEl.id = "lastUpdatedTime";
+                lastUpdatedEl.className = "status-note";
+                statsContainer.parentNode.insertBefore(lastUpdatedEl, statsContainer.nextSibling);
+            }
+            lastUpdatedEl.textContent = `Last updated: ${summaryCounts.last_updated || new Date().toLocaleString()}`;
+        }
+        if (overviewTenantCount) overviewTenantCount.style.display = 'none';
+    }
 }
 
 function renderTenantOverview() {
@@ -653,13 +779,24 @@ function renderBookingsTable() {
 
     dashboardEmpty.classList.add("hidden");
 
+    // f. Hide generic Tenant Table Headers contextually 
+    const table = bookingsTableBody.closest('table');
+    if (table) {
+        const ths = table.querySelectorAll('th');
+        if (ths.length > 0 && ths[0].textContent.includes('Tenant')) {
+            ths[0].style.display = portalData.scope === "global" ? '' : 'none';
+        }
+    }
+
+    const isGlobal = portalData.scope === "global";
+
     bookings.forEach((booking) => {
         const row = document.createElement("tr");
         row.innerHTML = `
-            <td>
+            ${isGlobal ? `<td>
                 <div class="cell-title">${booking.tenant_name || getTenantLabel(getSelectedTenant())}</div>
                 <div class="cell-copy">Tenant ID ${booking.tenant_id}</div>
-            </td>
+            </td>` : ''}
             <td>
                 <div class="cell-title">${booking.service_name || "Unnamed service"}</div>
                 <div class="cell-copy">Booking #${booking.id}</div>
