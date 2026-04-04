@@ -200,25 +200,30 @@ function formatWorkflowAnswers(answers) {
 
 function customizeSingleTenantUI() {
     if (portalData.scope === "global") return;
-
-    // 1a. Hide workflow editor tools & JSON textarea
+    
+    // 1a. Remove workflow editor tools & JSON textarea
     if (workflowConfigInput) {
-        workflowConfigInput.readOnly = true;
-        workflowConfigInput.style.display = 'none';
+        workflowConfigInput.remove(); // Completely remove the textarea
         
         // Add table container if missing
         if (!document.getElementById('workflowTableContainer')) {
             const tableContainer = document.createElement('div');
             tableContainer.id = 'workflowTableContainer';
             tableContainer.style.width = '100%';
-            tableContainer.style.marginTop = '15px';
+            tableContainer.style.marginTop = '20px'; // Increased margin for better spacing
             tableContainer.style.overflowX = 'auto';
-            workflowConfigInput.parentElement.appendChild(tableContainer);
+            // Append to the settings form directly, or a suitable parent
+            const workflowSection = document.getElementById('workflowSection'); // Assuming a parent div for workflow
+            if (workflowSection) {
+                workflowSection.appendChild(tableContainer);
+            } else if (settingsForm) {
+                settingsForm.appendChild(tableContainer);
+            }
         }
     }
-    
+    // Remove workflow editing buttons and selectors
     [stepSelector, insertBeforeSelector, addQuestionButton, addAnswerButton, removeStepButton].forEach(el => {
-        if (el && el.parentElement) el.parentElement.style.display = 'none';
+        if (el) el.remove(); // Completely remove these elements
     });
 
     // 1b. Center alignment for self-service settings properly
@@ -241,10 +246,10 @@ function customizeSingleTenantUI() {
     if (tenantList && tenantList.parentElement) tenantList.parentElement.style.display = 'none';
 
     // Find specific elements to remove/change (b, d, e, g, l)
-    document.querySelectorAll('h2, h3, p, span, div').forEach(el => {
+    document.querySelectorAll('h2, h3, p, span').forEach(el => { // Exclude 'div' to prevent over-hiding
         // Prevent modifying/hiding large parent layout containers by skipping elements that have children
-        if (el.children.length > 0) return;
-
+        // This check is less critical if 'div' is excluded, but still good for other tags
+        if (el.children.length > 0 && el.tagName !== 'SPAN') return; // Allow spans with children (e.g., status badges)
         if (!el.textContent) return;
         const text = el.textContent.trim();
         
@@ -269,62 +274,96 @@ function customizeSingleTenantUI() {
     // i. Hide the tenant filter entirely
     if (tenantFilter) tenantFilter.style.display = 'none';
 
-    // 1c & 1d. Align search bar to right and toggles to the middle
-    if (searchInput && searchInput.parentElement) {
-        const container = searchInput.parentElement;
-        container.style.display = 'flex';
-        container.style.justifyContent = 'space-between';
-        container.style.alignItems = 'center';
-        container.style.gap = '15px';
-        container.style.flexWrap = 'wrap';
+    // 1c & 1d. Layout for search bar, date picker, clear button, and toggles
+    const bookingsScreen = document.getElementById('bookingsScreen');
+    const controlsBar = bookingsScreen?.querySelector('.controls-bar');
 
-        // Left spacer for perfect flexbox centering
-        if (!document.getElementById('leftSpacer')) {
-            const spacer = document.createElement('div');
-            spacer.id = 'leftSpacer';
-            spacer.style.flex = '1';
-            container.appendChild(spacer);
+    if (controlsBar) {
+        // Ensure controlsBar is a flex container for proper alignment
+        controlsBar.style.display = 'flex';
+        controlsBar.style.justifyContent = 'space-between'; // Distribute space between items
+        controlsBar.style.alignItems = 'center';
+        controlsBar.style.flexWrap = 'wrap'; // Allow wrapping on smaller screens
+        controlsBar.style.gap = '15px'; // Add some gap between main sections
+
+        // Create or get left spacer for centering
+        let leftSpacer = document.getElementById('leftSpacer');
+        if (!leftSpacer) {
+            leftSpacer = document.createElement('div');
+            leftSpacer.id = 'leftSpacer';
+            leftSpacer.style.flex = '1';
+            controlsBar.appendChild(leftSpacer); // Temporarily append
         }
-    }
 
-    // Move toggles center
-    if (!document.querySelector('.date-toggles') && searchInput && searchInput.parentElement) {
-        const toggleGroup = document.createElement("div");
-        toggleGroup.className = "date-toggles";
-        toggleGroup.style.display = "flex";
-        toggleGroup.style.gap = "5px";
-        toggleGroup.style.justifyContent = "center";
-        toggleGroup.style.flex = "1";
+        // Create or get toggle group (middle)
+        let toggleGroup = document.querySelector('.date-toggles');
+        if (!toggleGroup) {
+            toggleGroup = document.createElement("div");
+            toggleGroup.className = "date-toggles";
+            toggleGroup.style.display = "flex";
+            toggleGroup.style.gap = "5px";
+            toggleGroup.style.justifyContent = "center";
+            toggleGroup.style.flex = "1";
 
-        ['today', 'tomorrow', 'future', 'past'].forEach(range => {
-            const btn = document.createElement("button");
-            btn.type = "button";
-            btn.className = `pill ${currentRange === range ? 'active' : ''}`;
-            btn.textContent = range.charAt(0).toUpperCase() + range.slice(1);
-            btn.dataset.range = range;
-            
-            btn.addEventListener("click", async () => {
-                currentRange = range;
-                currentFilter = "all";
-                if (dateInput) {
-                    dateInput.value = "";
-                    if (dateInput.type === "date") dateInput.type = "text";
-                }
+            ['today', 'tomorrow', 'future', 'past'].forEach(range => {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = `pill ${currentRange === range ? 'active' : ''}`;
+                btn.textContent = range.charAt(0).toUpperCase() + range.slice(1);
+                btn.dataset.range = range;
                 
-                toggleGroup.querySelectorAll('.pill').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                
-                currentPage = 1;
-                await loadBookings();
+                btn.addEventListener("click", async () => {
+                    currentRange = range;
+                    currentFilter = "all";
+                    if (dateInput) {
+                        dateInput.value = "";
+                        if (dateInput.type === "date") dateInput.type = "text";
+                    }
+                    
+                    toggleGroup.querySelectorAll('.pill').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    
+                    currentPage = 1;
+                    await loadBookings();
+                });
+                toggleGroup.appendChild(btn);
             });
-            toggleGroup.appendChild(btn);
-        });
+            controlsBar.appendChild(toggleGroup); // Temporarily append
+        } else {
+            toggleGroup.querySelectorAll('.pill').forEach(b => b.classList.toggle('active', b.dataset.range === currentRange));
+        }
 
-        searchInput.parentElement.appendChild(toggleGroup);
+        // Create or get search wrapper (right)
+        let searchWrapper = document.getElementById('rightSearchWrapper');
+        if (!searchWrapper) {
+            searchWrapper = document.createElement('div');
+            searchWrapper.id = 'rightSearchWrapper';
+            searchWrapper.style.display = 'flex';
+            searchWrapper.style.gap = '10px';
+            searchWrapper.style.alignItems = 'center';
+            searchWrapper.style.justifyContent = 'flex-end';
+            searchWrapper.style.flex = '1';
+            
+            // Move existing search elements into this wrapper if they are still in controlsBar
+            if (searchInput && searchInput.parentElement === controlsBar) searchWrapper.appendChild(searchInput);
+            if (dateInput && dateInput.parentElement === controlsBar) searchWrapper.appendChild(dateInput);
+            const clearBtn = document.getElementById('clearButton');
+            if (clearBtn && clearBtn.parentElement === controlsBar) searchWrapper.appendChild(clearBtn);
+            
+            controlsBar.appendChild(searchWrapper); // Temporarily append
+        }
+
+        // Final re-ordering of children in controlsBar: leftSpacer, toggleGroup, searchWrapper
+        const childrenInOrder = [];
+        if (leftSpacer) childrenInOrder.push(leftSpacer);
+        if (toggleGroup) childrenInOrder.push(toggleGroup);
+        if (searchWrapper) childrenInOrder.push(searchWrapper);
+
+        // Clear and re-append to ensure correct order
+        controlsBar.innerHTML = ''; // Clear existing children
+        childrenInOrder.forEach(child => controlsBar.appendChild(child));
     }
-
-    // Wrap Search components and pull them to the right
-    if (searchInput && searchInput.parentElement && !document.getElementById('rightSearchWrapper')) {
+}
         const searchWrapper = document.createElement('div');
         searchWrapper.id = 'rightSearchWrapper';
         searchWrapper.style.display = 'flex';
@@ -339,7 +378,7 @@ function customizeSingleTenantUI() {
         if (clearBtn) searchWrapper.appendChild(clearBtn);
         
         // Append safely at the end of the flex container
-        document.querySelector('.workspace-screen:not(.hidden) .controls-bar')?.appendChild(searchWrapper) || container?.appendChild(searchWrapper);
+        document.querySelector('.workspace-screen:not(.hidden) .controls-bar')?.appendChild(searchWrapper) || searchInput.parentElement?.appendChild(searchWrapper);
     }
 }
 
@@ -791,7 +830,6 @@ function renderSelectedTenant() {
     timezoneInput.value = tenant.timezone || "UTC";
     parallelInput.value = String(tenant.max_parallel_appointments || 1);
     tenantIdDisplay.value = String(tenant.id);
-    workflowConfigInput.value = formatWorkflowConfig(tenant.workflow_config);
     renderTokenList(servicesList, tenant.services || [], "No services configured for this tenant.");
     renderTokenList(providersList, tenant.providers || [], "No providers configured for this tenant.");
     refreshWorkflowSelectors();
@@ -972,26 +1010,14 @@ function closeCloseModal() {
 // 9. WORKFLOW EDITOR
 // ==========================================
 function parseWorkflowEditor() {
-    return safeJsonParse(workflowConfigInput.value, null);
+    // For single tenant, workflow is view-only, so we get it from the selected tenant state
+    return getSelectedTenant()?.workflow_config || null;
 }
 
 function refreshWorkflowSelectors() {
     const workflow = parseWorkflowEditor();
     const steps = Array.isArray(workflow?.steps) ? workflow.steps : [];
-
-    stepSelector.innerHTML = "";
-    insertBeforeSelector.innerHTML = "";
-
-    steps.forEach((step) => {
-        const option = document.createElement("option");
-        option.value = step.id;
-        option.textContent = `${step.id} (${step.kind})`;
-        stepSelector.appendChild(option);
-
-        const insertOption = option.cloneNode(true);
-        insertBeforeSelector.appendChild(insertOption);
-    });
-
+    // No longer populating stepSelector/insertBeforeSelector as they are removed
     renderWorkflowTable(workflow);
 }
 
@@ -1022,138 +1048,6 @@ function renderWorkflowTable(workflow) {
     container.innerHTML = html;
 }
 
-function createCustomStepTemplate() {
-    const workflow = parseWorkflowEditor();
-
-    if (!workflow || !Array.isArray(workflow.steps)) {
-        settingsStatus.textContent = "Workflow JSON must be valid before adding a question step.";
-        return;
-    }
-
-    const insertBeforeId = insertBeforeSelector.value || "confirm";
-    const newStepId = `custom_${Date.now()}`;
-    const newStep = {
-        id: newStepId,
-        kind: "custom_choice",
-        answer_mode: "buttons",
-        answer_key: newStepId,
-        question: {
-            header: "Custom question",
-            body: "Edit this question for the tenant.",
-            footer: "Choose one option"
-        },
-        options: [
-            {
-                id: "option_1",
-                title: "Option 1",
-                value: "option_1",
-                next: insertBeforeId
-            },
-            {
-                id: "option_2",
-                title: "Option 2",
-                value: "option_2",
-                next: insertBeforeId
-            }
-        ],
-        next: insertBeforeId
-    };
-
-    const insertIndex = workflow.steps.findIndex((step) => step.id === insertBeforeId);
-
-    if (insertIndex === -1) {
-        workflow.steps.push(newStep);
-    } else {
-        workflow.steps.splice(insertIndex, 0, newStep);
-    }
-
-    const previousStep = workflow.steps.find((step) => step.next === insertBeforeId && step.id !== newStepId);
-    if (previousStep) {
-        previousStep.next = newStepId;
-    }
-
-    workflowConfigInput.value = formatWorkflowConfig(workflow);
-    refreshWorkflowSelectors();
-    stepSelector.value = newStepId;
-    settingsStatus.textContent = `Added custom question step "${newStepId}". Review the workflow JSON before saving.`;
-}
-
-function addAnswerOptionTemplate() {
-    const workflow = parseWorkflowEditor();
-    const selectedStepId = stepSelector.value;
-
-    if (!workflow || !Array.isArray(workflow.steps)) {
-        settingsStatus.textContent = "Workflow JSON must be valid before adding an answer option.";
-        return;
-    }
-
-    const step = workflow.steps.find((item) => item.id === selectedStepId);
-
-    if (!step) {
-        settingsStatus.textContent = "Select a step before adding an answer option.";
-        return;
-    }
-
-    if (!Array.isArray(step.options)) {
-        step.options = [];
-    }
-
-    const nextId = step.next || insertBeforeSelector.value || "confirm";
-    const nextIndex = step.options.length + 1;
-
-    step.options.push({
-        id: `option_${nextIndex}`,
-        title: `Option ${nextIndex}`,
-        value: `option_${nextIndex}`,
-        next: nextId
-    });
-
-    workflowConfigInput.value = formatWorkflowConfig(workflow);
-    refreshWorkflowSelectors();
-    stepSelector.value = selectedStepId;
-    settingsStatus.textContent = `Added a new answer option to "${selectedStepId}".`;
-}
-
-function removeSelectedStep() {
-    const workflow = parseWorkflowEditor();
-    const selectedStepId = stepSelector.value;
-
-    if (!workflow || !Array.isArray(workflow.steps)) {
-        settingsStatus.textContent = "Workflow JSON must be valid before removing a step.";
-        return;
-    }
-
-    if (!selectedStepId) {
-        settingsStatus.textContent = "Select a step before removing it.";
-        return;
-    }
-
-    if (workflow.start_step === selectedStepId) {
-        settingsStatus.textContent = "You cannot remove the workflow start step from this helper. Edit the JSON manually if needed.";
-        return;
-    }
-
-    workflow.steps = workflow.steps.filter((step) => step.id !== selectedStepId);
-
-    workflow.steps.forEach((step) => {
-        if (step.next === selectedStepId) {
-            step.next = "confirm";
-        }
-
-        if (Array.isArray(step.options)) {
-            step.options.forEach((option) => {
-                if (option.next === selectedStepId) {
-                    option.next = "confirm";
-                }
-            });
-        }
-    });
-
-    workflowConfigInput.value = formatWorkflowConfig(workflow);
-    refreshWorkflowSelectors();
-    settingsStatus.textContent = `Removed step "${selectedStepId}". Review the workflow transitions before saving.`;
-}
-
 async function saveTenantSettings(event) {
     event.preventDefault();
 
@@ -1163,14 +1057,6 @@ async function saveTenantSettings(event) {
         settingsStatus.textContent = "Choose a tenant before saving.";
         return;
     }
-
-    const workflowConfig = parseWorkflowEditor();
-
-    if (!workflowConfig || workflowConfig._error) {
-        settingsStatus.textContent = `Workflow JSON is invalid: ${workflowConfig?._error || "Check syntax"}.`;
-        return;
-    }
-
     settingsStatus.textContent = "Saving tenant controls...";
 
     try {
@@ -1184,8 +1070,8 @@ async function saveTenantSettings(event) {
                 tenantId: tenant.id,
                 business_name: businessNameInput.value.trim(),
                 timezone: timezoneInput.value.trim(),
-                max_parallel_appointments: parallelInput.value,
-                workflow_config: workflowConfig
+                max_parallel_appointments: parallelInput.value
+                // workflow_config is not sent for single tenant as it's view-only
             })
         });
 
@@ -1363,19 +1249,6 @@ closeForm.addEventListener("submit", async (event) => {
     });
 });
 
-workflowConfigInput.addEventListener("input", refreshWorkflowSelectors);
-
-// Auto-format JSON when the user clicks out of the text area
-workflowConfigInput.addEventListener("blur", () => {
-    const parsed = safeJsonParse(workflowConfigInput.value);
-    if (parsed && !parsed._error) {
-        workflowConfigInput.value = formatWorkflowConfig(parsed);
-    }
-});
-
-addQuestionButton.addEventListener("click", createCustomStepTemplate);
-addAnswerButton.addEventListener("click", addAnswerOptionTemplate);
-removeStepButton.addEventListener("click", removeSelectedStep);
 settingsForm.addEventListener("submit", saveTenantSettings);
 
 // ==========================================
