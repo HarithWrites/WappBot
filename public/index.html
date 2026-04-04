@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WappBot Control Center</title>
     <link rel="stylesheet" href="/style.css">
+    
+    <!-- Theme Initializer: Runs instantly to prevent flash of wrong theme -->
+    <script>
+        const savedTheme = localStorage.getItem("workspaceTheme");
+        if (savedTheme === "dark") {
+            document.documentElement.setAttribute("data-theme", "dark");
+        }
+    </script>
 </head>
 <body>
     <div class="app-shell">
@@ -296,6 +304,36 @@
 
     <div id="toastContainer" class="toast-container"></div>
 
+    <!-- Theme Toggle Button -->
+    <button id="themeToggle" class="theme-toggle" title="Toggle Dark Mode">
+        <span id="themeIcon">🌙</span>
+    </button>
+
     <script src="/app.js"></script>
+    <script>
+        // Inline Theme Handler
+        const themeToggle = document.getElementById("themeToggle");
+        const themeIcon = document.getElementById("themeIcon");
+        
+        function updateThemeIcon(theme) {
+            themeIcon.textContent = theme === "dark" ? "☀️" : "🌙";
+        }
+        
+        updateThemeIcon(document.documentElement.getAttribute("data-theme") || "light");
+        
+        themeToggle.addEventListener("click", () => {
+            const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+            const newTheme = isDark ? "light" : "dark";
+            
+            if (newTheme === "dark") {
+                document.documentElement.setAttribute("data-theme", "dark");
+            } else {
+                document.documentElement.removeAttribute("data-theme");
+            }
+            
+            localStorage.setItem("workspaceTheme", newTheme);
+            updateThemeIcon(newTheme);
+        });
+    </script>
 </body>
 </html>

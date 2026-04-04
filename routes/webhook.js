@@ -47,23 +47,32 @@ router.get("/:businessName", async (req, res) => {
     const businessName = req.params.businessName;
     if (!businessName) return res.sendStatus(400);
 
-    const tenant = await getTenantByBusinessName(businessName);
-    if (!tenant) return res.sendStatus(404);
+    const mode = req.query["hub.mode"];
 
-    const VERIFY_TOKEN = tenant.webhook_verify_token;
-    if (!VERIFY_TOKEN) {
-        console.warn(`Tenant "${businessName}" missing webhook_verify_token!`);
+    // 1. Meta Webhook Verification Flow
+    if (mode) {
+        const tenant = await getTenantByBusinessName(businessName);
+        if (!tenant) return res.sendStatus(404);
+
+        const VERIFY_TOKEN = tenant.webhook_verify_token;
+        if (!VERIFY_TOKEN) {
+            console.warn(`Tenant "${businessName}" missing webhook_verify_token!`);
+            return res.sendStatus(403);
+        }
+
+        const token = req.query["hub.verify_token"];
+        const challenge = req.query["hub.challenge"];
+
+        if (mode === "subscribe" && token === VERIFY_TOKEN) {
+            return res.status(200).send(challenge);
+        }
         return res.sendStatus(403);
     }
 
-    const mode = req.query["hub.mode"];
-    const token = req.query["hub.verify_token"];
-    const challenge = req.query["hub.challenge"];
-
-    if (mode === "subscribe" && token === VERIFY_TOKEN) {
-        return res.status(200).send(challenge);
-    }
-    return res.sendStatus(403);
+    // 2. Browser Dashboard Access Flow
+    // Serve the tenant portal UI instead of returning 403
+    const path = require("path");
+    return res.sendFile(path.join(__dirname, "../public/index.html"));
 });
 
 module.exports = router;
