@@ -364,23 +364,6 @@ function customizeSingleTenantUI() {
         childrenInOrder.forEach(child => controlsBar.appendChild(child));
     }
 }
-        const searchWrapper = document.createElement('div');
-        searchWrapper.id = 'rightSearchWrapper';
-        searchWrapper.style.display = 'flex';
-        searchWrapper.style.gap = '10px';
-        searchWrapper.style.alignItems = 'center';
-        searchWrapper.style.justifyContent = 'flex-end';
-        searchWrapper.style.flex = '1';
-        
-        if (searchInput) searchWrapper.appendChild(searchInput);
-        if (dateInput) searchWrapper.appendChild(dateInput);
-        const clearBtn = document.getElementById('clearButton');
-        if (clearBtn) searchWrapper.appendChild(clearBtn);
-        
-        // Append safely at the end of the flex container
-        document.querySelector('.workspace-screen:not(.hidden) .controls-bar')?.appendChild(searchWrapper) || searchInput.parentElement?.appendChild(searchWrapper);
-    }
-}
 
 // ==========================================
 // 4. AUTH & SESSION MANAGEMENT
