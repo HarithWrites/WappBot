@@ -113,20 +113,22 @@ async function getAllBookings(tenant_id, filters = {}) {
         where += ` AND b.tenant_id=$${values.length}`;
     }
 
+    const localDate = "(CURRENT_TIMESTAMP AT TIME ZONE COALESCE(t.timezone, 'UTC'))::date";
+
     if (filters.range === "upcoming_30_days") {
-        where += " AND b.booking_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '29 days'";
+        where += ` AND b.booking_date BETWEEN ${localDate} AND ${localDate} + INTERVAL '29 days'`;
     } else if (filters.range === "today") {
-        where += " AND b.booking_date = CURRENT_DATE";
+        where += ` AND b.booking_date = ${localDate}`;
     } else if (filters.range === "tomorrow") {
-        where += " AND b.booking_date = CURRENT_DATE + INTERVAL '1 day'";
+        where += ` AND b.booking_date = ${localDate} + INTERVAL '1 day'`;
     } else if (filters.range === "future") {
-        where += " AND b.booking_date > CURRENT_DATE + INTERVAL '1 day'";
+        where += ` AND b.booking_date > ${localDate} + INTERVAL '1 day'`;
     } else if (filters.range === "past") {
-        where += " AND b.booking_date < CURRENT_DATE";
+        where += ` AND b.booking_date < ${localDate}`;
     } else if (filters.range === "this_week") {
-        where += " AND b.booking_date >= date_trunc('week', CURRENT_DATE) AND b.booking_date < date_trunc('week', CURRENT_DATE) + INTERVAL '1 week'";
+        where += ` AND b.booking_date >= date_trunc('week', ${localDate}) AND b.booking_date < date_trunc('week', ${localDate}) + INTERVAL '1 week'`;
     } else if (filters.range === "this_month") {
-        where += " AND b.booking_date >= date_trunc('month', CURRENT_DATE) AND b.booking_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'";
+        where += ` AND b.booking_date >= date_trunc('month', ${localDate}) AND b.booking_date < date_trunc('month', ${localDate}) + INTERVAL '1 month'`;
     }
 
     if (filters.date) {
