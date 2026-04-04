@@ -53,22 +53,6 @@ const tenantFilter = document.getElementById("tenantFilter");
 const prevPageButton = document.getElementById("prevPageButton");
 const nextPageButton = document.getElementById("nextPageButton");
 const pageLabel = document.getElementById("pageLabel");
-const settingsForm = document.getElementById("settingsForm");
-const businessNameInput = document.getElementById("businessNameInput");
-const timezoneInput = document.getElementById("timezoneInput");
-const parallelInput = document.getElementById("parallelInput");
-const tenantIdDisplay = document.getElementById("tenantIdDisplay");
-const workflowConfigInput = document.getElementById("workflowConfigInput");
-const settingsStatus = document.getElementById("settingsStatus");
-const tenantList = document.getElementById("tenantList");
-const servicesList = document.getElementById("servicesList");
-const providersList = document.getElementById("providersList");
-const tenantEditorTitle = document.getElementById("tenantEditorTitle");
-const stepSelector = document.getElementById("stepSelector");
-const insertBeforeSelector = document.getElementById("insertBeforeSelector");
-const addQuestionButton = document.getElementById("addQuestionButton");
-const addAnswerButton = document.getElementById("addAnswerButton");
-const removeStepButton = document.getElementById("removeStepButton");
 const closeModal = document.getElementById("closeModal");
 const closeForm = document.getElementById("closeForm");
 const closeRemarks = document.getElementById("closeRemarks");
@@ -201,50 +185,6 @@ function formatWorkflowAnswers(answers) {
 function customizeSingleTenantUI() {
     if (portalData.scope === "global") return;
     
-    // 1a. Remove workflow editor tools & JSON textarea
-    if (workflowConfigInput) {
-        workflowConfigInput.remove(); // Completely remove the textarea
-        
-        // Add table container if missing
-        if (!document.getElementById('workflowTableContainer')) {
-            const tableContainer = document.createElement('div');
-            tableContainer.id = 'workflowTableContainer';
-            tableContainer.style.width = '100%';
-            tableContainer.style.marginTop = '20px'; // Increased margin for better spacing
-            tableContainer.style.overflowX = 'auto';
-            // Append to the settings form directly, or a suitable parent
-            const workflowSection = document.getElementById('workflowSection'); // Assuming a parent div for workflow
-            if (workflowSection) {
-                workflowSection.appendChild(tableContainer);
-            } else if (settingsForm) {
-                settingsForm.appendChild(tableContainer);
-            }
-        }
-    }
-    // Remove workflow editing buttons and selectors
-    [stepSelector, insertBeforeSelector, addQuestionButton, addAnswerButton, removeStepButton].forEach(el => {
-        if (el) el.remove(); // Completely remove these elements
-    });
-
-    // 1b. Center alignment for self-service settings properly
-    if (settingsForm) {
-        settingsForm.style.maxWidth = '900px';
-        settingsForm.style.margin = '0 auto';
-        settingsForm.style.display = 'flex';
-        settingsForm.style.flexDirection = 'column';
-        
-        const settingsSection = settingsForm.closest('.workspace-screen') || settingsForm.parentElement;
-        if (settingsSection) {
-            settingsSection.style.display = 'flex';
-            settingsSection.style.flexDirection = 'column';
-            settingsSection.style.alignItems = 'center';
-            settingsSection.style.width = '100%';
-        }
-    }
-
-    // c. Remove Tenants Directory
-    if (tenantList && tenantList.parentElement) tenantList.parentElement.style.display = 'none';
-
     // Find specific elements to remove/change (b, d, e, g, l)
     document.querySelectorAll('h2, h3, p, span').forEach(el => { // Exclude 'div' to prevent over-hiding
         // Prevent modifying/hiding large parent layout containers by skipping elements that have children
@@ -253,11 +193,11 @@ function customizeSingleTenantUI() {
         if (!el.textContent) return;
         const text = el.textContent.trim();
         
-        // d, e: Rename configuration settings
-        if (text === 'Workflow and tenant management') el.textContent = 'Business Management Settings';
-        
-        // b: Remove specific strings
-        if (text.includes('Selected tenant') || text.includes('Configured in DB')) el.style.display = 'none';
+        // Remove "Bookings" header from its section
+        if (text === 'Bookings') {
+            el.style.display = 'none';
+            return;
+        }
 
         // g: Remove booking operation descriptions
         if (text.includes('Booking operations') || text.includes('Compact, paginated tables for high-volume booking operations across statuses and tenants.')) el.style.display = 'none';
@@ -286,15 +226,6 @@ function customizeSingleTenantUI() {
         controlsBar.style.flexWrap = 'wrap'; // Allow wrapping on smaller screens
         controlsBar.style.gap = '15px'; // Add some gap between main sections
 
-        // Create or get left spacer for centering
-        let leftSpacer = document.getElementById('leftSpacer');
-        if (!leftSpacer) {
-            leftSpacer = document.createElement('div');
-            leftSpacer.id = 'leftSpacer';
-            leftSpacer.style.flex = '1';
-            controlsBar.appendChild(leftSpacer); // Temporarily append
-        }
-
         // Create or get toggle group (middle)
         let toggleGroup = document.querySelector('.date-toggles');
         if (!toggleGroup) {
@@ -302,8 +233,6 @@ function customizeSingleTenantUI() {
             toggleGroup.className = "date-toggles";
             toggleGroup.style.display = "flex";
             toggleGroup.style.gap = "5px";
-            toggleGroup.style.justifyContent = "center";
-            toggleGroup.style.flex = "1";
 
             ['today', 'tomorrow', 'future', 'past'].forEach(range => {
                 const btn = document.createElement("button");
@@ -341,8 +270,6 @@ function customizeSingleTenantUI() {
             searchWrapper.style.display = 'flex';
             searchWrapper.style.gap = '10px';
             searchWrapper.style.alignItems = 'center';
-            searchWrapper.style.justifyContent = 'flex-end';
-            searchWrapper.style.flex = '1';
             
             // Move existing search elements into this wrapper if they are still in controlsBar
             if (searchInput && searchInput.parentElement === controlsBar) searchWrapper.appendChild(searchInput);
@@ -353,9 +280,8 @@ function customizeSingleTenantUI() {
             controlsBar.appendChild(searchWrapper); // Temporarily append
         }
 
-        // Final re-ordering of children in controlsBar: leftSpacer, toggleGroup, searchWrapper
+        // Final re-ordering of children in controlsBar: toggleGroup, searchWrapper
         const childrenInOrder = [];
-        if (leftSpacer) childrenInOrder.push(leftSpacer);
         if (toggleGroup) childrenInOrder.push(toggleGroup);
         if (searchWrapper) childrenInOrder.push(searchWrapper);
 
@@ -446,16 +372,6 @@ function buildBookingsUrl() {
     return `/admin/bookings?${params.toString()}`;
 }
 
-function buildSettingsUrl(tenantId) {
-    const params = getTokenQuery();
-
-    if (tenantId) {
-        params.set("tenantId", String(tenantId));
-    }
-
-    return `/admin/settings?${params.toString()}`;
-}
-
 async function fetchJson(url, options = {}) {
     const res = await fetch(url, options);
 
@@ -495,8 +411,6 @@ async function loadPortalData(silent = false) {
     updateTenantFilterOptions();
     updateHeaderLabels();
     renderTenantOverview();
-    renderTenantDirectory();
-    renderSelectedTenant();
     customizeSingleTenantUI();
 }
 
@@ -717,12 +631,7 @@ function renderTenantOverview() {
             <span class="tenant-overview-title">${getTenantLabel(tenant)}</span>
             <span class="tenant-overview-copy">${tenant.services.length} services, ${tenant.providers.length} providers</span>
         `;
-        item.addEventListener("click", () => {
-            selectedTenantId = tenant.id;
-            renderSelectedTenant();
-            renderTenantDirectory();
-            setActiveScreen("tenantControlsScreen");
-        });
+        item.style.cursor = "default"; // Items are not clickable for now
         tenantOverviewList.appendChild(item);
     });
 }
@@ -751,71 +660,6 @@ function updateTenantFilterOptions() {
         tenantFilter.disabled = false;
         tenantFilter.style.display = "inline-block";
     }
-}
-
-function renderTenantDirectory() {
-    tenantList.innerHTML = "";
-
-    portalData.tenants.forEach((tenant) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = `tenant-list-item${String(tenant.id) === String(selectedTenantId) ? " active" : ""}`;
-        button.innerHTML = `
-            <span class="tenant-list-title">${getTenantLabel(tenant)}</span>
-            <span class="tenant-list-copy">ID ${tenant.id} - ${tenant.services.length} services - ${tenant.providers.length} providers</span>
-        `;
-        button.addEventListener("click", () => {
-            selectedTenantId = tenant.id;
-            renderSelectedTenant();
-            renderTenantDirectory();
-        });
-        tenantList.appendChild(button);
-    });
-}
-
-function renderTokenList(target, items, emptyMessage) {
-    target.innerHTML = "";
-
-    if (!items.length) {
-        const empty = document.createElement("p");
-        empty.className = "status-note";
-        empty.textContent = emptyMessage;
-        target.appendChild(empty);
-        return;
-    }
-
-    items.forEach((item) => {
-        const token = document.createElement("span");
-        token.className = "data-token";
-        token.textContent = item.name || item.title || "Unnamed";
-        target.appendChild(token);
-    });
-}
-
-function renderSelectedTenant() {
-    const tenant = getSelectedTenant();
-
-    if (!tenant) {
-        tenantEditorTitle.textContent = "Choose a tenant";
-        businessNameInput.value = "";
-        timezoneInput.value = "";
-        parallelInput.value = "1";
-        tenantIdDisplay.value = "";
-        workflowConfigInput.value = "";
-        servicesList.innerHTML = "";
-        providersList.innerHTML = "";
-        refreshWorkflowSelectors();
-        return;
-    }
-
-    tenantEditorTitle.textContent = getTenantLabel(tenant);
-    businessNameInput.value = tenant.business_name || "";
-    timezoneInput.value = tenant.timezone || "UTC";
-    parallelInput.value = String(tenant.max_parallel_appointments || 1);
-    tenantIdDisplay.value = String(tenant.id);
-    renderTokenList(servicesList, tenant.services || [], "No services configured for this tenant.");
-    renderTokenList(providersList, tenant.providers || [], "No providers configured for this tenant.");
-    refreshWorkflowSelectors();
 }
 
 function getActionMarkup(booking) {
@@ -930,8 +774,6 @@ function render() {
     updateHeaderLabels();
     renderOverviewStats();
     renderTenantOverview();
-    renderTenantDirectory();
-    renderSelectedTenant();
     renderBookingsTable();
 }
 
@@ -990,94 +832,6 @@ function closeCloseModal() {
 }
 
 // ==========================================
-// 9. WORKFLOW EDITOR
-// ==========================================
-function parseWorkflowEditor() {
-    // For single tenant, workflow is view-only, so we get it from the selected tenant state
-    return getSelectedTenant()?.workflow_config || null;
-}
-
-function refreshWorkflowSelectors() {
-    const workflow = parseWorkflowEditor();
-    const steps = Array.isArray(workflow?.steps) ? workflow.steps : [];
-    // No longer populating stepSelector/insertBeforeSelector as they are removed
-    renderWorkflowTable(workflow);
-}
-
-function renderWorkflowTable(workflow) {
-    if (portalData.scope === "global") return;
-    let container = document.getElementById('workflowTableContainer');
-    if (!container) return;
-    
-    if (!workflow || !workflow.steps || !workflow.steps.length) {
-        container.innerHTML = '<p class="status-note">No workflow steps configured.</p>';
-        return;
-    }
-    
-    let html = '<table class="data-table" style="width:100%; border-collapse: collapse; margin-top: 10px; text-align: left; font-size: 0.9em;">';
-    html += '<thead><tr style="border-bottom: 2px solid #ccc;"><th style="padding: 10px;">Step ID</th><th style="padding: 10px;">Type</th><th style="padding: 10px;">Question</th><th style="padding: 10px;">Answer Options</th></tr></thead><tbody>';
-    
-    workflow.steps.forEach(step => {
-        let optionsText = (step.options || []).map(o => `• ${o.title}`).join('<br>');
-        let questionText = step.question ? `<strong>${step.question.header || ''}</strong><br><small>${step.question.body || ''}</small>` : '';
-        html += `<tr style="border-bottom: 1px solid #eee;">
-            <td style="padding: 10px; vertical-align: top;"><strong>${step.id}</strong></td>
-            <td style="padding: 10px; vertical-align: top;">${step.kind}</td>
-            <td style="padding: 10px; vertical-align: top;">${questionText}</td>
-            <td style="padding: 10px; vertical-align: top;">${optionsText || '-'}</td>
-        </tr>`;
-    });
-    html += '</tbody></table>';
-    container.innerHTML = html;
-}
-
-async function saveTenantSettings(event) {
-    event.preventDefault();
-
-    const tenant = getSelectedTenant();
-
-    if (!tenant) {
-        settingsStatus.textContent = "Choose a tenant before saving.";
-        return;
-    }
-    settingsStatus.textContent = "Saving tenant controls...";
-
-    try {
-        const response = await fetchJson(buildSettingsUrl(tenant.id), {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                token: adminToken,
-                tenantId: tenant.id,
-                business_name: businessNameInput.value.trim(),
-                timezone: timezoneInput.value.trim(),
-                max_parallel_appointments: parallelInput.value
-                // workflow_config is not sent for single tenant as it's view-only
-            })
-        });
-
-        portalData.tenants = portalData.tenants.map((item) => (
-            String(item.id) === String(response.tenant.id) ? response.tenant : item
-        ));
-
-        renderTenantOverview();
-        renderTenantDirectory();
-        renderSelectedTenant();
-        updateHeaderLabels();
-        settingsStatus.textContent = `Saved tenant controls for ${getTenantLabel(response.tenant)}.`;
-        showToast("Settings saved successfully", "success");
-    } catch (err) {
-        if (err.message !== "Unauthorized") {
-            console.error("saveTenantSettings error:", err);
-            settingsStatus.textContent = "Could not save tenant controls right now.";
-            showToast(err.message || "Failed to save settings", "error");
-        }
-    }
-}
-
-// ==========================================
 // 10. EVENT LISTENERS
 // ==========================================
 loginForm.addEventListener("submit", async (event) => {
@@ -1100,6 +854,11 @@ logoutButton.addEventListener("click", () => {
 });
 
 screenButtons.forEach((button) => {
+    // Hide the settings button entirely
+    if (button.dataset.screenTarget === "tenantControlsScreen") {
+        button.style.display = "none";
+    }
+
     button.addEventListener("click", () => {
         setActiveScreen(button.dataset.screenTarget);
     });
@@ -1231,8 +990,6 @@ closeForm.addEventListener("submit", async (event) => {
         remarks: closeRemarks.value.trim()
     });
 });
-
-settingsForm.addEventListener("submit", saveTenantSettings);
 
 // ==========================================
 // 11. INITIALIZATION

@@ -6,12 +6,10 @@ const {
 } = require("../services/bookingService");
 const {
     getAllTenants,
-    getTenantById,
-    updateTenantSettings
+    getTenantById
 } = require("../services/tenantService");
 const { getServices } = require("../services/serviceService");
 const { getProvidersByTenant } = require("../services/providerService");
-const { normalizeWorkflowConfig } = require("../services/workflowService");
 const { sendMessage } = require("../services/whatsappService");
 const { formatDisplayDate } = require("../utils/validators");
 
@@ -34,7 +32,6 @@ async function loadTenantPortalRecord(tenant) {
         business_name: tenant.business_name || `Tenant ${tenant.id}`,
         timezone: tenant.timezone || "UTC",
         max_parallel_appointments: getSlotCapacity(tenant),
-        workflow_config: normalizeWorkflowConfig(tenant.workflow_config),
         phone_number_id: tenant.phone_number_id || "",
         services,
         providers
@@ -82,61 +79,6 @@ exports.getBookings = async (req, res) => {
         });
     } catch (err) {
         console.error("getBookings error:", err);
-        return res.status(500).json({ error: "Internal server error" });
-    }
-};
-
-exports.getSettings = async (req, res) => {
-    try {
-        const targetTenantId = getTargetTenantId(req);
-        const tenant = req.adminScope === "global"
-            ? await getTenantById(targetTenantId)
-            : req.tenant;
-
-        if (!tenant) {
-            return res.status(404).json({ error: "Tenant not found" });
-        }
-
-        return res.json(await loadTenantPortalRecord(tenant));
-    } catch (err) {
-        console.error("getSettings error:", err);
-        return res.status(500).json({ error: "Internal server error" });
-    }
-};
-
-exports.updateSettings = async (req, res) => {
-    try {
-        const targetTenantId = getTargetTenantId(req);
-
-        if (!targetTenantId) {
-            return res.status(400).json({ error: "tenantId required" });
-        }
-
-        const businessName = String(req.body.business_name || `Tenant ${targetTenantId}`).trim() || `Tenant ${targetTenantId}`;
-        const timezone = String(req.body.timezone || "UTC").trim() || "UTC";
-        const maxParallelAppointments = Math.max(
-            1,
-            Number.parseInt(req.body.max_parallel_appointments, 10) || 1
-        );
-        const workflowConfig = normalizeWorkflowConfig(req.body.workflow_config);
-
-        const tenant = await updateTenantSettings(targetTenantId, {
-            business_name: businessName,
-            timezone,
-            max_parallel_appointments: maxParallelAppointments,
-            workflow_config: workflowConfig
-        });
-
-        if (!tenant) {
-            return res.status(404).json({ error: "Tenant not found" });
-        }
-
-        return res.json({
-            success: true,
-            tenant: await loadTenantPortalRecord(tenant)
-        });
-    } catch (err) {
-        console.error("updateSettings error:", err);
         return res.status(500).json({ error: "Internal server error" });
     }
 };
@@ -259,7 +201,7 @@ async function handleStatusUpdate(req, res, status, logLabel) {
         console.error(`${logLabel} error:`, err);
         return res.status(500).json({ error: "Internal server error" });
     }
-};
+}
 
 exports.approveBooking = (req, res) => handleStatusUpdate(req, res, "confirmed", "approveBooking");
 exports.rejectBooking = (req, res) => handleStatusUpdate(req, res, "rejected", "rejectBooking");
