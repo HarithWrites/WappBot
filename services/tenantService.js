@@ -31,6 +31,14 @@ async function getTenantById(tenantId) {
     return res.rows[0];
 }
 
+async function getTenantByBusinessName(businessName) {
+    const res = await db.query(
+        "SELECT * FROM tenants WHERE business_name=$1",
+        [businessName]
+    );
+    return res.rows[0];
+}
+
 async function updateTenantSettings(tenantId, settings) {
     const res = await db.query(
         `UPDATE tenants
@@ -55,6 +63,7 @@ async function updateTenantSettings(tenantId, settings) {
 module.exports = {
     getAllTenants,
     getTenantById,
+    getTenantByBusinessName,
     getTenantByPhoneNumberId,
     getTenantByAdminToken,
     updateTenantSettings

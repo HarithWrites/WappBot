@@ -22,6 +22,16 @@ async function ensureDatabaseSchema() {
     `);
 
     await db.query(`
+        ALTER TABLE tenants
+        ADD COLUMN IF NOT EXISTS app_secret TEXT
+    `);
+
+    await db.query(`
+        ALTER TABLE tenants
+        ADD COLUMN IF NOT EXISTS webhook_verify_token TEXT
+    `);
+
+    await db.query(`
         ALTER TABLE bookings
         ADD COLUMN IF NOT EXISTS close_remarks TEXT
     `);
