@@ -595,7 +595,7 @@ async function completeBooking({ tenant, phone, tenantId, workflow, context }) {
 
 async function processMessage({ tenant, phone, text, payload }) {
     const tenantId = tenant.id;
-    const workflow = getWorkflowDefinition(tenant);
+    const workflow = await getWorkflowDefinition(tenant);
     const normalizedText = (text || "").trim().toLowerCase();
     const normalizedPayload = (payload || "").trim().toLowerCase();
     const input = normalizedPayload || normalizedText;

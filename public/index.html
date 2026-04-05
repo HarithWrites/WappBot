@@ -353,31 +353,24 @@
                             </div>
                         </section>
 
-                                <div class="workflow-tools">
-                                    <div class="tool-row">
-                                        <button id="addQuestionButton" class="secondary" type="button">Add question step</button>
-                                        <button id="addAnswerButton" class="secondary" type="button">Add answer option</button>
-                                        <button id="removeStepButton" class="secondary" type="button">Remove selected step</button>
-                                    </div>
-                                    <div class="tool-row">
-                                        <label class="inline-label">
-                                            <span>Selected step</span>
-                                            <select id="stepSelector"></select>
-                                        </label>
-                                        <label class="inline-label">
-                                            <span>Insert before</span>
-                                            <select id="insertBeforeSelector"></select>
-                                        </label>
-                                    </div>
+                            <div class="workflow-builder-container">
+                                <div class="builder-header">
+                                    <h3>Step Configuration</h3>
+                                    <p class="status-note">Manage your chatbot's questions and logical flow below.</p>
+                                    <button id="addNewStepButton" class="secondary" type="button">+ Add New Step</button>
                                 </div>
 
-                                <label>
-                                    <span>Workflow configuration (JSON)</span>
-                                    <textarea id="workflowConfigInput" rows="24" placeholder='{"start_step":"service","steps":[]}'></textarea>
-                                </label>
+                                <div id="workflowStepsList" class="workflow-steps-list">
+                                    <!-- Dynamic step cards will be injected here -->
+                                    <div class="empty-state">
+                                        <p>No steps configured. Click "Add New Step" to begin.</p>
+                                    </div>
+                                </div>
+                            </div>
 
-                                <div class="form-actions">
-                                    <button class="primary" id="saveSettingsButton" type="submit">Save tenant controls</button>
+                            <div class="form-actions mt-32">
+                                <p class="status-note">Note: Changes to steps are saved individually per card.</p>
+                            </div>
                                 </div>
                             </form>
 

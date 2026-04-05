@@ -18,7 +18,7 @@ async function ensureDatabaseSchema() {
 
     await db.query(`
         ALTER TABLE tenants
-        ADD COLUMN IF NOT EXISTS workflow_config JSONB
+        DROP COLUMN IF EXISTS workflow_config
     `);
 
     await db.query(`
@@ -163,6 +163,49 @@ async function ensureDatabaseSchema() {
     await db.query(`
         DELETE FROM processed_webhooks
         WHERE processed_at < NOW() - INTERVAL '30 days'
+    `);
+
+    // --- WORKFLOW v2 STRUCTURE ---
+    await db.query(`
+        CREATE TABLE IF NOT EXISTS workflow_steps (
+            id SERIAL PRIMARY KEY,
+            tenant_id INTEGER NOT NULL,
+            step_id TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            question_header TEXT,
+            question_body TEXT,
+            question_footer TEXT,
+            next_step_id TEXT,
+            order_index INTEGER DEFAULT 0,
+            is_active BOOLEAN DEFAULT TRUE,
+            metadata JSONB DEFAULT '{}'::jsonb,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE(tenant_id, step_id)
+        )
+    `);
+
+    await db.query(`
+        CREATE TABLE IF NOT EXISTS workflow_options (
+            id SERIAL PRIMARY KEY,
+            step_db_id INTEGER REFERENCES workflow_steps(id) ON DELETE CASCADE,
+            option_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            value TEXT,
+            next_step_override TEXT,
+            action TEXT,
+            description TEXT,
+            order_index INTEGER DEFAULT 0,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE(step_db_id, option_id)
+        )
+    `);
+
+    await db.query(`
+        CREATE INDEX IF NOT EXISTS workflow_steps_tenant_idx ON workflow_steps(tenant_id, order_index)
+    `);
+
+    await db.query(`
+        CREATE INDEX IF NOT EXISTS workflow_options_step_idx ON workflow_options(step_db_id, order_index)
     `);
 }
 

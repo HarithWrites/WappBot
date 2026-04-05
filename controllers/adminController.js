@@ -11,6 +11,14 @@ const {
 } = require("../services/tenantService");
 const { getServices, getAllServices, upsertService } = require("../services/serviceService");
 const { getProvidersByTenant, getAllProvidersByTenant, upsertProvider } = require("../services/providerService");
+const { 
+    getWorkflow, 
+    upsertWorkflowStep, 
+    deleteWorkflowStep, 
+    reorderWorkflowSteps, 
+    upsertWorkflowOption, 
+    deleteWorkflowOption 
+} = require("../services/workflowService");
 const { sendMessage } = require("../services/whatsappService");
 const { formatDisplayDate } = require("../utils/validators");
 
@@ -283,6 +291,90 @@ exports.upsertProvider = async (req, res) => {
         return res.json({ success: true, provider: result });
     } catch (err) {
         console.error("upsertProvider error:", err);
+        return res.status(500).json({ error: "Internal server error" });
+    }
+};
+
+const {
+    getFullWorkflow,
+    upsertStep,
+    deleteStep,
+    upsertOption,
+    deleteOption,
+    reorderSteps
+} = require("../services/workflowAdminService");
+
+exports.getWorkflow = async (req, res) => {
+    try {
+        const tenantId = getTargetTenantId(req);
+        if (!tenantId) return res.status(400).json({ error: "tenantId required" });
+        const result = await getFullWorkflow(tenantId);
+        return res.json({ success: true, workflow: result });
+    } catch (err) {
+        console.error("getWorkflow error:", err);
+        return res.status(500).json({ error: "Internal server error" });
+    }
+};
+
+exports.upsertWorkflowStep = async (req, res) => {
+    try {
+        const tenantId = getTargetTenantId(req);
+        const { step } = req.body;
+        if (!tenantId) return res.status(400).json({ error: "tenantId required" });
+        const result = await upsertStep(tenantId, step);
+        return res.json({ success: true, step: result });
+    } catch (err) {
+        console.error("upsertWorkflowStep error:", err);
+        return res.status(500).json({ error: "Internal server error" });
+    }
+};
+
+exports.deleteWorkflowStep = async (req, res) => {
+    try {
+        const tenantId = getTargetTenantId(req);
+        const { stepId } = req.body;
+        if (!tenantId || !stepId) return res.status(400).json({ error: "tenantId and stepId required" });
+        await deleteStep(tenantId, stepId);
+        return res.json({ success: true });
+    } catch (err) {
+        console.error("deleteWorkflowStep error:", err);
+        return res.status(500).json({ error: "Internal server error" });
+    }
+};
+
+exports.reorderWorkflowSteps = async (req, res) => {
+    try {
+        const tenantId = getTargetTenantId(req);
+        const { stepIds } = req.body;
+        if (!tenantId || !stepIds) return res.status(400).json({ error: "tenantId and stepIds required" });
+        await reorderSteps(tenantId, stepIds);
+        return res.json({ success: true });
+    } catch (err) {
+        console.error("reorderWorkflowSteps error:", err);
+        return res.status(500).json({ error: "Internal server error" });
+    }
+};
+
+exports.upsertWorkflowOption = async (req, res) => {
+    try {
+        const { stepDbId, option } = req.body;
+        if (!stepDbId || !option) return res.status(400).json({ error: "stepDbId and option required" });
+        const result = await upsertOption(stepDbId, option);
+        return res.json({ success: true, option: result });
+    } catch (err) {
+        console.error("upsertWorkflowOption error:", err);
+        return res.status(500).json({ error: "Internal server error" });
+    }
+};
+
+exports.deleteWorkflowOption = async (req, res) => {
+    try {
+        const { optionId } = req.body;
+        if (!optionId) return res.status(400).json({ error: "optionId required" });
+        await deleteOption(optionId);
+        return res.json({ success: true });
+    } catch (err) {
+        console.error("deleteWorkflowOption error:", err);
         return res.status(500).json({ error: "Internal server error" });
     }
 };

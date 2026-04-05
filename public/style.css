@@ -458,3 +458,94 @@ button:disabled { opacity: 0.5; cursor: not-allowed; outline: none; box-shadow: 
   .workspace-header { flex-direction: column; align-items: flex-start; }
   .header-actions { width: 100%; }
 }
+
+/* -----------------------------
+   WORKFLOW BUILDER
+----------------------------- */
+.workflow-builder-container {
+  margin-top: 24px;
+}
+.builder-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+.workflow-steps-list {
+  display: grid;
+  gap: 20px;
+}
+.step-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
+}
+.step-card:hover { border-color: var(--primary); }
+
+.step-card-header {
+  padding: 16px 20px;
+  background: var(--surface-alt);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.step-title-row { display: flex; align-items: center; gap: 12px; }
+.step-id-badge {
+  padding: 4px 8px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.step-kind-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.step-actions { display: flex; gap: 8px; }
+
+.step-content { padding: 24px; display: grid; gap: 20px; }
+.step-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.options-section {
+  margin-top: 8px;
+  padding: 20px;
+  background: var(--surface-soft);
+  border-radius: 12px;
+  border: 1px dashed var(--border);
+}
+.options-list { display: grid; gap: 12px; margin-top: 16px; }
+.option-item {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.compact-input { padding: 8px 12px; font-size: 0.88rem; border-radius: 8px; }
+.btn-icon { padding: 6px; display: grid; place-items: center; min-width: 32px; border-radius: 8px; }
+.empty-state {
+  text-align: center;
+  padding: 60px 40px;
+  background: var(--surface-soft);
+  border: 2px dashed var(--border);
+  border-radius: 20px;
+  color: var(--muted);
+}
+
+.mt-32 { margin-top: 32px; }

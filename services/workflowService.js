@@ -1,3 +1,5 @@
+const db = require("../db");
+
 const DEFAULT_WORKFLOW = {
     version: 1,
     start_step: "service",
@@ -5,182 +7,112 @@ const DEFAULT_WORKFLOW = {
         {
             id: "service",
             kind: "service",
-            answer_mode: "auto",
             question: {
                 header: "Book a service",
-                body: "{{welcome_message}}",
-                footer: "Choose a service to continue."
+                body: "Welcome! Choose a service to continue.",
+                footer: "Select an option."
             },
-            next: "service_provider"
-        },
-        {
-            id: "service_provider",
-            kind: "service_provider",
-            answer_mode: "auto",
-            answer_key: "provider",
-            question: {
-                header: "Choose a service provider",
-                body: "Service: {{service_name}}\nSelect your preferred provider.",
-                footer: "Choose one provider"
-            },
-            next: "date"
+            next: "date",
+            options: []
         },
         {
             id: "date",
             kind: "date_choice",
-            answer_mode: "buttons",
             question: {
                 header: "Choose a date",
-                body: "Service: {{service_name}}\nPick one date option.",
-                footer: "Today, tomorrow, or another date"
+                body: "Pick one date option.",
+                footer: "Today or tomorrow"
             },
+            next: "time_period",
             options: [
                 { id: "today", title: "Today", value: "today", next: "time_period" },
-                { id: "tomorrow", title: "Tomorrow", value: "tomorrow", next: "time_period" },
-                { id: "other", title: "Other date", value: "other", next: "other_date" }
-            ]
-        },
-        {
-            id: "other_date",
-            kind: "relative_date_list",
-            answer_mode: "list",
-            question: {
-                header: "Choose another date",
-                body: "Service: {{service_name}}\nSelect one of the next available dates.",
-                footer: "Dates shown as DD/MM/YYYY"
-            },
-            offsets: [2, 3, 4],
-            list_title: "Next 3 dates",
-            button_text: "View dates",
-            next: "time_period"
-        },
-        {
-            id: "time_period",
-            kind: "time_period",
-            answer_mode: "buttons",
-            question: {
-                header: "Choose a time window",
-                body: "Service: {{service_name}}\nDate: {{display_date}}\nAvailable hours: {{opening_hours}}.{{capacity_note}}",
-                footer: "Pick a period first"
-            },
-            next: "time"
-        },
-        {
-            id: "time",
-            kind: "time_slot",
-            answer_mode: "list",
-            question: {
-                header: "{{period_title}} slots",
-                body: "Service: {{service_name}}\nDate: {{display_date}}\nChoose one {{slot_duration}}-minute slot.",
-                footer: "Only slots with remaining capacity are shown"
-            },
-            button_text: "View times",
-            next: "confirm"
-        },
-        {
-            id: "confirm",
-            kind: "confirmation",
-            answer_mode: "buttons",
-            question: {
-                header: "Confirm booking",
-                body: "Service: {{service_name}}\nDate: {{display_date}}\nTime: {{display_time}}{{week_note}}",
-                footer: "Please confirm"
-            },
-            options: [
-                { id: "yes", title: "Yes", value: "yes", action: "confirm" },
-                { id: "no", title: "No", value: "no", action: "cancel" }
+                { id: "tomorrow", title: "Tomorrow", value: "tomorrow", next: "time_period" }
             ]
         }
     ]
 };
 
-function deepClone(value) {
-    return JSON.parse(JSON.stringify(value));
-}
+async function getWorkflowDefinition(tenant) {
+    if (!tenant) return DEFAULT_WORKFLOW;
 
-function toPlainObject(value) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-        return {};
+    // 1. Fetch structured steps and options in one query
+    const stepsRes = await db.query(
+        `SELECT s.*, 
+                COALESCE(
+                    json_agg(
+                        json_build_object(
+                            'id', o.option_id,
+                            'title', o.title,
+                            'value', o.value,
+                            'next', o.next_step_override,
+                            'action', o.action,
+                            'description', o.description,
+                            'step_id', s.step_id
+                        ) ORDER BY o.order_index
+                    ) FILTER (WHERE o.id IS NOT NULL),
+                    '[]'::json
+                ) as options
+         FROM workflow_steps s
+         LEFT JOIN workflow_options o ON s.id = o.step_db_id
+         WHERE s.tenant_id = $1 AND s.is_active = TRUE
+         GROUP BY s.id
+         ORDER BY s.order_index`,
+        [tenant.id]
+    );
+
+    // 2. If no steps found, seed with a basic default workflow
+    if (stepsRes.rows.length === 0) {
+        console.log(`Seeding default workflow for tenant ${tenant.id}...`);
+        await seedDefaultWorkflow(tenant.id);
+        return await getWorkflowDefinition(tenant);
     }
 
-    return value;
-}
-
-function normalizeQuestion(question, fallback = {}) {
-    const source = toPlainObject(question);
+    // 3. Formulate the response in the format conversationService expects
     return {
-        header: String(source.header || fallback.header || "").trim(),
-        body: String(source.body || fallback.body || "").trim(),
-        footer: String(source.footer || fallback.footer || "").trim()
+        version: 1,
+        start_step: stepsRes.rows[0].step_id,
+        steps: stepsRes.rows.map(row => ({
+            id: row.step_id,
+            kind: row.kind,
+            question: {
+                header: row.question_header,
+                body: row.question_body,
+                footer: row.question_footer
+            },
+            next: row.next_step_id,
+            options: row.options,
+            ...row.metadata
+        }))
     };
 }
 
-function normalizeOption(option, index, stepId, fallback = {}) {
-    const source = toPlainObject(option);
-    const fallbackId = fallback.id || `option_${index + 1}`;
-    return {
-        id: String(source.id || fallbackId).trim(),
-        title: String(source.title || fallback.title || `Option ${index + 1}`).trim(),
-        value: source.value != null ? String(source.value).trim() : (fallback.value != null ? String(fallback.value).trim() : ""),
-        next: source.next ? String(source.next).trim() : (fallback.next ? String(fallback.next).trim() : ""),
-        action: source.action ? String(source.action).trim() : (fallback.action ? String(fallback.action).trim() : ""),
-        description: source.description ? String(source.description).trim() : (fallback.description ? String(fallback.description).trim() : ""),
-        step_id: stepId
-    };
-}
-
-function normalizeStep(step, index, fallbackStep) {
-    const source = toPlainObject(step);
-    const stepId = String(source.id || fallbackStep?.id || `step_${index + 1}`).trim();
-    const fallbackOffsets = Array.isArray(fallbackStep?.offsets) ? fallbackStep.offsets : [2, 3, 4];
-    const rawOffsets = Array.isArray(source.offsets) ? source.offsets : fallbackOffsets;
-    const offsets = rawOffsets
-        .map((item) => Number.parseInt(item, 10))
-        .filter((item) => Number.isInteger(item) && item >= 0);
-
-    return {
-        id: stepId,
-        kind: String(source.kind || fallbackStep?.kind || "text").trim(),
-        answer_mode: String(source.answer_mode || fallbackStep?.answer_mode || "buttons").trim(),
-        answer_key: String(source.answer_key || fallbackStep?.answer_key || stepId).trim(),
-        next: String(source.next || fallbackStep?.next || "").trim(),
-        list_title: String(source.list_title || fallbackStep?.list_title || "").trim(),
-        button_text: String(source.button_text || fallbackStep?.button_text || "").trim(),
-        question: normalizeQuestion(source.question, fallbackStep?.question || {}),
-        offsets: offsets.length ? offsets : fallbackOffsets,
-        options: (Array.isArray(source.options) ? source.options : (fallbackStep?.options || []))
-            .map((option, optionIndex) => normalizeOption(
-                option,
-                optionIndex,
-                stepId,
-                fallbackStep?.options?.[optionIndex]
-            ))
-    };
-}
-
-function normalizeWorkflowConfig(rawConfig) {
-    const base = deepClone(DEFAULT_WORKFLOW);
-    const source = toPlainObject(rawConfig);
-    const rawSteps = Array.isArray(source.steps) && source.steps.length
-        ? source.steps
-        : base.steps;
-
-    const steps = rawSteps.map((step, index) => normalizeStep(step, index, base.steps[index]));
-    const startStep = String(source.start_step || base.start_step || steps[0]?.id || "").trim();
-
-    return {
-        version: Number.parseInt(source.version, 10) || base.version,
-        start_step: steps.some((step) => step.id === startStep) ? startStep : (steps[0]?.id || base.start_step),
-        steps
-    };
-}
-
-function getWorkflowDefinition(tenant) {
-    return normalizeWorkflowConfig(tenant?.workflow_config);
+async function seedDefaultWorkflow(tenantId) {
+    try {
+        await db.query("BEGIN");
+        for (let i = 0; i < DEFAULT_WORKFLOW.steps.length; i++) {
+            const step = DEFAULT_WORKFLOW.steps[i];
+            const stepRes = await db.query(
+                `INSERT INTO workflow_steps (tenant_id, step_id, kind, question_header, question_body, question_footer, next_step_id, order_index)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+                [tenantId, step.id, step.kind, step.question.header, step.question.body, step.question.footer, step.next, i]
+            );
+            const stepDbId = stepRes.rows[0].id;
+            for (let j = 0; j < (step.options || []).length; j++) {
+                const opt = step.options[j];
+                await db.query(
+                    `INSERT INTO workflow_options (step_db_id, option_id, title, value, next_step_override, order_index)
+                     VALUES ($1, $2, $3, $4, $5, $6)`,
+                    [stepDbId, opt.id, opt.title, opt.value, opt.next, j]
+                );
+            }
+        }
+        await db.query("COMMIT");
+    } catch (err) {
+        await db.query("ROLLBACK");
+        console.error("Seeding error:", err);
+    }
 }
 
 module.exports = {
-    DEFAULT_WORKFLOW,
-    getWorkflowDefinition,
-    normalizeWorkflowConfig
+    getWorkflowDefinition
 };

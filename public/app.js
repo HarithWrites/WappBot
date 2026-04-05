@@ -883,6 +883,11 @@ function initSettingsTabs() {
             document.querySelectorAll(".settings-tab-pane").forEach(pane => {
                 pane.classList.toggle("hidden", pane.id !== `tab-${currentSettingsTab}`);
             });
+            
+            // Trigger workflow load if tab is selected
+            if (currentSettingsTab === "workflow" && portalData.scope === "global") {
+                loadWorkflowData();
+            }
         });
     });
 }
@@ -935,9 +940,241 @@ function renderSettings(data) {
     // 5. Workflow Tab
     const workflowTab = document.querySelector(".settings-tabs [data-tab='workflow']");
     if (workflowTab) {
-        workflowTab.style.display = portalData.scope === "global" ? "inline-block" : "none";
+        const isMaster = portalData.scope === "global";
+        workflowTab.style.display = isMaster ? "inline-block" : "none";
+        if (isMaster && currentSettingsTab === "workflow") {
+            loadWorkflowData();
+        }
     }
-    document.getElementById("workflowConfigInput").value = JSON.stringify(tenant.workflow_config || {}, null, 2);
+}
+
+let workflowStepsData = [];
+
+async function loadWorkflowData() {
+    const selectedTenant = getSelectedTenant();
+    if (!selectedTenant) return;
+
+    try {
+        const res = await fetch(`/admin/workflow?token=${encodeURIComponent(adminToken)}&tenantId=${selectedTenant.id}`);
+        const data = await res.json();
+        if (data.success) {
+            workflowStepsData = data.workflow;
+            renderWorkflowBuilder();
+        }
+    } catch (err) {
+        console.error("loadWorkflowData error:", err);
+        showToast("Error loading workflow", "error");
+    }
+}
+
+function renderWorkflowBuilder() {
+    const list = document.getElementById("workflowStepsList");
+    if (!list) return;
+
+    if (workflowStepsData.length === 0) {
+        list.innerHTML = `<div class="empty-state"><p>No steps configured. Click "Add New Step" to begin.</p></div>`;
+        return;
+    }
+
+    list.innerHTML = "";
+    workflowStepsData.forEach((step, index) => {
+        const card = createStepCard(step, index);
+        list.appendChild(card);
+    });
+}
+
+const STEP_KINDS = [
+    { value: "service", label: "Service Selection" },
+    { value: "custom_choice", label: "Custom Choices (Buttons/List)" },
+    { value: "date_choice", label: "Date Selection" },
+    { value: "relative_date_list", label: "Relative Date List" },
+    { value: "time_period", label: "Time Window Selection" },
+    { value: "time_slot", label: "Time Slot Selection" },
+    { value: "confirmation", label: "Final Confirmation" },
+    { value: "text", label: "Raw Text Input" }
+];
+
+function createStepCard(step, index) {
+    const card = document.createElement("div");
+    card.className = "step-card";
+    card.dataset.id = step.step_id;
+
+    const kindOptions = STEP_KINDS.map(k => `<option value="${k.value}" ${step.kind === k.value ? 'selected' : ''}>${k.label}</option>`).join("");
+    
+    // Build Options List
+    const hasOptions = ["custom_choice", "date_choice", "confirmation"].includes(step.kind);
+    const optionsHtml = step.options.map(opt => `
+        <div class="option-item" data-opt-id="${opt.id}">
+            <input type="text" value="${opt.title}" placeholder="Button Title" class="compact-input opt-title">
+            <input type="text" value="${opt.value}" placeholder="Value" class="compact-input opt-value">
+            <input type="text" value="${opt.next || ''}" placeholder="Next Step ID" class="compact-input opt-next">
+            <button class="secondary btn-icon delete-opt" title="Remove">&times;</button>
+        </div>
+    `).join("");
+
+    card.innerHTML = `
+        <div class="step-card-header">
+            <div class="step-title-row">
+                <span class="step-id-badge">${step.step_id}</span>
+                <span class="step-kind-badge">${step.kind}</span>
+            </div>
+            <div class="step-actions">
+                <button class="secondary btn-icon move-up" ${index === 0 ? 'disabled' : ''} title="Move Up">↑</button>
+                <button class="secondary btn-icon move-down" ${index === workflowStepsData.length - 1 ? 'disabled' : ''} title="Move Down">↓</button>
+                <button class="danger-soft btn-icon delete-step" title="Delete Step">&times;</button>
+            </div>
+        </div>
+        <div class="step-content">
+            <div class="step-form-grid">
+                <label>
+                    <span>Question Kind</span>
+                    <select class="compact-input step-kind">${kindOptions}</select>
+                </label>
+                <label>
+                    <span>Question Header</span>
+                    <input type="text" class="compact-input step-header" value="${step.question_header || ''}">
+                </label>
+                <label>
+                    <span>Question Body</span>
+                    <textarea class="compact-input step-body" rows="3">${step.question_body || ''}</textarea>
+                </label>
+                <label>
+                    <span>Question Footer</span>
+                    <input type="text" class="compact-input step-footer" value="${step.question_footer || ''}">
+                </label>
+                <label>
+                    <span>Fallback Next Step</span>
+                    <input type="text" class="compact-input step-next" value="${step.next_step_id || ''}">
+                </label>
+            </div>
+
+            ${hasOptions ? `
+                <div class="options-section">
+                    <div class="builder-header">
+                        <label class="eyebrow">Interactive Options (Buttons)</label>
+                        <button class="secondary compact-btn add-opt-btn">+ Add Button</button>
+                    </div>
+                    <div class="options-list">${optionsHtml}</div>
+                </div>
+            ` : ''}
+
+            <div class="form-actions" style="justify-content: flex-end; margin-top: 16px;">
+                <button class="primary save-step-btn">Update Step</button>
+            </div>
+        </div>
+    `;
+
+    // Event Listeners for Step
+    card.querySelector(".save-step-btn").onclick = () => saveWorkflowStep(step.step_id, card);
+    card.querySelector(".delete-step").onclick = () => deleteWorkflowStepUI(step.step_id);
+    card.querySelector(".move-up")?.addEventListener("click", () => reorderWorkflowStepUI(index, index - 1));
+    card.querySelector(".move-down")?.addEventListener("click", () => reorderWorkflowStepUI(index, index + 1));
+
+    if (hasOptions) {
+        card.querySelector(".add-opt-btn").onclick = () => addOptionUI(step.id, card);
+        card.querySelectorAll(".delete-opt").forEach(btn => {
+            btn.onclick = () => btn.closest(".option-item").remove();
+        });
+    }
+
+    return card;
+}
+
+async function saveWorkflowStep(stepId, card) {
+    const selectedTenant = getSelectedTenant();
+    if (!selectedTenant) return;
+
+    const options = Array.from(card.querySelectorAll(".option-item")).map(opt => ({
+        option_id: opt.querySelector(".opt-title").value.toLowerCase().replace(/[^a-z0-9]/g, '_'),
+        title: opt.querySelector(".opt-title").value,
+        value: opt.querySelector(".opt-value").value,
+        next_step_override: opt.querySelector(".opt-next").value
+    }));
+
+    const stepData = {
+        step_id: stepId,
+        kind: card.querySelector(".step-kind").value,
+        question_header: card.querySelector(".step-header").value,
+        question_body: card.querySelector(".step-body").value,
+        question_footer: card.querySelector(".step-footer").value,
+        next_step_id: card.querySelector(".step-next").value,
+        options // Pass options too if needed for bulk upsert, but we'll stick to a simple strategy
+    };
+
+    try {
+        const res = await fetch(`/admin/workflow/step?token=${encodeURIComponent(adminToken)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tenantId: selectedTenant.id, step: stepData })
+        });
+        const data = await res.json();
+        if (data.success) {
+            // After step is saved, also upsert all options
+            if (options.length > 0) {
+                for (const opt of options) {
+                    await fetch(`/admin/workflow/option?token=${encodeURIComponent(adminToken)}`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ stepDbId: data.step.id, option: opt })
+                    });
+                }
+            }
+            showToast("Step updated successfully", "success");
+            loadWorkflowData();
+        }
+    } catch (err) {
+        showToast("Save step failed", "error");
+    }
+}
+
+async function deleteWorkflowStepUI(stepId) {
+    if (!confirm(`Are you sure you want to delete step '${stepId}'?`)) return;
+    const selectedTenant = getSelectedTenant();
+    try {
+        await fetch(`/admin/workflow/step?token=${encodeURIComponent(adminToken)}`, {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tenantId: selectedTenant.id, stepId })
+        });
+        showToast("Step deleted");
+        loadWorkflowData();
+    } catch (err) {
+        showToast("Delete failed", "error");
+    }
+}
+
+async function reorderWorkflowStepUI(fromIndex, toIndex) {
+    const selectedTenant = getSelectedTenant();
+    const updatedSteps = [...workflowStepsData];
+    const [moved] = updatedSteps.splice(fromIndex, 1);
+    updatedSteps.splice(toIndex, 0, moved);
+
+    const stepIds = updatedSteps.map(s => s.step_id);
+
+    try {
+        await fetch(`/admin/workflow/reorder?token=${encodeURIComponent(adminToken)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tenantId: selectedTenant.id, stepIds })
+        });
+        loadWorkflowData();
+    } catch (err) {
+        showToast("Reorder failed", "error");
+    }
+}
+
+function addOptionUI(stepDbId, card) {
+    const list = card.querySelector(".options-list");
+    const div = document.createElement("div");
+    div.className = "option-item";
+    div.innerHTML = `
+        <input type="text" placeholder="Button Title" class="compact-input opt-title">
+        <input type="text" placeholder="Value" class="compact-input opt-value">
+        <input type="text" placeholder="Next Step ID" class="compact-input opt-next">
+        <button class="secondary btn-icon delete-opt" title="Remove">&times;</button>
+    `;
+    div.querySelector(".delete-opt").onclick = () => div.remove();
+    list.appendChild(div);
 }
 
 function renderHolidayList() {
@@ -1105,6 +1342,27 @@ function initSettingsEvents() {
     };
 
     // Add New Buttons
+    document.getElementById("addNewStepButton").onclick = () => {
+        const stepId = prompt("Enter a unique ID for this step (e.g. 'check_insurance'):");
+        if (!stepId) return;
+        const kind = prompt("Enter kind (service, custom_choice, date_choice, confirmation, text):", "custom_choice");
+        if (!kind) return;
+        
+        saveWorkflowStep(stepId.trim().toLowerCase().replace(/ /g, '_'), {
+            querySelector: (sel) => {
+                const defaults = {
+                    ".step-kind": { value: kind },
+                    ".step-header": { value: "New Question" },
+                    ".step-body": { value: "Please choose an option." },
+                    ".step-footer": { value: "" },
+                    ".step-next": { value: "" }
+                };
+                return defaults[sel] || { value: "" };
+            },
+            querySelectorAll: () => []
+        });
+    };
+
     document.getElementById("addNewServiceBtn").onclick = () => {
         const name = prompt("Enter service name:");
         if (name) saveService(null, { name, is_active: true });
@@ -1113,16 +1371,6 @@ function initSettingsEvents() {
     document.getElementById("addNewProviderBtn").onclick = () => {
         const name = prompt("Enter provider name:");
         if (name) saveProvider(null, { name, is_active: true });
-    };
-
-    // Workflow Save
-    document.getElementById("saveWorkflowBtn").onclick = () => {
-        try {
-            const config = JSON.parse(document.getElementById("workflowConfigInput").value);
-            saveSettingsConfig({ workflow_config: config });
-        } catch (err) {
-            showToast("Invalid JSON in workflow config", "error");
-        }
     };
 }
 
