@@ -19,7 +19,7 @@ async function getBookedSlotCounts(tenant_id, booking_date) {
         `SELECT booking_time, COUNT(*)::int AS booking_count
          FROM bookings
          WHERE tenant_id = $1
-           AND booking_date = $2
+           AND booking_date::date = $2
            AND status IN ('pending', 'waiting', 'confirmed')
          GROUP BY booking_time`,
         [tenant_id, booking_date]
@@ -53,7 +53,7 @@ async function createBooking({
             `SELECT COUNT(*)::int AS booking_count
              FROM bookings
              WHERE tenant_id = $1
-               AND booking_date = $2
+               AND booking_date::date = $2
                AND booking_time = $3
                AND status IN ('pending', 'waiting', 'confirmed')`,
             [tenant_id, booking_date, booking_time]
@@ -116,24 +116,24 @@ async function getAllBookings(tenant_id, filters = {}) {
     const localDate = "(CURRENT_TIMESTAMP AT TIME ZONE COALESCE(t.timezone, 'UTC'))::date";
 
     if (filters.range === "upcoming_30_days") {
-        where += ` AND b.booking_date BETWEEN ${localDate} AND ${localDate} + INTERVAL '29 days'`;
+        where += ` AND b.booking_date::date BETWEEN ${localDate} AND ${localDate} + INTERVAL '29 days'`;
     } else if (filters.range === "today") {
-        where += ` AND b.booking_date = ${localDate}`;
+        where += ` AND b.booking_date::date = ${localDate}`;
     } else if (filters.range === "tomorrow") {
-        where += ` AND b.booking_date = ${localDate} + INTERVAL '1 day'`;
+        where += ` AND b.booking_date::date = ${localDate} + INTERVAL '1 day'`;
     } else if (filters.range === "future") {
-        where += ` AND b.booking_date > ${localDate} + INTERVAL '1 day'`;
+        where += ` AND b.booking_date::date > ${localDate} + INTERVAL '1 day'`;
     } else if (filters.range === "past") {
-        where += ` AND b.booking_date < ${localDate}`;
+        where += ` AND b.booking_date::date < ${localDate}`;
     } else if (filters.range === "this_week") {
-        where += ` AND b.booking_date >= date_trunc('week', ${localDate}) AND b.booking_date < date_trunc('week', ${localDate}) + INTERVAL '1 week'`;
+        where += ` AND b.booking_date::date >= date_trunc('week', ${localDate}) AND b.booking_date::date < date_trunc('week', ${localDate}) + INTERVAL '1 week'`;
     } else if (filters.range === "this_month") {
-        where += ` AND b.booking_date >= date_trunc('month', ${localDate}) AND b.booking_date < date_trunc('month', ${localDate}) + INTERVAL '1 month'`;
+        where += ` AND b.booking_date::date >= date_trunc('month', ${localDate}) AND b.booking_date::date < date_trunc('month', ${localDate}) + INTERVAL '1 month'`;
     }
 
     if (filters.date) {
         values.push(filters.date);
-        where += ` AND b.booking_date=$${values.length}`;
+        where += ` AND b.booking_date::date=$${values.length}`;
     }
 
     if (filters.time) {

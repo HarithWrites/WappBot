@@ -114,18 +114,32 @@ async function getAvailableTimeSlots(tenant, bookingDate) {
     });
 }
 
-function getRelativeDateOptions(tenant, offsets = [2, 3, 4]) {
+function getRelativeDateOptions(tenant, offsets = [1, 2, 3, 4, 5, 6, 7]) {
     const timeZone = tenant?.timezone;
+    const holidays = Array.isArray(tenant.business_holidays) ? tenant.business_holidays : [];
+    const weekOffs = Array.isArray(tenant.week_offs) ? tenant.week_offs : [];
 
-    return offsets.map((offset) => {
+    const options = [];
+    for (const offset of offsets) {
         const date = addDays(getDateInTimeZone(timeZone), offset);
-        const display = toDisplayDate(date);
-        return {
-            id: `date_${display.replace(/\//g, "_")}`,
-            title: display,
-            value: parseDate(display)
-        };
-    });
+        const dateStr = toDateOnlyString(date);
+        const dayOfWeek = date.getDay();
+
+        const isHoliday = holidays.includes(dateStr);
+        const isWeekOff = weekOffs.includes(dayOfWeek);
+
+        if (!isHoliday && !isWeekOff) {
+            const display = toDisplayDate(date);
+            options.push({
+                id: `date_${display.replace(/\//g, "_")}`,
+                title: display,
+                value: dateStr
+            });
+        }
+
+        if (options.length >= 4) break;
+    }
+    return options;
 }
 
 function getCurrentWeekRange(timeZone) {
@@ -296,27 +310,22 @@ async function promptStep({ tenant, phone, tenantId, workflow, stepId, context }
     switch (step.kind) {
         case "service": {
             const services = await getServices(tenantId);
-
-            if (!services.length) {
-                return sendMessage({
-                    tenant,
-                    to: phone,
-                    text: "No services are configured right now. Please try again later."
-                });
+            const activeServices = services.filter(s => s.is_active !== false);
+            if (!activeServices.length) {
+                return sendMessage({ tenant, phone, text: "Sorry, no services are currently available." });
             }
-
-            return sendInteractiveStep({
+            return sendListMessage({
                 tenant,
-                phone,
-                step,
-                question,
-                listTitle: step.list_title || "Available services",
-                buttonText: step.button_text || "View services",
-                items: services.map((service) => ({
-                    id: buildInteractiveId(step.id, String(service.id)),
-                    title: service.name,
-                    description: "Tap to select"
-                }))
+                to: phone,
+                text: buildPromptText(step.text, "Please select a service:", context),
+                button: "Services",
+                sections: [{
+                    title: "Available Services",
+                    rows: activeServices.map((s) => ({
+                        id: buildInteractiveId(step.id, String(s.id)),
+                        title: s.name
+                    }))
+                }]
             });
         }
 
@@ -336,8 +345,9 @@ async function promptStep({ tenant, phone, tenantId, workflow, stepId, context }
 
         case "service_provider": {
             const providers = await getProvidersByTenantAndService(tenantId, context.service_id);
+            const activeProviders = providers.filter(p => p.is_active !== false);
 
-            if (!providers.length) {
+            if (!activeProviders.length) {
                 return promptStep({
                     tenant,
                     phone,
@@ -352,36 +362,46 @@ async function promptStep({ tenant, phone, tenantId, workflow, stepId, context }
                 });
             }
 
-            return sendInteractiveStep({
+            return sendListMessage({
                 tenant,
-                phone,
-                step,
-                question,
-                listTitle: step.list_title || "Available providers",
-                buttonText: step.button_text || "View providers",
-                items: providers.map((provider) => ({
-                    id: buildInteractiveId(step.id, String(provider.id)),
-                    title: provider.name,
-                    description: "Tap to select"
-                }))
+                to: phone,
+                text: buildPromptText(step.text, "Please select a provider:", context),
+                button: "Providers",
+                sections: [{
+                    title: "Available Providers",
+                    rows: activeProviders.map((p) => ({
+                        id: buildInteractiveId(step.id, String(p.id)),
+                        title: p.name
+                    }))
+                }]
             });
         }
 
         case "relative_date_list": {
-            const options = getRelativeDateOptions(tenant, step.offsets);
-
-            return sendInteractiveStep({
+            const options = getRelativeDateOptions(tenant);
+ 
+            if (options.length === 0) {
+                return sendMessage({ tenant, phone, text: "Sorry, no dates are available for booking at this time." });
+            }
+ 
+            return sendListMessage({
                 tenant,
-                phone,
-                step,
-                question,
-                listTitle: step.list_title || "Available dates",
-                buttonText: step.button_text || "View dates",
-                items: options.map((option) => ({
-                    id: buildInteractiveId(step.id, option.value),
-                    title: option.title,
-                    description: "Tap to select"
-                }))
+                to: phone,
+                text: buildPromptText(step.text, "Please select a date:", context),
+                button: "Dates",
+                sections: [{
+                    title: "Suggested Dates",
+                    rows: [
+                        ...options.map((opt) => ({
+                            id: buildInteractiveId(step.id, opt.id),
+                            title: opt.title
+                        })),
+                        {
+                            id: buildInteractiveId(step.id, "other"),
+                            title: "Other (Type DD/MM/YYYY)"
+                        }
+                    ]
+                }]
             });
         }
 
@@ -610,7 +630,8 @@ async function processMessage({ tenant, phone, text, payload }) {
     switch (step.kind) {
         case "service": {
             const services = await getServices(tenantId);
-            const service = services.find((item) => {
+            const activeServices = services.filter(s => s.is_active !== false);
+            const service = activeServices.find((item) => {
                 const serviceId = String(item.id);
                 return [
                     buildInteractiveId(step.id, serviceId),
@@ -686,7 +707,8 @@ async function processMessage({ tenant, phone, text, payload }) {
 
         case "service_provider": {
             const providers = await getProvidersByTenantAndService(tenantId, context.service_id);
-            const provider = providers.find((item) => {
+            const activeProviders = providers.filter(p => p.is_active !== false);
+            const provider = activeProviders.find((item) => {
                 const providerId = String(item.id);
                 return [
                     buildInteractiveId(step.id, providerId),
@@ -695,7 +717,7 @@ async function processMessage({ tenant, phone, text, payload }) {
                 ].some((token) => String(token || "").trim().toLowerCase() === input);
             });
 
-            if (!providers.length) {
+            if (!activeProviders.length) {
                 return promptStep({
                     tenant,
                     phone,

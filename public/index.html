@@ -120,24 +120,28 @@
                         </div>
                     </header>
 
-                    <div class="toolbar compact-toolbar">
-                        <div class="search-wrap compact-search">
-                            <input type="search" id="searchInput" placeholder="Search bookings...">
+                    <div class="dashboard-controls-row" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 20px;">
+                        <div class="left-controls">
+                            <div class="status-tabs" style="margin-bottom: 0;">
+                                <button class="pill active" data-filter="all" type="button">All</button>
+                                <button class="pill" data-filter="pending" type="button">Pending</button>
+                                <button class="pill" data-filter="waiting" type="button">Waiting</button>
+                                <button class="pill" data-filter="confirmed" type="button">Confirmed</button>
+                                <button class="pill" data-filter="rejected" type="button">Rejected</button>
+                                <button class="pill" data-filter="closed" type="button">Closed</button>
+                            </div>
                         </div>
-                        <div class="toolbar-actions compact-actions">
-                            <select id="tenantFilter"></select>
-                            <input type="text" id="dateFilter" placeholder="Select date..." onfocus="(this.type='date')" onblur="(this.type=this.value?'date':'text')">
-                            <button id="clearButton" class="secondary compact-btn" type="button">Clear</button>
-                        </div>
-                    </div>
 
-                    <div class="status-tabs">
-                        <button class="pill active" data-filter="all" type="button">All</button>
-                        <button class="pill" data-filter="pending" type="button">Pending</button>
-                        <button class="pill" data-filter="waiting" type="button">Waiting</button>
-                        <button class="pill" data-filter="confirmed" type="button">Confirmed</button>
-                        <button class="pill" data-filter="rejected" type="button">Rejected</button>
-                        <button class="pill" data-filter="closed" type="button">Closed</button>
+                        <div class="right-controls toolbar compact-toolbar controls-bar" style="margin-bottom: 0; width: auto; display: flex; align-items: center; justify-content: flex-end; border: none; padding: 0; background: transparent; box-shadow: none;">
+                            <div class="search-wrap compact-search" style="margin-right: 15px;">
+                                <input type="search" id="searchInput" placeholder="Search bookings...">
+                            </div>
+                            <div class="toolbar-actions compact-actions">
+                                <select id="tenantFilter"></select>
+                                <input type="text" id="dateFilter" placeholder="Select date..." onfocus="(this.type='date')" onblur="(this.type=this.value?'date':'text')">
+                                <button id="clearButton" class="secondary compact-btn" type="button">Clear</button>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="table-card">
@@ -198,51 +202,156 @@
                         <section class="tenant-editor panel-card">
                             <div class="panel-header">
                                 <div>
-                                    <p class="section-label">Selected tenant</p>
+                                    <p class="section-label">Settings</p>
                                     <h3 id="tenantEditorTitle">Choose a tenant</h3>
+                                </div>
+                                <div class="settings-tabs">
+                                    <button class="pill active" data-tab="general">General</button>
+                                    <button class="pill" data-tab="schedule">Schedule & Holidays</button>
+                                    <button class="pill" data-tab="services">Services</button>
+                                    <button class="pill" data-tab="providers">Providers</button>
+                                    <button class="pill" data-tab="workflow">Workflow (Q&A)</button>
                                 </div>
                             </div>
 
-                            <form id="settingsForm" class="settings-form">
-                                <div class="form-grid">
-                                    <label>
-                                        <span>Business name</span>
-                                        <input type="text" id="businessNameInput" placeholder="Business name">
-                                    </label>
-
-                                    <label>
-                                        <span>Timezone</span>
-                                        <input type="text" id="timezoneInput" placeholder="Asia/Kolkata">
-                                    </label>
-
-                                    <label>
-                                        <span>Parallel appointments</span>
-                                        <input type="number" id="parallelInput" min="1" step="1" value="1">
-                                    </label>
-
-                                    <label>
-                                        <span>Tenant ID</span>
-                                        <input type="text" id="tenantIdDisplay" disabled>
-                                    </label>
+                            <div id="settingsContainer" class="settings-content">
+                                <!-- TAB: GENERAL -->
+                                <div id="tab-general" class="settings-tab-pane">
+                                    <form id="generalSettingsForm" class="settings-form">
+                                        <div class="form-grid">
+                                            <label>
+                                                <span>Business Name (Read Only)</span>
+                                                <input type="text" id="businessNameInput" readonly class="readonly-input">
+                                            </label>
+                                            <label>
+                                                <span>Timezone</span>
+                                                <input type="text" id="timezoneInput" placeholder="Asia/Kolkata">
+                                            </label>
+                                            <label>
+                                                <span>Max Parallel Appointments</span>
+                                                <input type="number" id="parallelInput" min="1" step="1">
+                                            </label>
+                                            <label>
+                                                <span>Tenant ID</span>
+                                                <input type="text" id="tenantIdDisplay" disabled>
+                                            </label>
+                                        </div>
+                                        <div class="form-actions">
+                                            <button type="submit" class="primary">Save General Settings</button>
+                                        </div>
+                                    </form>
                                 </div>
 
-                                <div class="split-grid">
-                                    <article class="mini-panel">
-                                        <div class="mini-panel-header">
-                                            <p class="section-label">Services</p>
-                                            <h4>Configured in DB</h4>
+                                <!-- TAB: SCHEDULE -->
+                                <div id="tab-schedule" class="settings-tab-pane hidden">
+                                    <form id="scheduleSettingsForm" class="settings-form">
+                                        <div class="form-grid">
+                                            <label>
+                                                <span>Opening Hour (0-23)</span>
+                                                <input type="number" id="openingHourInput" min="0" max="23">
+                                            </label>
+                                            <label>
+                                                <span>Closing Hour (0-23)</span>
+                                                <input type="number" id="closingHourInput" min="0" max="23">
+                                            </label>
+                                            <label>
+                                                <span>Slot Duration (minutes)</span>
+                                                <input type="number" id="slotDurationInput" min="5" step="5">
+                                            </label>
                                         </div>
-                                        <div id="servicesList" class="token-list"></div>
-                                    </article>
 
-                                    <article class="mini-panel">
-                                        <div class="mini-panel-header">
-                                            <p class="section-label">Providers</p>
-                                            <h4>Configured in DB</h4>
+                                        <div class="settings-section">
+                                            <h4>Week Offs</h4>
+                                            <div class="week-offs-grid" id="weekOffsContainer">
+                                                <label><input type="checkbox" value="0"> Sunday</label>
+                                                <label><input type="checkbox" value="1"> Monday</label>
+                                                <label><input type="checkbox" value="2"> Tuesday</label>
+                                                <label><input type="checkbox" value="3"> Wednesday</label>
+                                                <label><input type="checkbox" value="4"> Thursday</label>
+                                                <label><input type="checkbox" value="5"> Friday</label>
+                                                <label><input type="checkbox" value="6"> Saturday</label>
+                                            </div>
                                         </div>
-                                        <div id="providersList" class="token-list"></div>
-                                    </article>
+
+                                        <div class="settings-section">
+                                            <h4>Business Holidays</h4>
+                                            <div class="holiday-manager">
+                                                <div class="add-row">
+                                                    <input type="date" id="newHolidayInput">
+                                                    <button type="button" id="addHolidayBtn" class="secondary">Add Holiday</button>
+                                                </div>
+                                                <ul id="holidayList" class="tag-list"></ul>
+                                            </div>
+                                        </div>
+
+                                        <div class="form-actions">
+                                            <button type="submit" class="primary">Save Schedule Settings</button>
+                                        </div>
+                                    </form>
                                 </div>
+
+                                <!-- TAB: SERVICES -->
+                                <div id="tab-services" class="settings-tab-pane hidden">
+                                    <div class="mini-panel">
+                                        <div class="mini-panel-header">
+                                            <h4>Manage Services</h4>
+                                            <button type="button" id="addNewServiceBtn" class="primary compact-btn">+ Add Service</button>
+                                        </div>
+                                        <div class="table-shell">
+                                            <table class="booking-table dense">
+                                                <thead>
+                                                    <tr>
+                                                        <th>ID</th>
+                                                        <th>Name</th>
+                                                        <th>Status</th>
+                                                        <th>Action</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="servicesSettingsTableBody"></tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- TAB: PROVIDERS -->
+                                <div id="tab-providers" class="settings-tab-pane hidden">
+                                    <div class="mini-panel">
+                                        <div class="mini-panel-header">
+                                            <h4>Manage Service Providers</h4>
+                                            <button type="button" id="addNewProviderBtn" class="primary compact-btn">+ Add Provider</button>
+                                        </div>
+                                        <div class="table-shell">
+                                            <table class="booking-table dense">
+                                                <thead>
+                                                    <tr>
+                                                        <th>ID</th>
+                                                        <th>Name</th>
+                                                        <th>Assigned Service</th>
+                                                        <th>Status</th>
+                                                        <th>Action</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="providersSettingsTableBody"></tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- TAB: WORKFLOW -->
+                                <div id="tab-workflow" class="settings-tab-pane hidden">
+                                    <div class="workflow-editor-container">
+                                        <div class="mini-panel-header">
+                                            <h4>Workflow Configuration (JSON)</h4>
+                                            <p class="hero-copy">Edit the underlying chatbot logic steps directly.</p>
+                                        </div>
+                                        <textarea id="workflowConfigInput" class="code-editor" spellcheck="false"></textarea>
+                                        <div class="form-actions">
+                                            <button type="button" id="saveWorkflowBtn" class="primary">Save Workflow Updates</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
 
                                 <div class="workflow-tools">
                                     <div class="tool-row">

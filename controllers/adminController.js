@@ -6,10 +6,11 @@ const {
 } = require("../services/bookingService");
 const {
     getAllTenants,
-    getTenantById
+    getTenantById,
+    updateTenantSettings
 } = require("../services/tenantService");
-const { getServices } = require("../services/serviceService");
-const { getProvidersByTenant } = require("../services/providerService");
+const { getServices, getAllServices, upsertService } = require("../services/serviceService");
+const { getProvidersByTenant, getAllProvidersByTenant, upsertProvider } = require("../services/providerService");
 const { sendMessage } = require("../services/whatsappService");
 const { formatDisplayDate } = require("../utils/validators");
 
@@ -207,3 +208,81 @@ exports.approveBooking = (req, res) => handleStatusUpdate(req, res, "confirmed",
 exports.rejectBooking = (req, res) => handleStatusUpdate(req, res, "rejected", "rejectBooking");
 exports.setWaitingBooking = (req, res) => handleStatusUpdate(req, res, "waiting", "setWaitingBooking");
 exports.closeBooking = (req, res) => handleStatusUpdate(req, res, "closed", "closeBooking");
+
+exports.getSettings = async (req, res) => {
+    try {
+        const tenantId = req.adminScope === "global"
+            ? (req.query.tenantId || null)
+            : req.tenant.id;
+
+        if (!tenantId) {
+            return res.status(400).json({ error: "tenantId required" });
+        }
+
+        const tenant = await getTenantById(tenantId);
+        if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+
+        const services = await getAllServices(tenantId);
+        const providers = await getAllProvidersByTenant(tenantId);
+
+        return res.json({
+            tenant,
+            services,
+            providers
+        });
+    } catch (err) {
+        console.error("getSettings error:", err);
+        return res.status(500).json({ error: "Internal server error" });
+    }
+};
+
+exports.updateSettingsConfig = async (req, res) => {
+    try {
+        const { tenantId, settings } = req.body;
+        const scopedTenantId = req.adminScope === "global"
+            ? (tenantId || null)
+            : req.tenant.id;
+
+        if (!scopedTenantId) return res.status(400).json({ error: "tenantId required" });
+
+        const updated = await updateTenantSettings(scopedTenantId, settings);
+        return res.json({ success: true, tenant: updated });
+    } catch (err) {
+        console.error("updateSettingsConfig error:", err);
+        return res.status(500).json({ error: "Internal server error" });
+    }
+};
+
+exports.upsertService = async (req, res) => {
+    try {
+        const { tenantId, service } = req.body;
+        const scopedTenantId = req.adminScope === "global"
+            ? (tenantId || null)
+            : req.tenant.id;
+
+        if (!scopedTenantId) return res.status(400).json({ error: "tenantId required" });
+
+        const result = await upsertService(scopedTenantId, service);
+        return res.json({ success: true, service: result });
+    } catch (err) {
+        console.error("upsertService error:", err);
+        return res.status(500).json({ error: "Internal server error" });
+    }
+};
+
+exports.upsertProvider = async (req, res) => {
+    try {
+        const { tenantId, provider } = req.body;
+        const scopedTenantId = req.adminScope === "global"
+            ? (tenantId || null)
+            : req.tenant.id;
+
+        if (!scopedTenantId) return res.status(400).json({ error: "tenantId required" });
+
+        const result = await upsertProvider(scopedTenantId, provider);
+        return res.json({ success: true, provider: result });
+    } catch (err) {
+        console.error("upsertProvider error:", err);
+        return res.status(500).json({ error: "Internal server error" });
+    }
+};

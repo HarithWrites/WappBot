@@ -440,7 +440,7 @@ async function refreshSummaryCounts() {
             const params = getTokenQuery();
             if (selectedTenant) params.set("tenantId", selectedTenant);
             // 1e. Dynamically sync with the active range (fixes "today showing 0" when fetching Future/Past stats)
-            params.set("range", currentRange && currentRange !== "all" ? currentRange : "today");
+            params.set("range", currentRange || "all");
             params.set("status", status);
             params.set("page", "1");
             params.set("pageSize", "1");
@@ -592,8 +592,8 @@ function renderOverviewStats() {
         const statsContainer = document.getElementById("statToday")?.closest('.stats-grid') || document.getElementById("statToday")?.parentElement;
         if (statsContainer) {
             // 1e. Dynamically format label to reflect selected range
-            const rangeStr = (currentRange && currentRange !== "all") ? currentRange : "today";
-            const rangeLabel = rangeStr.charAt(0).toUpperCase() + rangeStr.slice(1);
+            const rangeStr = (currentRange && currentRange !== "all") ? currentRange : "all time";
+            const rangeLabel = rangeStr === "all time" ? "Total" : rangeStr.charAt(0).toUpperCase() + rangeStr.slice(1);
 
             statsContainer.innerHTML = `
                 <div class="stat-card"><h3>Pending (${rangeLabel})</h3><p class="stat-value">${summaryCounts.pending || 0}</p></div>
@@ -832,6 +832,260 @@ function closeCloseModal() {
 }
 
 // ==========================================
+// 8. SETTINGS MANAGEMENT
+// ==========================================
+let currentSettingsTab = "general";
+let currentSettingHolidays = [];
+
+function initSettingsTabs() {
+    const tabButtons = document.querySelectorAll(".settings-tabs .pill");
+    tabButtons.forEach(btn => {
+        btn.addEventListener("click", () => {
+            currentSettingsTab = btn.dataset.tab;
+            tabButtons.forEach(b => b.classList.toggle("active", b === btn));
+            document.querySelectorAll(".settings-tab-pane").forEach(pane => {
+                pane.classList.toggle("hidden", pane.id !== `tab-${currentSettingsTab}`);
+            });
+        });
+    });
+}
+
+async function loadSettings() {
+    const selectedTenant = getSelectedTenant();
+    if (!selectedTenant) return;
+
+    try {
+        const res = await fetch(`/admin/settings?token=${encodeURIComponent(adminToken)}&tenantId=${selectedTenant.id}`);
+        if (!res.ok) throw new Error("Failed to fetch settings");
+        const data = await res.json();
+        renderSettings(data);
+    } catch (err) {
+        console.error("loadSettings error:", err);
+        showToast("Error loading settings", "error");
+    }
+}
+
+function renderSettings(data) {
+    const { tenant, services, providers } = data;
+    
+    // 1. General Tab
+    document.getElementById("tenantIdDisplay").value = tenant.id;
+    document.getElementById("businessNameInput").value = tenant.business_name || "";
+    document.getElementById("timezoneInput").value = tenant.timezone || "UTC";
+    document.getElementById("parallelInput").value = tenant.max_parallel_appointments || 1;
+
+    // 2. Schedule Tab
+    document.getElementById("openingHourInput").value = tenant.opening_hour ?? 9;
+    document.getElementById("closingHourInput").value = tenant.closing_hour ?? 21;
+    document.getElementById("slotDurationInput").value = tenant.slot_duration ?? 60;
+
+    // Week Offs
+    const weekOffs = Array.isArray(tenant.week_offs) ? tenant.week_offs : [];
+    document.querySelectorAll("#weekOffsContainer input[type='checkbox']").forEach(cb => {
+        cb.checked = weekOffs.includes(parseInt(cb.value));
+    });
+
+    // Holidays
+    currentSettingHolidays = Array.isArray(tenant.business_holidays) ? tenant.business_holidays : [];
+    renderHolidayList();
+
+    // 3. Services Tab
+    renderServicesSettingsTable(services);
+
+    // 4. Providers Tab
+    renderProvidersSettingsTable(providers, services);
+
+    // 5. Workflow Tab
+    document.getElementById("workflowConfigInput").value = JSON.stringify(tenant.workflow_config || {}, null, 2);
+}
+
+function renderHolidayList() {
+    const list = document.getElementById("holidayList");
+    list.innerHTML = "";
+    currentSettingHolidays.sort().forEach((date, index) => {
+        const li = document.createElement("li");
+        li.className = "tag-item";
+        li.innerHTML = `<span>${date}</span><button type="button" class="del-btn">&times;</button>`;
+        li.querySelector(".del-btn").onclick = () => {
+            currentSettingHolidays.splice(index, 1);
+            renderHolidayList();
+        };
+        list.appendChild(li);
+    });
+}
+
+function renderServicesSettingsTable(services) {
+    const tbody = document.getElementById("servicesSettingsTableBody");
+    tbody.innerHTML = "";
+    services.forEach(s => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td>${s.id}</td>
+            <td><input type="text" value="${s.name}" class="inline-edit service-name-input"></td>
+            <td>
+                <span class="status-badge ${s.is_active ? 'active' : 'inactive'}">${s.is_active ? 'Active' : 'Disabled'}</span>
+            </td>
+            <td>
+                <button class="secondary compact-btn toggle-status">${s.is_active ? 'Disable' : 'Enable'}</button>
+                <button class="primary compact-btn save-service">Save</button>
+            </td>
+        `;
+        
+        tr.querySelector(".toggle-status").onclick = () => saveService(s.id, { name: tr.querySelector(".service-name-input").value, is_active: !s.is_active });
+        tr.querySelector(".save-service").onclick = () => saveService(s.id, { name: tr.querySelector(".service-name-input").value, is_active: s.is_active });
+        
+        tbody.appendChild(tr);
+    });
+}
+
+function renderProvidersSettingsTable(providers, services) {
+    const tbody = document.getElementById("providersSettingsTableBody");
+    tbody.innerHTML = "";
+    providers.forEach(p => {
+        const tr = document.createElement("tr");
+        const serviceOptions = services.map(s => `<option value="${s.id}" ${p.service_id == s.id ? 'selected' : ''}>${s.name}</option>`).join("");
+        
+        tr.innerHTML = `
+            <td>${p.id}</td>
+            <td><input type="text" value="${p.name}" class="inline-edit provider-name-input"></td>
+            <td>
+                <select class="inline-edit provider-service-select">
+                    <option value="">(None - All Services)</option>
+                    ${serviceOptions}
+                </select>
+            </td>
+            <td>
+                <span class="status-badge ${p.is_active ? 'active' : 'inactive'}">${p.is_active ? 'Active' : 'Disabled'}</span>
+            </td>
+            <td>
+                <button class="secondary compact-btn toggle-status">${p.is_active ? 'Disable' : 'Enable'}</button>
+                <button class="primary compact-btn save-provider">Save</button>
+            </td>
+        `;
+        
+        tr.querySelector(".toggle-status").onclick = () => saveProvider(p.id, { 
+            name: tr.querySelector(".provider-name-input").value, 
+            service_id: tr.querySelector(".provider-service-select").value,
+            is_active: !p.is_active 
+        });
+        tr.querySelector(".save-provider").onclick = () => saveProvider(p.id, { 
+            name: tr.querySelector(".provider-name-input").value, 
+            service_id: tr.querySelector(".provider-service-select").value,
+            is_active: p.is_active 
+        });
+        
+        tbody.appendChild(tr);
+    });
+}
+
+async function saveSettingsConfig(settings) {
+    const selectedTenant = getSelectedTenant();
+    if (!selectedTenant) return;
+
+    try {
+        const res = await fetch(`/admin/settings/config?token=${encodeURIComponent(adminToken)}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tenantId: selectedTenant.id, settings })
+        });
+        if (!res.ok) throw new Error("Failed to save settings");
+        showToast("Settings saved", "success");
+        await loadSettings();
+    } catch (err) {
+        showToast("Save failed", "error");
+    }
+}
+
+async function saveService(id, data) {
+    const selectedTenant = getSelectedTenant();
+    try {
+        const res = await fetch(`/admin/settings/services?token=${encodeURIComponent(adminToken)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tenantId: selectedTenant.id, service: { id, ...data } })
+        });
+        if (!res.ok) throw new Error("Failed to save service");
+        showToast("Service updated", "success");
+        await loadSettings();
+    } catch (err) {
+        showToast("Service update failed", "error");
+    }
+}
+
+async function saveProvider(id, data) {
+    const selectedTenant = getSelectedTenant();
+    try {
+        const res = await fetch(`/admin/settings/providers?token=${encodeURIComponent(adminToken)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tenantId: selectedTenant.id, provider: { id, ...data } })
+        });
+        if (!res.ok) throw new Error("Failed to save provider");
+        showToast("Provider updated", "success");
+        await loadSettings();
+    } catch (err) {
+        showToast("Provider update failed", "error");
+    }
+}
+
+function initSettingsEvents() {
+    initSettingsTabs();
+
+    // General Form
+    document.getElementById("generalSettingsForm").addEventListener("submit", (e) => {
+        e.preventDefault();
+        saveSettingsConfig({
+            timezone: document.getElementById("timezoneInput").value,
+            max_parallel_appointments: parseInt(document.getElementById("parallelInput").value)
+        });
+    });
+
+    // Schedule Form
+    document.getElementById("scheduleSettingsForm").addEventListener("submit", (e) => {
+        e.preventDefault();
+        const weekOffs = Array.from(document.querySelectorAll("#weekOffsContainer input:checked")).map(cb => parseInt(cb.value));
+        saveSettingsConfig({
+            opening_hour: parseInt(document.getElementById("openingHourInput").value),
+            closing_hour: parseInt(document.getElementById("closingHourInput").value),
+            slot_duration: parseInt(document.getElementById("slotDurationInput").value),
+            week_offs: weekOffs,
+            business_holidays: currentSettingHolidays
+        });
+    });
+
+    // Holiday Addition
+    document.getElementById("addHolidayBtn").onclick = () => {
+        const val = document.getElementById("newHolidayInput").value;
+        if (val && !currentSettingHolidays.includes(val)) {
+            currentSettingHolidays.push(val);
+            renderHolidayList();
+            document.getElementById("newHolidayInput").value = "";
+        }
+    };
+
+    // Add New Buttons
+    document.getElementById("addNewServiceBtn").onclick = () => {
+        const name = prompt("Enter service name:");
+        if (name) saveService(null, { name, is_active: true });
+    };
+
+    document.getElementById("addNewProviderBtn").onclick = () => {
+        const name = prompt("Enter provider name:");
+        if (name) saveProvider(null, { name, is_active: true });
+    };
+
+    // Workflow Save
+    document.getElementById("saveWorkflowBtn").onclick = () => {
+        try {
+            const config = JSON.parse(document.getElementById("workflowConfigInput").value);
+            saveSettingsConfig({ workflow_config: config });
+        } catch (err) {
+            showToast("Invalid JSON in workflow config", "error");
+        }
+    };
+}
+
+// ==========================================
 // 10. EVENT LISTENERS
 // ==========================================
 loginForm.addEventListener("submit", async (event) => {
@@ -854,13 +1108,12 @@ logoutButton.addEventListener("click", () => {
 });
 
 screenButtons.forEach((button) => {
-    // Hide the settings button entirely
-    if (button.dataset.screenTarget === "tenantControlsScreen") {
-        button.style.display = "none";
-    }
-
     button.addEventListener("click", () => {
-        setActiveScreen(button.dataset.screenTarget);
+        const target = button.dataset.screenTarget;
+        setActiveScreen(target);
+        if (target === "tenantControlsScreen") {
+            loadSettings();
+        }
     });
 });
 
@@ -1016,6 +1269,7 @@ closeForm.addEventListener("submit", async (event) => {
 // ==========================================
 // 11. INITIALIZATION
 // ==========================================
+initSettingsEvents();
 tenantInput.value = localStorage.getItem("adminToken") || "";
 setActiveScreen(currentScreen);
 

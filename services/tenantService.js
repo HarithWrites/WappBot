@@ -45,7 +45,12 @@ async function updateTenantSettings(tenantId, settings) {
          SET business_name = $2,
              timezone = $3,
              max_parallel_appointments = $4,
-             workflow_config = $5
+             workflow_config = $5,
+             opening_hour = $6,
+             closing_hour = $7,
+             slot_duration = $8,
+             business_holidays = $9,
+             week_offs = $10
          WHERE id = $1
          RETURNING *`,
         [
@@ -53,7 +58,12 @@ async function updateTenantSettings(tenantId, settings) {
             settings.business_name,
             settings.timezone,
             settings.max_parallel_appointments,
-            settings.workflow_config || null
+            settings.workflow_config || null,
+            settings.opening_hour || null,
+            settings.closing_hour || null,
+            settings.slot_duration || null,
+            settings.business_holidays || '[]',
+            settings.week_offs || '[]'
         ]
     );
 

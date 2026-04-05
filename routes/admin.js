@@ -55,4 +55,9 @@ router.post("/reject", controller.rejectBooking);
 router.get("/approve", (req, res) => res.status(405).send("Use POST method for approve"));
 router.get("/reject", (req, res) => res.status(405).send("Use POST method for reject"));
 
+router.get("/settings", controller.getSettings);
+router.put("/settings/config", controller.updateSettingsConfig);
+router.post("/settings/services", controller.upsertService);
+router.post("/settings/providers", controller.upsertProvider);
+
 module.exports = router;

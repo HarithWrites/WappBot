@@ -23,6 +23,20 @@ async function ensureDatabaseSchema() {
 
     await db.query(`
         ALTER TABLE tenants
+        ADD COLUMN IF NOT EXISTS opening_hour INTEGER DEFAULT 9,
+        ADD COLUMN IF NOT EXISTS closing_hour INTEGER DEFAULT 21,
+        ADD COLUMN IF NOT EXISTS slot_duration INTEGER DEFAULT 60,
+        ADD COLUMN IF NOT EXISTS business_holidays JSONB DEFAULT '[]'::jsonb,
+        ADD COLUMN IF NOT EXISTS week_offs JSONB DEFAULT '[]'::jsonb
+    `);
+
+    await db.query(`
+        ALTER TABLE services
+        ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE
+    `);
+
+    await db.query(`
+        ALTER TABLE tenants
         ADD COLUMN IF NOT EXISTS app_secret TEXT
     `);
 
