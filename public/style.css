@@ -281,20 +281,36 @@ button:disabled { opacity: 0.5; cursor: not-allowed; outline: none; box-shadow: 
 /* -----------------------------
    LISTS & ITEMS
 ----------------------------- */
-.tenant-overview-list, .tenant-list, .token-list { display: grid; gap: 12px; margin-top: 16px; }
-.tenant-overview-item, .tenant-list-item {
-  background: var(--surface-soft);
-  border: 1px solid var(--border);
-  padding: 16px; text-align: left;
-  border-radius: 12px; transition: all 0.2s;
+.tenant-directory-item {
+  display: block; width: 100%; border: 1px solid var(--border);
+  background: var(--surface-soft); padding: 16px; text-align: left;
+  border-radius: 12px; transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  margin-bottom: 8px; cursor: pointer;
 }
-.tenant-list-item:hover { border-color: #cbd5e1; background: var(--surface); }
-.tenant-list-item.active {
+.tenant-directory-item:hover { border-color: var(--primary); background: var(--surface); transform: translateX(4px); }
+.tenant-directory-item.active {
   border-color: var(--primary);
   background: var(--primary-soft);
-  box-shadow: inset 2px 0 0 var(--primary);
+  box-shadow: var(--shadow-sm);
+  outline: none;
 }
-.tenant-overview-title, .tenant-list-title { display: block; font-weight: 600; color: #1e293b; margin-bottom: 4px; font-size: 0.95rem; }
+[data-theme="dark"] .tenant-directory-item.active { background: rgba(79, 70, 229, 0.2); }
+
+.tenant-title { display: block; font-weight: 700; color: var(--ink); margin-bottom: 2px; font-size: 0.95rem; }
+.tenant-id { font-size: 0.72rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+/* Stat Card Color Themes */
+.stat-pending { border-left: 4px solid #f59e0b !important; }
+.stat-waiting { border-left: 4px solid #0ea5e9 !important; }
+.stat-confirmed { border-left: 4px solid #10b981 !important; }
+.stat-rejected { border-left: 4px solid #f43f5e !important; }
+.stat-closed { border-left: 4px solid #64748b !important; }
+
+[data-theme="dark"] .stat-pending { background-color: rgba(245, 158, 11, 0.05); }
+[data-theme="dark"] .stat-waiting { background-color: rgba(14, 165, 233, 0.05); }
+[data-theme="dark"] .stat-confirmed { background-color: rgba(16, 185, 129, 0.05); }
+[data-theme="dark"] .stat-rejected { background-color: rgba(244, 63, 94, 0.05); }
+[data-theme="dark"] .stat-closed { background-color: rgba(100, 116, 139, 0.05); }
 
 /* -----------------------------
    TOOLBARS & TABS

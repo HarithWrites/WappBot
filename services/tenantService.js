@@ -42,28 +42,28 @@ async function getTenantByBusinessName(businessName) {
 async function updateTenantSettings(tenantId, settings) {
     const res = await db.query(
         `UPDATE tenants
-         SET business_name = $2,
-             timezone = $3,
-             max_parallel_appointments = $4,
-             workflow_config = $5,
-             opening_hour = $6,
-             closing_hour = $7,
-             slot_duration = $8,
-             business_holidays = $9,
-             week_offs = $10
+         SET business_name = COALESCE($2, business_name),
+             timezone = COALESCE($3, timezone),
+             max_parallel_appointments = COALESCE($4, max_parallel_appointments),
+             workflow_config = COALESCE($5, workflow_config),
+             opening_hour = COALESCE($6, opening_hour),
+             closing_hour = COALESCE($7, closing_hour),
+             slot_duration = COALESCE($8, slot_duration),
+             business_holidays = COALESCE($9, business_holidays),
+             week_offs = COALESCE($10, week_offs)
          WHERE id = $1
          RETURNING *`,
         [
             tenantId,
-            settings.business_name,
-            settings.timezone,
-            settings.max_parallel_appointments,
-            settings.workflow_config || null,
-            settings.opening_hour || null,
-            settings.closing_hour || null,
-            settings.slot_duration || null,
-            settings.business_holidays || '[]',
-            settings.week_offs || '[]'
+            settings.business_name ?? null,
+            settings.timezone ?? null,
+            settings.max_parallel_appointments ?? null,
+            settings.workflow_config ?? null,
+            settings.opening_hour ?? null,
+            settings.closing_hour ?? null,
+            settings.slot_duration ?? null,
+            settings.business_holidays ?? null,
+            settings.week_offs ?? null
         ]
     );
 

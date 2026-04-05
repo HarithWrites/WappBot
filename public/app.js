@@ -411,6 +411,7 @@ async function loadPortalData(silent = false) {
     updateTenantFilterOptions();
     updateHeaderLabels();
     renderTenantOverview();
+    renderTenantSettingsList();
     customizeSingleTenantUI();
 }
 
@@ -596,11 +597,11 @@ function renderOverviewStats() {
             const rangeLabel = rangeStr === "all time" ? "Total" : rangeStr.charAt(0).toUpperCase() + rangeStr.slice(1);
 
             statsContainer.innerHTML = `
-                <div class="stat-card"><h3>Pending (${rangeLabel})</h3><p class="stat-value">${summaryCounts.pending || 0}</p></div>
-                <div class="stat-card"><h3>Waiting (${rangeLabel})</h3><p class="stat-value">${summaryCounts.waiting || 0}</p></div>
-                <div class="stat-card"><h3>Confirmed (${rangeLabel})</h3><p class="stat-value">${summaryCounts.confirmed || 0}</p></div>
-                <div class="stat-card"><h3>Rejected (${rangeLabel})</h3><p class="stat-value">${summaryCounts.rejected || 0}</p></div>
-                <div class="stat-card"><h3>Closed (${rangeLabel})</h3><p class="stat-value">${summaryCounts.closed || 0}</p></div>
+                <div class="stat-card stat-pending" data-filter="pending"><h3>Pending (${rangeLabel})</h3><p class="stat-value">${summaryCounts.pending || 0}</p></div>
+                <div class="stat-card stat-waiting" data-filter="waiting"><h3>Waiting (${rangeLabel})</h3><p class="stat-value">${summaryCounts.waiting || 0}</p></div>
+                <div class="stat-card stat-confirmed" data-filter="confirmed"><h3>Confirmed (${rangeLabel})</h3><p class="stat-value">${summaryCounts.confirmed || 0}</p></div>
+                <div class="stat-card stat-rejected" data-filter="rejected"><h3>Rejected (${rangeLabel})</h3><p class="stat-value">${summaryCounts.rejected || 0}</p></div>
+                <div class="stat-card stat-closed" data-filter="closed"><h3>Closed (${rangeLabel})</h3><p class="stat-value">${summaryCounts.closed || 0}</p></div>
             `;
             let lastUpdatedEl = document.getElementById("lastUpdatedTime");
             if (!lastUpdatedEl) {
@@ -831,7 +832,43 @@ function closeCloseModal() {
     closeModal.classList.add("hidden");
 }
 
-// ==========================================
+function renderTenantSettingsList() {
+    const list = document.getElementById("tenantList");
+    if (!list) return;
+
+    list.innerHTML = "";
+
+    // Hide sidebar if only one tenant or in tenant-scoped view
+    const sidebar = list.closest(".tenant-directory");
+    if (portalData.scope !== "global") {
+        if (sidebar) sidebar.style.display = "none";
+        return;
+    }
+
+    if (sidebar) sidebar.style.display = "block";
+
+    portalData.tenants.forEach((tenant) => {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = "tenant-directory-item";
+        if (String(tenant.id) === String(selectedTenantId)) item.classList.add("active");
+
+        item.innerHTML = `
+            <div class="tenant-title">${getTenantLabel(tenant)}</div>
+            <div class="tenant-id">ID ${tenant.id}</div>
+        `;
+
+        item.onclick = async () => {
+            selectedTenantId = tenant.id;
+            document.querySelectorAll(".tenant-directory-item").forEach(el => el.classList.remove("active"));
+            item.classList.add("active");
+            document.getElementById("tenantEditorTitle").textContent = getTenantLabel(tenant);
+            await loadSettings();
+        };
+
+        list.appendChild(item);
+    });
+}
 // 8. SETTINGS MANAGEMENT
 // ==========================================
 let currentSettingsTab = "general";
@@ -896,6 +933,10 @@ function renderSettings(data) {
     renderProvidersSettingsTable(providers, services);
 
     // 5. Workflow Tab
+    const workflowTab = document.querySelector(".settings-tabs [data-tab='workflow']");
+    if (workflowTab) {
+        workflowTab.style.display = portalData.scope === "global" ? "inline-block" : "none";
+    }
     document.getElementById("workflowConfigInput").value = JSON.stringify(tenant.workflow_config || {}, null, 2);
 }
 
@@ -1177,21 +1218,35 @@ document.getElementById("clearButton").addEventListener("click", async () => {
     await loadBookings();
 });
 
-// Use event delegation for stat cards to handle dynamically created elements
+// // Use event delegation for stat cards to handle dynamically created elements
 document.body.addEventListener("click", async (event) => {
     const card = event.target.closest('.stat-card');
-    // Only act on global-view cards that have a data-range attribute
-    if (!card || !card.dataset.range) return;
+    if (!card) return;
 
-    // This logic is for the global overview cards to switch date ranges
-    currentRange = card.dataset.range;
-    currentFilter = "all";
-    dateInput.value = "";
-    if (dateInput.type === "date") {
-        dateInput.type = "text";
+    let changed = false;
+
+    // Handle range filter (global view)
+    if (card.dataset.range) {
+        currentRange = card.dataset.range;
+        currentFilter = "all";
+        dateInput.value = "";
+        if (dateInput.type === "date") {
+            dateInput.type = "text";
+        }
+        changed = true;
     }
+
+    // Handle status filter (tenant view)
+    if (card.dataset.filter) {
+        currentFilter = card.dataset.filter;
+        changed = true;
+    }
+
+    if (!changed) return;
+
+    // Trigger navigation and filter update
     document.querySelectorAll(".pill").forEach((item) => {
-        item.classList.toggle("active", item.dataset.filter === "all")
+        item.classList.toggle("active", item.dataset.filter === currentFilter);
     });
 
     setActiveScreen("bookingsScreen");
