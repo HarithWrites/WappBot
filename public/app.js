@@ -24,6 +24,9 @@ let bookingsResponse = {
     pageSize
 };
 let closeBookingMeta = null;
+let currentSettingsTab = "general";
+let currentSettingHolidays = [];
+let workflowStepsData = [];
 
 // ==========================================
 // 2. DOM ELEMENTS
@@ -35,14 +38,14 @@ const tenantInput = document.getElementById("tenantId");
 const loginStatus = document.getElementById("loginStatus");
 const logoutButton = document.getElementById("logoutButton");
 const tenantName = document.getElementById("tenantName");
-const connectionStatus = document.getElementById("connectionStatus");
-const overviewStatus = document.getElementById("overviewStatus");
+const connectionStatusText = document.getElementById("connectionStatusText");
+const connectionStatusDot = document.getElementById("connectionStatusDot");
 const homeConnectionLabel = document.getElementById("homeConnectionLabel");
 const tenantOverviewList = document.getElementById("tenantOverviewList");
 const overviewTenantCount = document.getElementById("overviewTenantCount");
 const screenButtons = document.querySelectorAll("[data-screen-target]");
 const screens = document.querySelectorAll(".workspace-screen");
-const refreshOverviewButton = document.getElementById("refreshOverviewButton");
+const refreshGlobalButton = document.getElementById("refreshGlobalButton");
 const refreshBookingsButton = document.getElementById("refreshBookingsButton");
 const bookingsTableBody = document.getElementById("bookingsTableBody");
 const dashboardEmpty = document.getElementById("dashboardEmpty");
@@ -411,8 +414,13 @@ async function loadPortalData(silent = false) {
     updateTenantFilterOptions();
     updateHeaderLabels();
     renderTenantOverview();
-    renderTenantSettingsList();
+    renderTenantLists();
     customizeSingleTenantUI();
+}
+
+function renderTenantLists() {
+    renderTenantSettingsList("tenantListWorkflow");
+    renderTenantSettingsList("tenantListSettings");
 }
 
 async function refreshSummaryCounts() {
@@ -487,9 +495,9 @@ async function refreshPortal(silent = false) {
 
         await loadBookings(silent);
         if (!silent) {
-            // n. Dynamic text adjustment
             overviewStatus.textContent = portalData.scope === "global" ? `Portal ready. Managing ${portalData.tenants.length} tenant(s).` : `Portal ready.`;
-            connectionStatus.textContent = "Live updates connected.";
+            connectionStatusText.textContent = "Live connected";
+            connectionStatusDot.className = "status-dot connected";
             homeConnectionLabel.textContent = "Connected";
         }
         connectStream(adminToken);
@@ -497,7 +505,8 @@ async function refreshPortal(silent = false) {
         if (err.message !== "Unauthorized") {
             console.error("refreshPortal error:", err);
             overviewStatus.textContent = "Could not load portal data right now.";
-            connectionStatus.textContent = "Live connection unavailable.";
+            connectionStatusText.textContent = "Disconnected";
+            connectionStatusDot.className = "status-dot";
             homeConnectionLabel.textContent = "Error";
         }
     }
@@ -516,7 +525,8 @@ function connectStream(token) {
     stream = new EventSource(`/admin/bookings/stream?token=${encodeURIComponent(token)}`);
 
     stream.onopen = () => {
-        connectionStatus.textContent = "Live updates connected.";
+        connectionStatusText.textContent = "Live connected";
+        connectionStatusDot.className = "status-dot connected";
         homeConnectionLabel.textContent = "Connected";
     };
 
@@ -540,7 +550,8 @@ function connectStream(token) {
     };
 
     stream.onerror = () => {
-        connectionStatus.textContent = "Live connection interrupted. Retrying...";
+        connectionStatusText.textContent = "Retrying...";
+        connectionStatusDot.className = "status-dot retrying";
         homeConnectionLabel.textContent = "Retrying";
     };
 }
@@ -667,10 +678,19 @@ function getActionMarkup(booking) {
     const status = booking.status || "pending";
     const tenantId = booking.tenant_id;
 
+    const icons = {
+        approve: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"></path></svg>`,
+        waiting: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`,
+        reject: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
+        close: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 8v13H3V8"></path><path d="M1 3h22v5H1z"></path><path d="M10 12h4"></path></svg>`
+    };
+
     if (status === "confirmed") {
         return `
             <div class="action-stack">
-                <button class="secondary" data-action="close" data-id="${booking.id}" data-tenant-id="${tenantId}" type="button">Close</button>
+                <button class="action-btn close" data-action="close" data-id="${booking.id}" data-tenant-id="${tenantId}" title="Close Booking">
+                    ${icons.close}
+                </button>
             </div>
         `;
     }
@@ -678,9 +698,15 @@ function getActionMarkup(booking) {
     if (status === "pending") {
         return `
             <div class="action-stack">
-                <button class="approve" data-action="approve" data-id="${booking.id}" data-tenant-id="${tenantId}" type="button">Confirm</button>
-                <button class="waiting" data-action="waiting" data-id="${booking.id}" data-tenant-id="${tenantId}" type="button">Waiting</button>
-                <button class="reject" data-action="reject" data-id="${booking.id}" data-tenant-id="${tenantId}" type="button">Reject</button>
+                <button class="action-btn approve" data-action="approve" data-id="${booking.id}" data-tenant-id="${tenantId}" title="Confirm">
+                    ${icons.approve}
+                </button>
+                <button class="action-btn waiting" data-action="waiting" data-id="${booking.id}" data-tenant-id="${tenantId}" title="Set to Waiting">
+                    ${icons.waiting}
+                </button>
+                <button class="action-btn reject" data-action="reject" data-id="${booking.id}" data-tenant-id="${tenantId}" title="Reject">
+                    ${icons.reject}
+                </button>
             </div>
         `;
     }
@@ -688,8 +714,12 @@ function getActionMarkup(booking) {
     if (status === "waiting") {
         return `
             <div class="action-stack">
-                <button class="approve" data-action="approve" data-id="${booking.id}" data-tenant-id="${tenantId}" type="button">Confirm</button>
-                <button class="reject" data-action="reject" data-id="${booking.id}" data-tenant-id="${tenantId}" type="button">Reject</button>
+                <button class="action-btn approve" data-action="approve" data-id="${booking.id}" data-tenant-id="${tenantId}" title="Confirm">
+                    ${icons.approve}
+                </button>
+                <button class="action-btn reject" data-action="reject" data-id="${booking.id}" data-tenant-id="${tenantId}" title="Reject">
+                    ${icons.reject}
+                </button>
             </div>
         `;
     }
@@ -832,8 +862,8 @@ function closeCloseModal() {
     closeModal.classList.add("hidden");
 }
 
-function renderTenantSettingsList() {
-    const list = document.getElementById("tenantList");
+function renderTenantSettingsList(containerId) {
+    const list = document.getElementById(containerId);
     if (!list) return;
 
     list.innerHTML = "";
@@ -861,36 +891,26 @@ function renderTenantSettingsList() {
         item.onclick = async () => {
             selectedTenantId = tenant.id;
             document.querySelectorAll(".tenant-directory-item").forEach(el => el.classList.remove("active"));
-            item.classList.add("active");
-            document.getElementById("tenantEditorTitle").textContent = getTenantLabel(tenant);
-            await loadSettings();
+            
+            // Sync all lists
+            document.querySelectorAll(`[data-tenant-id="${tenant.id}"]`).forEach(el => el.classList.add('active'));
+            
+            if (currentScreen === "workflowScreen") {
+                document.getElementById("workflowEditorTitle").textContent = getTenantLabel(tenant);
+                await loadWorkflowData();
+            } else if (currentScreen === "settingsScreen") {
+                await loadSettings();
+            }
         };
+        item.dataset.tenantId = tenant.id;
 
         list.appendChild(item);
     });
 }
 // 8. SETTINGS MANAGEMENT
 // ==========================================
-let currentSettingsTab = "general";
-let currentSettingHolidays = [];
 
-function initSettingsTabs() {
-    const tabButtons = document.querySelectorAll(".settings-tabs .pill");
-    tabButtons.forEach(btn => {
-        btn.addEventListener("click", () => {
-            currentSettingsTab = btn.dataset.tab;
-            tabButtons.forEach(b => b.classList.toggle("active", b === btn));
-            document.querySelectorAll(".settings-tab-pane").forEach(pane => {
-                pane.classList.toggle("hidden", pane.id !== `tab-${currentSettingsTab}`);
-            });
-            
-            // Trigger workflow load if tab is selected
-            if (currentSettingsTab === "workflow" && portalData.scope === "global") {
-                loadWorkflowData();
-            }
-        });
-    });
-}
+
 
 async function loadSettings() {
     const selectedTenant = getSelectedTenant();
@@ -911,7 +931,6 @@ function renderSettings(data) {
     const { tenant, services, providers } = data;
     
     // 1. General Tab
-    document.getElementById("tenantIdDisplay").value = tenant.id;
     document.getElementById("businessNameInput").value = tenant.business_name || "";
     document.getElementById("timezoneInput").value = tenant.timezone || "UTC";
     document.getElementById("parallelInput").value = tenant.max_parallel_appointments || 1;
@@ -936,19 +955,9 @@ function renderSettings(data) {
 
     // 4. Providers Tab
     renderProvidersSettingsTable(providers, services);
-
-    // 5. Workflow Tab
-    const workflowTab = document.querySelector(".settings-tabs [data-tab='workflow']");
-    if (workflowTab) {
-        const isMaster = portalData.scope === "global";
-        workflowTab.style.display = isMaster ? "inline-block" : "none";
-        if (isMaster && currentSettingsTab === "workflow") {
-            loadWorkflowData();
-        }
-    }
 }
 
-let workflowStepsData = [];
+
 
 async function loadWorkflowData() {
     const selectedTenant = getSelectedTenant();
@@ -1307,7 +1316,16 @@ async function saveProvider(id, data) {
 }
 
 function initSettingsEvents() {
-    initSettingsTabs();
+    const tabButtons = document.querySelectorAll(".settings-tabs .pill");
+    tabButtons.forEach(btn => {
+        btn.addEventListener("click", () => {
+            currentSettingsTab = btn.dataset.tab;
+            tabButtons.forEach(b => b.classList.toggle("active", b === btn));
+            document.querySelectorAll(".settings-tab-pane").forEach(pane => {
+                pane.classList.toggle("hidden", pane.id !== `tab-${currentSettingsTab}`);
+            });
+        });
+    });
 
     // General Form
     document.getElementById("generalSettingsForm").addEventListener("submit", (e) => {
@@ -1400,13 +1418,15 @@ screenButtons.forEach((button) => {
     button.addEventListener("click", () => {
         const target = button.dataset.screenTarget;
         setActiveScreen(target);
-        if (target === "tenantControlsScreen") {
+        if (target === "workflowScreen") {
+            loadWorkflowData();
+        } else if (target === "settingsScreen") {
             loadSettings();
         }
     });
 });
 
-refreshOverviewButton.addEventListener("click", refreshPortal);
+refreshGlobalButton.addEventListener("click", refreshPortal);
 refreshBookingsButton.addEventListener("click", loadBookings);
 
 let searchTimeout = null;
@@ -1538,14 +1558,14 @@ bookingsTableBody.addEventListener("click", async (event) => {
 
     // Disable button to prevent double-clicks
     actionButton.disabled = true;
-    const originalText = actionButton.textContent;
-    actionButton.textContent = "...";
+    const originalHtml = actionButton.innerHTML;
+    actionButton.innerHTML = `<svg class="spin" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"></path></svg>`;
 
     try {
         await updateBookingStatus(bookingId, action, { tenantId });
     } finally {
         actionButton.disabled = false;
-        actionButton.textContent = originalText;
+        actionButton.innerHTML = originalHtml;
     }
 });
 

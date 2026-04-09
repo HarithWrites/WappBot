@@ -40,49 +40,50 @@
             <header class="top-nav-header">
                 <div class="nav-top-row">
                     <h1 id="tenantName">WappBot Control Center</h1>
-                    <div class="nav-actions">
-                        <span id="connectionStatus" class="status-badge">Disconnected</span>
-                        <button id="logoutButton" class="secondary">Sign Out</button>
+                        <div class="header-main-actions">
+                            <div class="connection-pill">
+                                <span id="connectionStatusDot" class="status-dot"></span>
+                                <span id="connectionStatusText">Disconnected</span>
+                            </div>
+                            <button id="refreshGlobalButton" class="icon-button" title="Refresh Portal">
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"></path></svg>
+                            </button>
+                            <button id="logoutButton" class="icon-button logout" title="Sign Out">
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"></path></svg>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
                 <nav class="nav-tabs">
                     <button class="nav-tab active" data-screen-target="overviewScreen">Overview</button>
                     <button class="nav-tab" data-screen-target="bookingsScreen">Bookings</button>
-                    <button class="nav-tab" data-screen-target="tenantControlsScreen">Settings</button>
+                    <button class="nav-tab" data-screen-target="workflowScreen">Workflow</button>
+                    <button class="nav-tab" data-screen-target="settingsScreen">Settings</button>
                 </nav>
             </header>
 
             <main class="workspace">
                 <section id="overviewScreen" class="workspace-screen">
-                    <header class="workspace-header">
-                        <div>
-                            <p class="section-label">Overview</p>
-                            <h2>Operations snapshot</h2>
-                            <p class="hero-copy">Monitor all booking queues, tenant coverage, and live portal status at a glance.</p>
+                    <div class="overview-stats-container">
+                        <div class="stats-grid interactive-stats">
+                            <article class="stat-card" data-range="today">
+                                <span id="statToday">0</span>
+                                <label>Today</label>
+                            </article>
+                            <article class="stat-card" data-range="this_week">
+                                <span id="statThisWeek">0</span>
+                                <label>This week</label>
+                            </article>
+                            <article class="stat-card" data-range="this_month">
+                                <span id="statThisMonth">0</span>
+                                <label>This month</label>
+                            </article>
+                            <article class="stat-card" data-range="all">
+                                <span id="statTotal">0</span>
+                                <label>Total</label>
+                            </article>
                         </div>
-                        <div class="header-actions">
-                            <button class="secondary" id="refreshOverviewButton" type="button">Refresh</button>
-                        </div>
-                    </header>
-
-                    <div class="stats-grid interactive-stats">
-                        <article class="stat-card" data-range="today">
-                            <span id="statToday">0</span>
-                            <label>Today</label>
-                        </article>
-                        <article class="stat-card" data-range="this_week">
-                            <span id="statThisWeek">0</span>
-                            <label>This week</label>
-                        </article>
-                        <article class="stat-card" data-range="this_month">
-                            <span id="statThisMonth">0</span>
-                            <label>This month</label>
-                        </article>
-                        <article class="stat-card" data-range="all">
-                            <span id="statTotal">0</span>
-                            <label>Total Till Now</label>
-                        </article>
                     </div>
 
                     <div class="overview-grid">
@@ -179,12 +180,12 @@
                     </div>
                 </section>
 
-                <section id="tenantControlsScreen" class="workspace-screen hidden">
+                <section id="workflowScreen" class="workspace-screen hidden">
                     <header class="workspace-header">
                         <div>
-                            <p class="section-label">Tenant Controls</p>
-                            <h2>Workflow and tenant management</h2>
-                            <p class="hero-copy">View, add, update, and remove tenant questions and answers from a single portal.</p>
+                            <p class="section-label">Workflow</p>
+                            <h2>Interactive Chatbot Logic</h2>
+                            <p class="hero-copy">Configure the questions, options, and flow of your automated assistant.</p>
                         </div>
                     </header>
 
@@ -196,21 +197,52 @@
                                     <h3>Directory</h3>
                                 </div>
                             </div>
-                            <div id="tenantList" class="tenant-list"></div>
+                            <div id="tenantListWorkflow" class="tenant-list"></div>
+                        </aside>
+
+                        <section class="tenant-editor panel-card">
+                            <div id="workflowBuilderContainer" class="workflow-builder-container">
+                                <div class="builder-header">
+                                    <h3 id="workflowEditorTitle">Choose a tenant</h3>
+                                    <button id="addNewStepButton" class="primary compact-btn" type="button">+ Add Step</button>
+                                </div>
+
+                                <div id="workflowStepsList" class="workflow-steps-list">
+                                    <div class="empty-state">
+                                        <p>Select a tenant to manage workflow steps.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                </section>
+
+                <section id="settingsScreen" class="workspace-screen hidden">
+                    <header class="workspace-header">
+                        <div>
+                            <p class="section-label">Settings</p>
+                            <h2>System Configuration</h2>
+                            <p class="hero-copy">Manage business hours, services, and staff availability.</p>
+                        </div>
+                    </header>
+
+                    <div class="tenant-controls-layout">
+                        <aside class="tenant-directory panel-card">
+                            <div class="panel-header">
+                                <div>
+                                    <p class="section-label">Tenants</p>
+                                    <h3>Directory</h3>
+                                </div>
+                            </div>
+                            <div id="tenantListSettings" class="tenant-list"></div>
                         </aside>
 
                         <section class="tenant-editor panel-card">
                             <div class="panel-header">
-                                <div>
-                                    <p class="section-label">Settings</p>
-                                    <h3 id="tenantEditorTitle">Choose a tenant</h3>
-                                </div>
                                 <div class="settings-tabs">
                                     <button class="pill active" data-tab="general">General</button>
                                     <button class="pill" data-tab="schedule">Schedule & Holidays</button>
-                                    <button class="pill" data-tab="services">Services</button>
-                                    <button class="pill" data-tab="providers">Providers</button>
-                                    <button class="pill" data-tab="workflow">Workflow (Q&A)</button>
+                                    <button class="pill" data-tab="services">Services & Providers</button>
                                 </div>
                             </div>
 
@@ -230,10 +262,6 @@
                                             <label>
                                                 <span>Max Parallel Appointments</span>
                                                 <input type="number" id="parallelInput" min="1" step="1">
-                                            </label>
-                                            <label>
-                                                <span>Tenant ID</span>
-                                                <input type="text" id="tenantIdDisplay" disabled>
                                             </label>
                                         </div>
                                         <div class="form-actions">
@@ -294,7 +322,7 @@
                                 <div id="tab-services" class="settings-tab-pane hidden">
                                     <div class="mini-panel">
                                         <div class="mini-panel-header">
-                                            <h4>Manage Services</h4>
+                                            <h4>Services</h4>
                                             <button type="button" id="addNewServiceBtn" class="primary compact-btn">+ Add Service</button>
                                         </div>
                                         <div class="table-shell">
@@ -311,13 +339,10 @@
                                             </table>
                                         </div>
                                     </div>
-                                </div>
 
-                                <!-- TAB: PROVIDERS -->
-                                <div id="tab-providers" class="settings-tab-pane hidden">
-                                    <div class="mini-panel">
+                                    <div class="mini-panel" style="margin-top: 24px;">
                                         <div class="mini-panel-header">
-                                            <h4>Manage Service Providers</h4>
+                                            <h4>Service Providers</h4>
                                             <button type="button" id="addNewProviderBtn" class="primary compact-btn">+ Add Provider</button>
                                         </div>
                                         <div class="table-shell">
@@ -335,29 +360,6 @@
                                             </table>
                                         </div>
                                     </div>
-                                </div>
-
-                                <!-- TAB: WORKFLOW -->
-                                <div id="tab-workflow" class="settings-tab-pane hidden">
-                                    <div class="workflow-editor-container">
-                                        <div class="mini-panel-header">
-                                            <h4>Workflow Configuration (JSON)</h4>
-                                            <p class="hero-copy">Edit the underlying chatbot logic steps directly.</p>
-                                        </div>
-                                        <textarea id="workflowConfigInput" class="code-editor" spellcheck="false"></textarea>
-                                        <div class="form-actions">
-                                            <button type="button" id="saveWorkflowBtn" class="primary">Save Workflow Updates</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </section>
-
-                            <div class="workflow-builder-container">
-                                <div class="builder-header">
-                                    <h3>Step Configuration</h3>
-                                    <p class="status-note">Manage your chatbot's questions and logical flow below.</p>
-                                    <button id="addNewStepButton" class="secondary" type="button">+ Add New Step</button>
                                 </div>
 
                                 <div id="workflowStepsList" class="workflow-steps-list">
