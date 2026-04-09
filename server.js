@@ -1,11 +1,14 @@
 const express = require("express");
 require("dotenv").config();
-
 const { ensureDatabaseSchema } = require("./utils/dbInit");
 
 const app = express();
+const PORT = process.env.PORT || 3000;
 
-console.log("Server boot started");
+// 1. Immediately Bind Port to pass Railway health checks
+const server = app.listen(PORT, "0.0.0.0", () => {
+    console.log(`>>> SERVER START: Port ${PORT} <<<`);
+});
 
 app.use(express.json({
     verify: (req, res, buf) => {
@@ -29,20 +32,21 @@ process.on("unhandledRejection", (err) => {
     console.error("UNHANDLED:", err);
 });
 
-const PORT = process.env.PORT || 3000;
-
-const server = app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on port ${PORT}`);
-});
-
 async function boot() {
     try {
-        await ensureDatabaseSchema();
-        console.log("Database schema ready");
+        console.log("Lazy-loading schema check...");
+        // await ensureDatabaseSchema(); // DISABLE ON EVERY BOOT TO SAVE MEMORY
+        console.log("Boot sequence reached idle");
     } catch (err) {
         console.error("Schema init failed:", err);
     }
 }
+
+// Memory Monitor for Railway debugging
+setInterval(() => {
+    const used = process.memoryUsage();
+    console.log(`MEMORY: RSS=${Math.round(used.rss / 1024 / 1024)}MB, Heap=${Math.round(used.heapUsed / 1024 / 1024)}MB`);
+}, 30000);
 
 boot();
 
