@@ -31,18 +31,33 @@ process.on("unhandledRejection", (err) => {
 
 const PORT = process.env.PORT || 3000;
 
-async function startServer() {
+const server = app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on port ${PORT}`);
+});
+
+async function boot() {
     try {
         await ensureDatabaseSchema();
         console.log("Database schema ready");
-
-        app.listen(PORT, "0.0.0.0", () => {
-            console.log(`Server running on port ${PORT}`);
-        });
     } catch (err) {
-        console.error("Startup failed:", err);
-        process.exit(1);
+        console.error("Schema init failed:", err);
     }
 }
 
-startServer();
+boot();
+
+process.on("SIGTERM", () => {
+    console.log("SIGTERM received, shutting down...");
+    server.close(() => {
+        const db = require("./db");
+        db.end().then(() => {
+            console.log("DB pool closed");
+            process.exit(0);
+        });
+    });
+});
+
+process.on("SIGINT", () => {
+    console.log("SIGINT received");
+    process.exit(0);
+});

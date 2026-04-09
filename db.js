@@ -5,9 +5,9 @@ const pool = new Pool({
     ssl: {
         rejectUnauthorized: false
     },
-    max: 20,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000
+    max: 10, // Reduced from 20 for platform stability
+    idleTimeoutMillis: 10000, // Faster cleanup
+    connectionTimeoutMillis: 5000
 });
 
 // Run a cheap query so we do not leak a checked-out client during boot.
