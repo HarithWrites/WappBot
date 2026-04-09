@@ -46,6 +46,9 @@ function extractIncomingContent(message) {
 }
 
 exports.handleWebhook = async (req, res) => {
+    console.log(">>> WEBHOOK RECEIVED <<<");
+    console.log("Headers:", JSON.stringify(req.headers));
+    console.log("Body:", JSON.stringify(req.body));
     try {
         const value = req.body?.entry?.[0]?.changes?.[0]?.value;
 
@@ -137,12 +140,14 @@ exports.handleWebhook = async (req, res) => {
         // ===============================
         // PROCESS BUSINESS LOGIC
         // ===============================
+        console.log("Calling processMessage for:", phone);
         await processMessage({
             tenant,
             phone,
             text,
             payload
         });
+        console.log("processMessage completed for:", phone);
 
         // ===============================
         // SUCCESS RESPONSE

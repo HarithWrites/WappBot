@@ -37,7 +37,9 @@ async function verifySignature(req, res, next) {
         console.error("Signature validation error:", err);
     }
 
-    console.error("Signature mismatch");
+    console.error(`Signature mismatch for tenant: ${businessName}`);
+    console.error(`Expected: ${expectedSignature}`);
+    console.error(`Received: ${signature}`);
     return res.sendStatus(403);
 }
 
