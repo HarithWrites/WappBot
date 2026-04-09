@@ -322,7 +322,7 @@ async function promptStep({ tenant, phone, tenantId, workflow, stepId, context }
             return sendListMessage({
                 tenant,
                 to: phone,
-                text: buildPromptText(step.text, "Please select a service:", context),
+                body: buildPromptText(step.text, "Please select a service:", context),
                 buttonText: "Services",
                 sections: [{
                     title: "Available Services",
@@ -370,7 +370,7 @@ async function promptStep({ tenant, phone, tenantId, workflow, stepId, context }
             return sendListMessage({
                 tenant,
                 to: phone,
-                text: buildPromptText(step.text, "Please select a provider:", context),
+                body: buildPromptText(step.text, "Please select a provider:", context),
                 buttonText: "Providers",
                 sections: [{
                     title: "Available Providers",
@@ -392,7 +392,7 @@ async function promptStep({ tenant, phone, tenantId, workflow, stepId, context }
             return sendListMessage({
                 tenant,
                 to: phone,
-                text: buildPromptText(step.text, "Please select a date:", context),
+                body: buildPromptText(step.text, "Please select a date:", context),
                 buttonText: "Dates",
                 sections: [{
                     title: "Suggested Dates",
