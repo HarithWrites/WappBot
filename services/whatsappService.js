@@ -1,8 +1,16 @@
 const axios = require("axios");
 
 async function sendPayload({ tenant, payload }) {
+    console.log("WhatsApp sendPayload", {
+        tenantId: tenant?.id,
+        phoneNumberId: tenant?.phone_number_id,
+        to: payload?.to,
+        type: payload?.type,
+        payloadSummary: JSON.stringify(payload).slice(0, 1000)
+    });
+
     try {
-        await axios.post(
+        const response = await axios.post(
             `https://graph.facebook.com/v19.0/${tenant.phone_number_id}/messages`,
             payload,
             {
@@ -12,8 +20,15 @@ async function sendPayload({ tenant, payload }) {
                 }
             }
         );
+
+        console.log("WhatsApp sendPayload success", {
+            status: response.status,
+            data: response.data
+        });
+        return response.data;
     } catch (err) {
         console.error("WhatsApp error:", err.response?.data || err.message);
+        throw err;
     }
 }
 

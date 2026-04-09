@@ -323,7 +323,7 @@ async function promptStep({ tenant, phone, tenantId, workflow, stepId, context }
                 tenant,
                 to: phone,
                 text: buildPromptText(step.text, "Please select a service:", context),
-                button: "Services",
+                buttonText: "Services",
                 sections: [{
                     title: "Available Services",
                     rows: activeServices.map((s) => ({
@@ -371,7 +371,7 @@ async function promptStep({ tenant, phone, tenantId, workflow, stepId, context }
                 tenant,
                 to: phone,
                 text: buildPromptText(step.text, "Please select a provider:", context),
-                button: "Providers",
+                buttonText: "Providers",
                 sections: [{
                     title: "Available Providers",
                     rows: activeProviders.map((p) => ({
@@ -393,7 +393,7 @@ async function promptStep({ tenant, phone, tenantId, workflow, stepId, context }
                 tenant,
                 to: phone,
                 text: buildPromptText(step.text, "Please select a date:", context),
-                button: "Dates",
+                buttonText: "Dates",
                 sections: [{
                     title: "Suggested Dates",
                     rows: [
@@ -607,7 +607,8 @@ async function processMessage({ tenant, phone, text, payload }) {
 
     console.log("INPUT:", { phone, text: normalizedText, payload: normalizedPayload });
 
-    if (input === "hi" || input === "hello" || input === "restart" || input === "start") {
+    const greetingRegex = /^(hi|hello|hey|start|restart)\b/;
+    if (greetingRegex.test(normalizedText) || normalizedPayload === "restart" || normalizedPayload === "start") {
         return startWorkflow({ tenant, phone, tenantId, workflow });
     }
 
