@@ -598,11 +598,11 @@ async function processMessage({ tenant, phone, text, payload }) {
     const workflow = await getWorkflowDefinition(tenant);
     const normalizedText = (text || "").trim().toLowerCase();
     const normalizedPayload = (payload || "").trim().toLowerCase();
-    const input = normalizedPayload || normalizedText;
+    const input = (normalizedPayload || normalizedText || "").trim().toLowerCase();
 
     console.log("INPUT:", { phone, text: normalizedText, payload: normalizedPayload });
 
-    if (normalizedText === "hi" || normalizedText === "hello" || input === "restart") {
+    if (input === "hi" || input === "hello" || input === "restart" || input === "start") {
         return startWorkflow({ tenant, phone, tenantId, workflow });
     }
 

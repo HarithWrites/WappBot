@@ -12,17 +12,19 @@ function extractIncomingContent(message) {
 
     if (message.type === "text") {
         const text = message.text?.body;
-        return text ? { text: text.trim(), payload: null } : null;
+        return text && text.trim() ? { text: text.trim(), payload: null } : null;
     }
 
     if (message.type === "button") {
+        // Handle quick-reply buttons (text-only usually has payload)
         const payload = message.button?.payload || message.button?.text;
         const text = message.button?.text || payload;
-        return payload ? { text: (text || "").trim(), payload: payload.trim() } : null;
+        return (text || payload) ? { text: (text || "").trim(), payload: (payload || "").trim() } : null;
     }
 
     if (message.type === "interactive") {
         const interactive = message.interactive || {};
+        // button_reply for quick action buttons, list_reply for menu selections
         const reply = interactive.button_reply || interactive.list_reply;
 
         if (!reply?.id) {
@@ -33,6 +35,11 @@ function extractIncomingContent(message) {
             text: (reply.title || reply.id).trim(),
             payload: reply.id.trim()
         };
+    }
+
+    // Default to plain text if available (fallback)
+    if (message.text?.body) {
+        return { text: message.text.body.trim(), payload: null };
     }
 
     return null;

@@ -41,6 +41,7 @@ const tenantName = document.getElementById("tenantName");
 const connectionStatusText = document.getElementById("connectionStatusText");
 const connectionStatusDot = document.getElementById("connectionStatusDot");
 const homeConnectionLabel = document.getElementById("homeConnectionLabel");
+const overviewStatus = document.getElementById("overviewStatus");
 const tenantOverviewList = document.getElementById("tenantOverviewList");
 const overviewTenantCount = document.getElementById("overviewTenantCount");
 const screenButtons = document.querySelectorAll("[data-screen-target]");
