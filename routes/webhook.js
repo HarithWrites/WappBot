@@ -8,7 +8,18 @@ async function verifySignature(req, res, next) {
     const signature = req.headers["x-hub-signature-256"];
     const businessName = req.params.businessName;
 
-    if (!businessName) return res.sendStatus(400);
+    console.log("Webhook verify request", {
+        method: req.method,
+        path: req.originalUrl,
+        businessName,
+        signaturePresent: Boolean(signature),
+        rawBodyLength: req.rawBody?.length || 0
+    });
+
+    if (!businessName) {
+        console.warn("Webhook verify request missing businessName", { path: req.originalUrl });
+        return res.sendStatus(400);
+    }
 
     const tenant = await getTenantByBusinessName(businessName);
     if (!tenant) return res.sendStatus(404);
@@ -44,6 +55,14 @@ async function verifySignature(req, res, next) {
 }
 
 router.post("/:businessName", verifySignature, controller.handleWebhook);
+
+router.post("/", (req, res) => {
+    console.warn("Webhook POST hit without businessName path segment", {
+        path: req.originalUrl,
+        bodySummary: JSON.stringify(req.body || {}).slice(0, 500)
+    });
+    return res.status(400).send("Webhook URL must include tenant businessName, e.g. /webhook/:businessName");
+});
 
 router.get("/:businessName", async (req, res) => {
     const businessName = req.params.businessName;

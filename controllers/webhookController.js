@@ -46,9 +46,14 @@ function extractIncomingContent(message) {
 }
 
 exports.handleWebhook = async (req, res) => {
-    console.log(">>> WEBHOOK RECEIVED <<<");
-    console.log("Headers:", JSON.stringify(req.headers));
-    console.log("Body:", JSON.stringify(req.body));
+    console.log(">>> WEBHOOK RECEIVED <<<", {
+        path: req.originalUrl,
+        headers: {
+            host: req.headers.host,
+            "x-hub-signature-256": !!req.headers["x-hub-signature-256"]
+        },
+        bodySummary: JSON.stringify(req.body).slice(0, 1000)
+    });
     try {
         const value = req.body?.entry?.[0]?.changes?.[0]?.value;
 
@@ -66,6 +71,7 @@ exports.handleWebhook = async (req, res) => {
 
         // Ignore if no messages
         if (!value.messages || !Array.isArray(value.messages)) {
+            console.warn("Webhook ignored: no messages array", { value });
             return res.sendStatus(200);
         }
 
@@ -82,13 +88,17 @@ exports.handleWebhook = async (req, res) => {
         const messageContent = extractIncomingContent(message);
 
         if (!messageContent) {
+            console.warn("Webhook ignored: no content extracted", { message });
             return res.sendStatus(200);
         }
 
         const text = messageContent.text.trim().toLowerCase();
         const payload = messageContent.payload?.trim().toLowerCase() || null;
 
+        console.log("Extracted message content", { text, payload, type: message.type });
+
         if (!text) {
+            console.warn("Webhook ignored: empty text after extraction", { messageContent });
             return res.sendStatus(200);
         }
 

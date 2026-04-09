@@ -35,8 +35,8 @@ process.on("unhandledRejection", (err) => {
 async function boot() {
     try {
         console.log("Lazy-loading schema check...");
-        // await ensureDatabaseSchema(); // DISABLE ON EVERY BOOT TO SAVE MEMORY
-        console.log("Boot sequence reached idle");
+        await ensureDatabaseSchema();
+        console.log("Schema check completed successfully");
     } catch (err) {
         console.error("Schema init failed:", err);
     }

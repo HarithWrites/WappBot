@@ -605,10 +605,10 @@ async function processMessage({ tenant, phone, text, payload }) {
     const normalizedPayload = (payload || "").trim().toLowerCase();
     const input = (normalizedPayload || normalizedText || "").trim().toLowerCase();
 
-    console.log("INPUT:", { phone, text: normalizedText, payload: normalizedPayload });
+    console.log("INPUT:", { phone, text: normalizedText, payload: normalizedPayload, input });
 
     const greetingRegex = /^(hi|hello|hey|start|restart)\b/;
-    if (greetingRegex.test(normalizedText) || normalizedPayload === "restart" || normalizedPayload === "start") {
+    if (greetingRegex.test(normalizedText) || greetingRegex.test(normalizedPayload)) {
         return startWorkflow({ tenant, phone, tenantId, workflow });
     }
 
