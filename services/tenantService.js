@@ -56,7 +56,9 @@ async function updateTenantSettings(tenantId, settings) {
              closing_hour = COALESCE($7, closing_hour),
              slot_duration = COALESCE($8, slot_duration),
              business_holidays = COALESCE($9, business_holidays),
-             week_offs = COALESCE($10, week_offs)
+             week_offs = COALESCE($10, week_offs),
+             app_secret = COALESCE($11, app_secret),
+             webhook_verify_token = COALESCE($12, webhook_verify_token)
          WHERE id = $1
          RETURNING *`,
         [
@@ -69,7 +71,9 @@ async function updateTenantSettings(tenantId, settings) {
             settings.closing_hour ?? null,
             settings.slot_duration ?? null,
             settings.business_holidays ?? null,
-            settings.week_offs ?? null
+            settings.week_offs ?? null,
+            settings.app_secret ?? null,
+            settings.webhook_verify_token ?? null
         ]
     );
 

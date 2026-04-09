@@ -22,26 +22,41 @@ async function verifySignature(req, res, next) {
     }
 
     const tenant = await getTenantByBusinessName(businessName);
-    if (!tenant) return res.sendStatus(404);
+    if (!tenant) {
+        console.error(`Tenant "${businessName}" not found in database`);
+        return res.sendStatus(404);
+    }
+
+    console.log(`Found tenant "${businessName}" with ID ${tenant.id}, app_secret present: ${Boolean(tenant.app_secret)}`);
 
     const appSecret = tenant.app_secret;
     if (!appSecret) {
-        console.warn(`Tenant "${businessName}" missing app_secret! Blocking payload for security.`);
+        console.error(`Tenant "${businessName}" missing app_secret! Please set it in the admin panel.`);
         return res.sendStatus(403);
     }
 
     if (!signature || !req.rawBody) {
-        console.error("Missing signature or rawBody");
+        console.error("Missing signature or rawBody", {
+            signaturePresent: Boolean(signature),
+            rawBodyPresent: Boolean(req.rawBody)
+        });
         return res.sendStatus(403);
     }
 
     const expectedSignature = "sha256=" + crypto.createHmac("sha256", appSecret).update(req.rawBody).digest("hex");
 
+    console.log("Signature verification", {
+        receivedSignature: signature,
+        expectedSignature: expectedSignature,
+        signaturesMatch: signature === expectedSignature
+    });
+
     try {
         const expectedBuffer = Buffer.from(expectedSignature);
         const signatureBuffer = Buffer.from(signature);
         if (expectedBuffer.length === signatureBuffer.length && crypto.timingSafeEqual(expectedBuffer, signatureBuffer)) {
-            req.tenant = tenant; 
+            req.tenant = tenant;
+            console.log("Signature verification passed, proceeding to webhook handler");
             return next();
         }
     } catch (err) {
@@ -49,8 +64,6 @@ async function verifySignature(req, res, next) {
     }
 
     console.error(`Signature mismatch for tenant: ${businessName}`);
-    console.error(`Expected: ${expectedSignature}`);
-    console.error(`Received: ${signature}`);
     return res.sendStatus(403);
 }
 
