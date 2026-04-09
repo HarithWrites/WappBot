@@ -27,6 +27,9 @@ let closeBookingMeta = null;
 let currentSettingsTab = "general";
 let currentSettingHolidays = [];
 let workflowStepsData = [];
+let selectedWorkflowTenant = null;
+let workflowCurrentPage = 1;
+let workflowPageSize = 10;
 
 // ==========================================
 // 2. DOM ELEMENTS
@@ -47,7 +50,11 @@ const overviewTenantCount = document.getElementById("overviewTenantCount");
 const screenButtons = document.querySelectorAll("[data-screen-target]");
 const screens = document.querySelectorAll(".workspace-screen");
 const refreshGlobalButton = document.getElementById("refreshGlobalButton");
+const refreshOverviewButton = document.getElementById("refreshOverviewButton");
 const refreshBookingsButton = document.getElementById("refreshBookingsButton");
+const refreshAnalyticsButton = document.getElementById("refreshAnalyticsButton");
+const refreshWorkflowButton = document.getElementById("refreshWorkflowButton");
+const refreshSettingsButton = document.getElementById("refreshSettingsButton");
 const bookingsTableBody = document.getElementById("bookingsTableBody");
 const dashboardEmpty = document.getElementById("dashboardEmpty");
 const bookingsStatus = document.getElementById("bookingsStatus");
@@ -563,6 +570,196 @@ function closeStream() {
         stream = null;
     }
     streamTenantToken = null;
+}
+
+// ==========================================
+// NEW FUNCTIONS FOR ENHANCED DASHBOARD
+// ==========================================
+
+async function loadAnalytics() {
+    if (!adminToken) return;
+
+    try {
+        // Load analytics data
+        const analyticsData = await fetchJson(`/admin/analytics?${getTokenQuery().toString()}`);
+
+        // Update metrics
+        document.getElementById('totalConversations').textContent = analyticsData.totalConversations || 0;
+        document.getElementById('conversionRate').textContent = `${analyticsData.conversionRate || 0}%`;
+        document.getElementById('avgResponseTime').textContent = `${analyticsData.avgResponseTime || 0}s`;
+        document.getElementById('popularService').textContent = analyticsData.popularService || 'N/A';
+
+        // Update engagement table
+        document.getElementById('messagesSent').textContent = analyticsData.messagesSent || 0;
+        document.getElementById('messagesReceived').textContent = analyticsData.messagesReceived || 0;
+        document.getElementById('activeUsers').textContent = analyticsData.activeUsers || 0;
+        document.getElementById('avgSessionDuration').textContent = `${analyticsData.avgSessionDuration || 0}m`;
+
+        // Render charts (placeholder for now)
+        renderAnalyticsCharts(analyticsData);
+
+    } catch (error) {
+        console.error('Failed to load analytics:', error);
+        showToast('Failed to load analytics data', 'error');
+    }
+}
+
+async function loadCommunications() {
+    if (!adminToken) return;
+
+    try {
+        // Load message history
+        const messagesData = await fetchJson(`/admin/messages?${getTokenQuery().toString()}`);
+        renderMessageHistory(messagesData);
+
+        // Load user segments for targeting
+        const usersData = await fetchJson(`/admin/users?${getTokenQuery().toString()}`);
+        populateUserSegments(usersData);
+
+    } catch (error) {
+        console.error('Failed to load communications:', error);
+        showToast('Failed to load communications data', 'error');
+    }
+}
+
+async function loadWorkflowData() {
+    if (!adminToken) return;
+
+    const tenantSelect = document.getElementById('workflowTenantSelect');
+    if (!tenantSelect) return;
+
+    // Populate tenant dropdown
+    tenantSelect.innerHTML = '<option value="">Choose a tenant...</option>';
+    portalData.tenants.forEach(tenant => {
+        const option = document.createElement('option');
+        option.value = tenant.id;
+        option.textContent = tenant.name;
+        tenantSelect.appendChild(option);
+    });
+
+    // If a tenant was previously selected, keep it selected
+    if (selectedWorkflowTenant) {
+        tenantSelect.value = selectedWorkflowTenant;
+        await loadWorkflowSteps(selectedWorkflowTenant);
+    }
+}
+
+async function loadWorkflowSteps(tenantId) {
+    if (!tenantId) {
+        document.getElementById('workflowTableBody').innerHTML = `
+            <tr>
+                <td colspan="7" class="empty-state">
+                    <div class="empty-state-content">
+                        <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14,2 14,8 20,8"></polyline>
+                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                            <polyline points="10,9 9,9 8,9"></polyline>
+                        </svg>
+                        <p>Select a tenant to view workflow steps</p>
+                    </div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    try {
+        const response = await fetchJson(`/admin/workflow/${tenantId}?${getTokenQuery().toString()}`);
+        renderWorkflowTable(response.steps || []);
+    } catch (error) {
+        console.error('Failed to load workflow steps:', error);
+        showToast('Failed to load workflow steps', 'error');
+    }
+}
+
+function renderAnalyticsCharts(data) {
+    // Placeholder for chart rendering
+    // In a real implementation, you would use Chart.js or similar library
+    console.log('Rendering analytics charts with data:', data);
+}
+
+function renderMessageHistory(messages) {
+    const tbody = document.getElementById('messagesTableBody');
+    if (!tbody) return;
+
+    if (!messages || messages.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No messages sent yet.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = messages.map(msg => `
+        <tr>
+            <td>${msg.type}</td>
+            <td>${msg.content.substring(0, 50)}${msg.content.length > 50 ? '...' : ''}</td>
+            <td>${msg.recipientCount || 0}</td>
+            <td>${new Date(msg.sentAt).toLocaleDateString()}</td>
+            <td><span class="status-badge ${msg.status}">${msg.status}</span></td>
+            <td>
+                <button class="secondary compact-btn" onclick="viewMessage(${msg.id})">View</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function populateUserSegments(users) {
+    const select = document.getElementById('individualUsers');
+    if (!select) return;
+
+    select.innerHTML = '<option value="">Select users...</option>';
+    users.forEach(user => {
+        const option = document.createElement('option');
+        option.value = user.id;
+        option.textContent = `${user.name} (${user.phone})`;
+        select.appendChild(option);
+    });
+}
+
+function renderWorkflowTable(steps) {
+    const tbody = document.getElementById('workflowTableBody');
+    if (!tbody) return;
+
+    if (!steps || steps.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" class="empty-state">
+                    <div class="empty-state-content">
+                        <p>No workflow steps configured</p>
+                        <button class="primary compact-btn" onclick="addNewWorkflowStep()">Add First Step</button>
+                    </div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = steps.map((step, index) => `
+        <tr>
+            <td>${step.order}</td>
+            <td><span class="step-type ${step.type}">${step.type}</span></td>
+            <td>${step.message}</td>
+            <td>${step.options ? step.options.join(', ') : 'N/A'}</td>
+            <td>${step.nextStep || 'End'}</td>
+            <td><span class="status-badge ${step.status}">${step.status}</span></td>
+            <td>
+                <button class="icon-button small" onclick="editWorkflowStep(${step.id})" title="Edit">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                </button>
+                <button class="icon-button small" onclick="deleteWorkflowStep(${step.id})" title="Delete">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3,6 5,6 21,6"></polyline>
+                        <path d="M19,6v14a2,2 0 0,1-2,2H7a2,2 0 0,1-2-2V6m3,0V4a2,2 0 0,1,2-2h4a2,2 0 0,1,2,2v2"></path>
+                        <line x1="10" y1="11" x2="10" y2="17"></line>
+                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                    </svg>
+                </button>
+            </td>
+        </tr>
+    `).join('');
 }
 
 // ==========================================
@@ -1394,6 +1591,116 @@ function initSettingsEvents() {
 }
 
 // ==========================================
+// WORKFLOW EVENT LISTENERS
+// ==========================================
+
+// Workflow tenant selection
+document.getElementById('workflowTenantSelect')?.addEventListener('change', async (e) => {
+    selectedWorkflowTenant = e.target.value;
+    await loadWorkflowSteps(selectedWorkflowTenant);
+});
+
+// Workflow search
+document.getElementById('workflowSearch')?.addEventListener('input', (e) => {
+    // Implement search filtering
+    const searchTerm = e.target.value.toLowerCase();
+    const rows = document.querySelectorAll('#workflowTableBody tr');
+    rows.forEach(row => {
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(searchTerm) ? '' : 'none';
+    });
+});
+
+// Workflow type filter
+document.getElementById('stepTypeFilter')?.addEventListener('change', (e) => {
+    const filter = e.target.value;
+    const rows = document.querySelectorAll('#workflowTableBody tr');
+    rows.forEach(row => {
+        if (filter === 'all') {
+            row.style.display = '';
+        } else {
+            const typeCell = row.querySelector('td:nth-child(2)');
+            const type = typeCell?.textContent.toLowerCase();
+            row.style.display = type === filter ? '' : 'none';
+        }
+    });
+});
+
+// Add workflow step button
+document.getElementById('addWorkflowStepButton')?.addEventListener('click', () => {
+    if (!selectedWorkflowTenant) {
+        showToast('Please select a tenant first', 'error');
+        return;
+    }
+    showWorkflowModal();
+});
+
+// Communications form
+document.getElementById('messageForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    // Implement message sending logic
+    showToast('Message sending functionality coming soon', 'info');
+});
+
+// Workflow modal functions
+function showWorkflowModal(stepData = null) {
+    const modal = document.getElementById('workflowModal');
+    const form = document.getElementById('workflowStepForm');
+    const title = document.getElementById('workflowModalTitle');
+
+    if (stepData) {
+        title.textContent = 'Edit Step';
+        // Populate form with step data
+        document.getElementById('stepOrder').value = stepData.order || '';
+        document.getElementById('stepType').value = stepData.type || 'question';
+        document.getElementById('stepMessage').value = stepData.message || '';
+        document.getElementById('stepOptions').value = stepData.options ? stepData.options.join('\n') : '';
+        document.getElementById('nextStep').value = stepData.nextStep || '';
+        document.getElementById('stepStatus').value = stepData.status || 'active';
+    } else {
+        title.textContent = 'Add New Step';
+        form.reset();
+    }
+
+    modal.classList.remove('hidden');
+}
+
+function hideWorkflowModal() {
+    document.getElementById('workflowModal').classList.add('hidden');
+}
+
+// Global functions for workflow actions
+function addNewWorkflowStep() {
+    showWorkflowModal();
+}
+
+function editWorkflowStep(stepId) {
+    // Find step data and show modal
+    showToast('Edit functionality coming soon', 'info');
+}
+
+function deleteWorkflowStep(stepId) {
+    if (confirm('Are you sure you want to delete this workflow step?')) {
+        showToast('Delete functionality coming soon', 'info');
+    }
+}
+
+function viewMessage(messageId) {
+    showToast('View message functionality coming soon', 'info');
+}
+
+// Workflow modal event listeners
+document.getElementById('workflowModalClose')?.addEventListener('click', hideWorkflowModal);
+document.getElementById('workflowCancelButton')?.addEventListener('click', hideWorkflowModal);
+
+document.getElementById('workflowStepForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    // Implement save logic
+    showToast('Save functionality coming soon', 'info');
+    hideWorkflowModal();
+});
+
+// ==========================================
 // 10. EVENT LISTENERS
 // ==========================================
 loginForm.addEventListener("submit", async (event) => {
@@ -1419,7 +1726,11 @@ screenButtons.forEach((button) => {
     button.addEventListener("click", () => {
         const target = button.dataset.screenTarget;
         setActiveScreen(target);
-        if (target === "workflowScreen") {
+        if (target === "analyticsScreen") {
+            loadAnalytics();
+        } else if (target === "communicationsScreen") {
+            loadCommunications();
+        } else if (target === "workflowScreen") {
             loadWorkflowData();
         } else if (target === "settingsScreen") {
             loadSettings();
@@ -1429,6 +1740,10 @@ screenButtons.forEach((button) => {
 
 refreshGlobalButton.addEventListener("click", refreshPortal);
 refreshBookingsButton.addEventListener("click", loadBookings);
+refreshOverviewButton?.addEventListener("click", refreshPortal);
+refreshAnalyticsButton?.addEventListener("click", loadAnalytics);
+refreshWorkflowButton?.addEventListener("click", loadWorkflowData);
+refreshSettingsButton?.addEventListener("click", loadSettings);
 
 let searchTimeout = null;
 searchInput.addEventListener("input", () => {
