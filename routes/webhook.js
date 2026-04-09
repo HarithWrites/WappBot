@@ -43,8 +43,7 @@ async function verifySignature(req, res, next) {
     return res.sendStatus(403);
 }
 
-// TEMPORARILY DISABLED verifySignature for debugging - Restore after logs appear
-router.post("/:businessName", controller.handleWebhook);
+router.post("/:businessName", verifySignature, controller.handleWebhook);
 
 router.get("/:businessName", async (req, res) => {
     const businessName = req.params.businessName;

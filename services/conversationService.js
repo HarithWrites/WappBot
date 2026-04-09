@@ -158,6 +158,10 @@ function getStepById(workflow, stepId) {
 function buildPromptText(template, fallback, values) {
     const rawTemplate = String(template || fallback || "").trim();
 
+    if (!rawTemplate) {
+        console.warn("Building prompt text with NO template and NO fallback!");
+    }
+
     return rawTemplate.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, token) => {
         const value = values[token];
         return value == null ? "" : String(value);
@@ -211,11 +215,12 @@ function getTemplateValues({ tenant, context }) {
 
 function buildQuestion(step, tenant, context) {
     const values = getTemplateValues({ tenant, context });
-    return {
-        header: buildPromptText(step.question?.header, "", values),
-        body: buildPromptText(step.question?.body, "", values),
-        footer: buildPromptText(step.question?.footer, "", values)
-    };
+    const header = buildPromptText(step.question?.header, "", values);
+    const body = buildPromptText(step.question?.body || step.question_body, "Welcome! Please choose an option:", values);
+    const footer = buildPromptText(step.question?.footer, "", values);
+
+    console.log(`Building question for step [${step.id}]:`, { header, body, footer });
+    return { header, body, footer };
 }
 
 function buildInteractiveId(stepId, optionId) {
