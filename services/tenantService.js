@@ -8,10 +8,16 @@ async function getAllTenants() {
 }
 
 async function getTenantByPhoneNumberId(phoneNumberId) {
+    console.log("Looking up tenant for phone_number_id:", phoneNumberId);
     const res = await db.query(
         "SELECT * FROM tenants WHERE phone_number_id=$1",
         [phoneNumberId]
     );
+    if (!res.rows[0]) {
+        console.warn("No tenant found for phone_number_id:", phoneNumberId);
+    } else {
+        console.log("Found tenant:", res.rows[0].id, res.rows[0].business_name);
+    }
     return res.rows[0];
 }
 

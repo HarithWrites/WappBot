@@ -10,9 +10,5 @@ const pool = new Pool({
     connectionTimeoutMillis: 5000
 });
 
-// Run a cheap query so we do not leak a checked-out client during boot.
-pool.query("SELECT 1")
-    .then(() => console.log("PostgreSQL connected"))
-    .catch((err) => console.error("PostgreSQL error:", err.message));
-
+// Connections are established on demand by the pool
 module.exports = pool;
