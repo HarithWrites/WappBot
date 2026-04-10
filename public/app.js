@@ -384,7 +384,12 @@ function buildBookingsUrl() {
 }
 
 async function fetchJson(url, options = {}) {
-    const res = await fetch(url, options);
+    const headers = {
+        ...options.headers,
+        "Authorization": `Bearer ${adminToken}`
+    };
+    
+    const res = await fetch(url, { ...options, headers });
 
     if (res.status === 401 || res.status === 403) {
         handleUnauthorized();
@@ -1321,9 +1326,7 @@ async function loadSettings() {
     if (!selectedTenant) return;
 
     try {
-        const res = await fetch(`/admin/settings?token=${encodeURIComponent(adminToken)}&tenantId=${selectedTenant.id}`);
-        if (!res.ok) throw new Error("Failed to fetch settings");
-        const data = await res.json();
+        const data = await fetchJson(`/admin/settings?tenantId=${selectedTenant.id}`);
         renderSettings(data);
     } catch (err) {
         console.error("loadSettings error:", err);
@@ -1338,6 +1341,12 @@ function renderSettings(data) {
     document.getElementById("businessNameInput").value = tenant.business_name || "";
     document.getElementById("timezoneInput").value = tenant.timezone || "UTC";
     document.getElementById("parallelInput").value = tenant.max_parallel_appointments || 1;
+
+    // WhatsApp Fields
+    document.getElementById("phoneNumberIdInput").value = tenant.phone_number_id || "";
+    document.getElementById("whatsappTokenInput").value = tenant.token || "";
+    document.getElementById("appSecretInput").value = tenant.app_secret || "";
+    document.getElementById("verifyTokenInput").value = tenant.webhook_verify_token || "";
 
     // 2. Schedule Tab
     document.getElementById("openingHourInput").value = tenant.opening_hour ?? 9;
@@ -1368,12 +1377,9 @@ async function loadWorkflowData() {
     if (!selectedTenant) return;
 
     try {
-        const res = await fetch(`/admin/workflow?token=${encodeURIComponent(adminToken)}&tenantId=${selectedTenant.id}`);
-        const data = await res.json();
-        if (data.success) {
-            workflowStepsData = data.workflow;
-            renderWorkflowBuilder();
-        }
+        const data = await fetchJson(`/admin/workflow?tenantId=${selectedTenant.id}`);
+        workflowStepsData = data.steps || [];
+        renderWorkflowBuilder();
     } catch (err) {
         console.error("loadWorkflowData error:", err);
         showToast("Error loading workflow", "error");
@@ -1515,20 +1521,18 @@ async function saveWorkflowStep(stepId, card) {
     };
 
     try {
-        const res = await fetch(`/admin/workflow/step?token=${encodeURIComponent(adminToken)}`, {
+        const data = await fetchJson(`/admin/workflow/step`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ tenantId: selectedTenant.id, step: stepData })
         });
-        const data = await res.json();
         if (data.success) {
             // After step is saved, also upsert all options
             if (options.length > 0) {
                 for (const opt of options) {
-                    await fetch(`/admin/workflow/option?token=${encodeURIComponent(adminToken)}`, {
+                    await fetchJson(`/admin/workflow/option`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ stepDbId: data.step.id, option: opt })
+                        body: JSON.stringify({ tenantId: selectedTenant.id, option: opt })
                     });
                 }
             }
@@ -1544,7 +1548,7 @@ async function deleteWorkflowStepUI(stepId) {
     if (!confirm(`Are you sure you want to delete step '${stepId}'?`)) return;
     const selectedTenant = getSelectedTenant();
     try {
-        await fetch(`/admin/workflow/step?token=${encodeURIComponent(adminToken)}`, {
+        await fetchJson(`/admin/workflow/step`, {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ tenantId: selectedTenant.id, stepId })
@@ -1562,13 +1566,13 @@ async function reorderWorkflowStepUI(fromIndex, toIndex) {
     const [moved] = updatedSteps.splice(fromIndex, 1);
     updatedSteps.splice(toIndex, 0, moved);
 
-    const stepIds = updatedSteps.map(s => s.step_id);
+    const steps = updatedSteps.map(s => s.step_id);
 
     try {
-        await fetch(`/admin/workflow/reorder?token=${encodeURIComponent(adminToken)}`, {
+        await fetchJson(`/admin/workflow/reorder`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ tenantId: selectedTenant.id, stepIds })
+            body: JSON.stringify({ tenantId: selectedTenant.id, steps })
         });
         loadWorkflowData();
     } catch (err) {
@@ -1737,12 +1741,11 @@ async function saveSettingsConfig(settings) {
     if (!selectedTenant) return;
 
     try {
-        const res = await fetch(`/admin/settings/config?token=${encodeURIComponent(adminToken)}`, {
+        await fetchJson(`/admin/settings/config`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ tenantId: selectedTenant.id, settings })
         });
-        if (!res.ok) throw new Error("Failed to save settings");
         showToast("Settings saved", "success");
         await loadSettings();
     } catch (err) {
@@ -1753,12 +1756,11 @@ async function saveSettingsConfig(settings) {
 async function saveService(id, data) {
     const selectedTenant = getSelectedTenant();
     try {
-        const res = await fetch(`/admin/settings/services?token=${encodeURIComponent(adminToken)}`, {
+        await fetchJson(`/admin/settings/services`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ tenantId: selectedTenant.id, service: { id, ...data } })
         });
-        if (!res.ok) throw new Error("Failed to save service");
         showToast("Service updated", "success");
         await loadSettings();
     } catch (err) {
@@ -1769,12 +1771,11 @@ async function saveService(id, data) {
 async function saveProvider(id, data) {
     const selectedTenant = getSelectedTenant();
     try {
-        const res = await fetch(`/admin/settings/providers?token=${encodeURIComponent(adminToken)}`, {
+        await fetchJson(`/admin/settings/providers`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ tenantId: selectedTenant.id, provider: { id, ...data } })
         });
-        if (!res.ok) throw new Error("Failed to save provider");
         showToast("Provider updated", "success");
         await loadSettings();
     } catch (err) {
@@ -1799,7 +1800,11 @@ function initSettingsEvents() {
         e.preventDefault();
         saveSettingsConfig({
             timezone: document.getElementById("timezoneInput").value,
-            max_parallel_appointments: parseInt(document.getElementById("parallelInput").value)
+            max_parallel_appointments: parseInt(document.getElementById("parallelInput").value),
+            phone_number_id: document.getElementById("phoneNumberIdInput").value,
+            token: document.getElementById("whatsappTokenInput").value,
+            app_secret: document.getElementById("appSecretInput").value,
+            webhook_verify_token: document.getElementById("verifyTokenInput").value
         });
     });
 

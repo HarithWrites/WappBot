@@ -719,10 +719,32 @@
                                                 <span>Timezone</span>
                                                 <input type="text" id="timezoneInput" placeholder="Asia/Kolkata">
                                             </label>
-                                            <label>
+                                                                                        <label>
                                                 <span>Max Parallel Appointments</span>
                                                 <input type="number" id="parallelInput" min="1" step="1">
                                             </label>
+                                        </div>
+
+                                        <div class="settings-section mt-24">
+                                            <h4 style="margin-bottom: 12px; font-weight: 600;">WhatsApp Integration</h4>
+                                            <div class="form-grid">
+                                                <label>
+                                                    <span>Phone Number ID</span>
+                                                    <input type="text" id="phoneNumberIdInput" placeholder="Enter ID from Meta Portal">
+                                                </label>
+                                                <label>
+                                                    <span>Access Token</span>
+                                                    <input type="password" id="whatsappTokenInput" placeholder="EAANZ...">
+                                                </label>
+                                                <label>
+                                                    <span>App Secret</span>
+                                                    <input type="password" id="appSecretInput" placeholder="Enter App Secret">
+                                                </label>
+                                                <label>
+                                                    <span>Webhook Verify Token</span>
+                                                    <input type="text" id="verifyTokenInput" placeholder="Enter Verify Token">
+                                                </label>
+                                            </div>
                                         </div>
                                         <div class="form-actions">
                                             <button type="submit" class="primary">Save General Settings</button>
@@ -901,3 +923,4 @@
     </script>
 </body>
 </html>
+

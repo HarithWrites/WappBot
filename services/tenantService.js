@@ -58,7 +58,9 @@ async function updateTenantSettings(tenantId, settings) {
              business_holidays = COALESCE($9, business_holidays),
              week_offs = COALESCE($10, week_offs),
              app_secret = COALESCE($11, app_secret),
-             webhook_verify_token = COALESCE($12, webhook_verify_token)
+             webhook_verify_token = COALESCE($12, webhook_verify_token),
+             token = COALESCE($13, token),
+             phone_number_id = COALESCE($14, phone_number_id)
          WHERE id = $1
          RETURNING *`,
         [
@@ -73,7 +75,9 @@ async function updateTenantSettings(tenantId, settings) {
             settings.business_holidays ?? null,
             settings.week_offs ?? null,
             settings.app_secret ?? null,
-            settings.webhook_verify_token ?? null
+            settings.webhook_verify_token ?? null,
+            settings.token ?? null,
+            settings.phone_number_id ?? null
         ]
     );
 
