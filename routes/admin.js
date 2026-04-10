@@ -16,10 +16,11 @@ function isGlobalAdminToken(token) {
 
 router.use(async (req, res, next) => {
     try {
-        const token = String(req.query.token || req.body?.token || "").trim();
+        // SECURITY: Only check Authorization header and POST body, never query params
+        const token = String(req.headers.authorization?.replace('Bearer ', '') || req.body?.token || "").trim();
 
         if (!token) {
-            return res.status(401).json({ error: "Missing admin token" });
+            return res.status(401).json({ error: "Missing admin token. Use Authorization header or POST body." });
         }
 
         if (isGlobalAdminToken(token)) {

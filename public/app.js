@@ -689,18 +689,53 @@ function renderMessageHistory(messages) {
         return;
     }
 
-    tbody.innerHTML = messages.map(msg => `
-        <tr>
-            <td>${msg.type}</td>
-            <td>${msg.content.substring(0, 50)}${msg.content.length > 50 ? '...' : ''}</td>
-            <td>${msg.recipientCount || 0}</td>
-            <td>${new Date(msg.sentAt).toLocaleDateString()}</td>
-            <td><span class="status-badge ${msg.status}">${msg.status}</span></td>
-            <td>
-                <button class="secondary compact-btn" onclick="viewMessage(${msg.id})">View</button>
-            </td>
-        </tr>
-    `).join('');
+    // SECURITY: Clear existing content safely
+    tbody.innerHTML = '';
+
+    // SECURITY: Create elements safely to prevent XSS
+    messages.forEach(msg => {
+        const row = document.createElement('tr');
+
+        // Type cell - safe
+        const typeCell = document.createElement('td');
+        typeCell.textContent = msg.type || '';
+        row.appendChild(typeCell);
+
+        // Content cell - ESCAPE HTML to prevent XSS
+        const contentCell = document.createElement('td');
+        const content = String(msg.content || '');
+        contentCell.textContent = content.length > 50 ? content.substring(0, 50) + '...' : content;
+        row.appendChild(contentCell);
+
+        // Recipients cell - safe number
+        const recipientsCell = document.createElement('td');
+        recipientsCell.textContent = msg.recipientCount || 0;
+        row.appendChild(recipientsCell);
+
+        // Sent date - safe date formatting
+        const sentCell = document.createElement('td');
+        sentCell.textContent = msg.sentAt ? new Date(msg.sentAt).toLocaleDateString() : '';
+        row.appendChild(sentCell);
+
+        // Status cell - safe with CSS class
+        const statusCell = document.createElement('td');
+        const statusBadge = document.createElement('span');
+        statusBadge.className = `status-badge ${msg.status || 'unknown'}`;
+        statusBadge.textContent = msg.status || 'unknown';
+        statusCell.appendChild(statusBadge);
+        row.appendChild(statusCell);
+
+        // Actions cell - safe button
+        const actionsCell = document.createElement('td');
+        const viewButton = document.createElement('button');
+        viewButton.className = 'secondary compact-btn';
+        viewButton.textContent = 'View';
+        viewButton.onclick = () => viewMessage(msg.id);
+        actionsCell.appendChild(viewButton);
+        row.appendChild(actionsCell);
+
+        tbody.appendChild(row);
+    });
 }
 
 function populateUserSegments(users) {
@@ -720,46 +755,143 @@ function renderWorkflowTable(steps) {
     const tbody = document.getElementById('workflowTableBody');
     if (!tbody) return;
 
+    // Clear existing content
+    tbody.innerHTML = '';
+
     if (!steps || steps.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="7" class="empty-state">
-                    <div class="empty-state-content">
-                        <p>No workflow steps configured</p>
-                        <button class="primary compact-btn" onclick="addNewWorkflowStep()">Add First Step</button>
-                    </div>
-                </td>
-            </tr>
-        `;
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 7;
+        td.className = 'empty-state';
+
+        const div = document.createElement('div');
+        div.className = 'empty-state-content';
+
+        const p = document.createElement('p');
+        p.textContent = 'No workflow steps configured';
+
+        const button = document.createElement('button');
+        button.className = 'primary compact-btn';
+        button.textContent = 'Add First Step';
+        button.onclick = addNewWorkflowStep;
+
+        div.appendChild(p);
+        div.appendChild(button);
+        td.appendChild(div);
+        tr.appendChild(td);
+        tbody.appendChild(tr);
         return;
     }
 
-    tbody.innerHTML = steps.map((step, index) => `
-        <tr>
-            <td>${step.order}</td>
-            <td><span class="step-type ${step.type}">${step.type}</span></td>
-            <td>${step.message}</td>
-            <td>${step.options ? step.options.join(', ') : 'N/A'}</td>
-            <td>${step.nextStep || 'End'}</td>
-            <td><span class="status-badge ${step.status}">${step.status}</span></td>
-            <td>
-                <button class="icon-button small" onclick="editWorkflowStep(${step.id})" title="Edit">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                    </svg>
-                </button>
-                <button class="icon-button small" onclick="deleteWorkflowStep(${step.id})" title="Delete">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="3,6 5,6 21,6"></polyline>
-                        <path d="M19,6v14a2,2 0 0,1-2,2H7a2,2 0 0,1-2-2V6m3,0V4a2,2 0 0,1,2-2h4a2,2 0 0,1,2,2v2"></path>
-                        <line x1="10" y1="11" x2="10" y2="17"></line>
-                        <line x1="14" y1="11" x2="14" y2="17"></line>
-                    </svg>
-                </button>
-            </td>
-        </tr>
-    `).join('');
+    steps.forEach((step, index) => {
+        const tr = document.createElement('tr');
+
+        // Order
+        const tdOrder = document.createElement('td');
+        tdOrder.textContent = step.order;
+        tr.appendChild(tdOrder);
+
+        // Type
+        const tdType = document.createElement('td');
+        const spanType = document.createElement('span');
+        spanType.className = `step-type ${step.type}`;
+        spanType.textContent = step.type;
+        tdType.appendChild(spanType);
+        tr.appendChild(tdType);
+
+        // Message
+        const tdMessage = document.createElement('td');
+        tdMessage.textContent = step.message;
+        tr.appendChild(tdMessage);
+
+        // Options
+        const tdOptions = document.createElement('td');
+        tdOptions.textContent = step.options ? step.options.join(', ') : 'N/A';
+        tr.appendChild(tdOptions);
+
+        // Next Step
+        const tdNext = document.createElement('td');
+        tdNext.textContent = step.nextStep || 'End';
+        tr.appendChild(tdNext);
+
+        // Status
+        const tdStatus = document.createElement('td');
+        const spanStatus = document.createElement('span');
+        spanStatus.className = `status-badge ${step.status}`;
+        spanStatus.textContent = step.status;
+        tdStatus.appendChild(spanStatus);
+        tr.appendChild(tdStatus);
+
+        // Actions
+        const tdActions = document.createElement('td');
+
+        // Edit button
+        const editBtn = document.createElement('button');
+        editBtn.className = 'icon-button small';
+        editBtn.title = 'Edit';
+        editBtn.onclick = () => editWorkflowStep(step.id);
+
+        const editSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        editSvg.setAttribute('viewBox', '0 0 24 24');
+        editSvg.setAttribute('width', '16');
+        editSvg.setAttribute('height', '16');
+        editSvg.setAttribute('fill', 'none');
+        editSvg.setAttribute('stroke', 'currentColor');
+        editSvg.setAttribute('stroke-width', '2');
+
+        const editPath1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        editPath1.setAttribute('d', 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7');
+        editSvg.appendChild(editPath1);
+
+        const editPath2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        editPath2.setAttribute('d', 'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z');
+        editSvg.appendChild(editPath2);
+
+        editBtn.appendChild(editSvg);
+        tdActions.appendChild(editBtn);
+
+        // Delete button
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'icon-button small';
+        deleteBtn.title = 'Delete';
+        deleteBtn.onclick = () => deleteWorkflowStep(step.id);
+
+        const deleteSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        deleteSvg.setAttribute('viewBox', '0 0 24 24');
+        deleteSvg.setAttribute('width', '16');
+        deleteSvg.setAttribute('height', '16');
+        deleteSvg.setAttribute('fill', 'none');
+        deleteSvg.setAttribute('stroke', 'currentColor');
+        deleteSvg.setAttribute('stroke-width', '2');
+
+        const deletePolyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+        deletePolyline.setAttribute('points', '3,6 5,6 21,6');
+        deleteSvg.appendChild(deletePolyline);
+
+        const deletePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        deletePath.setAttribute('d', 'M19,6v14a2,2 0 0,1-2,2H7a2,2 0 0,1-2-2V6m3,0V4a2,2 0 0,1,2-2h4a2,2 0 0,1,2,2v2');
+        deleteSvg.appendChild(deletePath);
+
+        const deleteLine1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        deleteLine1.setAttribute('x1', '10');
+        deleteLine1.setAttribute('y1', '11');
+        deleteLine1.setAttribute('x2', '10');
+        deleteLine1.setAttribute('y2', '17');
+        deleteSvg.appendChild(deleteLine1);
+
+        const deleteLine2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        deleteLine2.setAttribute('x1', '14');
+        deleteLine2.setAttribute('y1', '11');
+        deleteLine2.setAttribute('x2', '14');
+        deleteLine2.setAttribute('y2', '17');
+        deleteSvg.appendChild(deleteLine2);
+
+        deleteBtn.appendChild(deleteSvg);
+        tdActions.appendChild(deleteBtn);
+
+        tr.appendChild(tdActions);
+        tbody.appendChild(tr);
+    });
 }
 
 // ==========================================
@@ -829,7 +961,10 @@ function renderTenantOverview() {
     tenantOverviewList.innerHTML = "";
 
     if (!portalData.tenants.length) {
-        tenantOverviewList.innerHTML = '<p class="status-note">No tenants available.</p>';
+        const p = document.createElement('p');
+        p.className = 'status-note';
+        p.textContent = 'No tenants available.';
+        tenantOverviewList.appendChild(p);
         return;
     }
 
@@ -837,11 +972,18 @@ function renderTenantOverview() {
         const item = document.createElement("button");
         item.type = "button";
         item.className = "tenant-overview-item";
-        item.innerHTML = `
-            <span class="tenant-overview-title">${getTenantLabel(tenant)}</span>
-            <span class="tenant-overview-copy">${tenant.services.length} services, ${tenant.providers.length} providers</span>
-        `;
         item.style.cursor = "default"; // Items are not clickable for now
+
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'tenant-overview-title';
+        titleSpan.textContent = getTenantLabel(tenant);
+
+        const copySpan = document.createElement('span');
+        copySpan.className = 'tenant-overview-copy';
+        copySpan.textContent = `${tenant.services.length} services, ${tenant.providers.length} providers`;
+
+        item.appendChild(titleSpan);
+        item.appendChild(copySpan);
         tenantOverviewList.appendChild(item);
     });
 }
@@ -953,42 +1095,106 @@ function renderBookingsTable() {
 
     bookings.forEach((booking) => {
         const row = document.createElement("tr");
-        row.innerHTML = `
-            ${isGlobal ? `<td>
-                <div class="cell-title">${booking.tenant_name || getTenantLabel(getSelectedTenant())}</div>
-                <div class="cell-copy">Tenant ID ${booking.tenant_id}</div>
-            </td>` : ''}
-            <td>
-                <div class="cell-title">${booking.service_name || "Unnamed service"}</div>
-                <div class="cell-copy">Booking #${booking.id}</div>
-            </td>
-            <td>
-                <div class="cell-title">${booking.provider_name || "Not selected"}</div>
-                <div class="cell-copy">${booking.provider_id ? `Provider #${booking.provider_id}` : "Configured via workflow"}</div>
-            </td>
-            <td>
-                <div class="cell-title">${booking.phone || "No phone"}</div>
-            </td>
-            <td>
-                <div class="cell-title">${formatDisplayDate(booking.booking_date)}</div>
-            </td>
-            <td>
-                <div class="cell-title">${formatDisplayTime(booking.booking_time)}</div>
-            </td>
-            <td>
-                <span class="status-badge status-${booking.status || "pending"}">${booking.status || "pending"}</span>
-            </td>
-            <td>
-                <pre class="inline-pre">${formatWorkflowAnswers(booking.workflow_answers)}</pre>
-            </td>
-            <td>
-                <div class="cell-copy">${booking.close_remarks || "-"}</div>
-            </td>
-            <td>
-                <div class="cell-copy">${booking.created_at ? new Date(booking.created_at).toLocaleString("en-IN") : "-"}</div>
-            </td>
-            <td>${getActionMarkup(booking)}</td>
-        `;
+
+        // Tenant column (if global scope)
+        if (isGlobal) {
+            const tenantCell = document.createElement('td');
+            const tenantTitle = document.createElement('div');
+            tenantTitle.className = 'cell-title';
+            tenantTitle.textContent = booking.tenant_name || getTenantLabel(getSelectedTenant());
+            const tenantCopy = document.createElement('div');
+            tenantCopy.className = 'cell-copy';
+            tenantCopy.textContent = `Tenant ID ${booking.tenant_id}`;
+            tenantCell.appendChild(tenantTitle);
+            tenantCell.appendChild(tenantCopy);
+            row.appendChild(tenantCell);
+        }
+
+        // Service column
+        const serviceCell = document.createElement('td');
+        const serviceTitle = document.createElement('div');
+        serviceTitle.className = 'cell-title';
+        serviceTitle.textContent = booking.service_name || "Unnamed service";
+        const serviceCopy = document.createElement('div');
+        serviceCopy.className = 'cell-copy';
+        serviceCopy.textContent = `Booking #${booking.id}`;
+        serviceCell.appendChild(serviceTitle);
+        serviceCell.appendChild(serviceCopy);
+        row.appendChild(serviceCell);
+
+        // Provider column
+        const providerCell = document.createElement('td');
+        const providerTitle = document.createElement('div');
+        providerTitle.className = 'cell-title';
+        providerTitle.textContent = booking.provider_name || "Not selected";
+        const providerCopy = document.createElement('div');
+        providerCopy.className = 'cell-copy';
+        providerCopy.textContent = booking.provider_id ? `Provider #${booking.provider_id}` : "Configured via workflow";
+        providerCell.appendChild(providerTitle);
+        providerCell.appendChild(providerCopy);
+        row.appendChild(providerCell);
+
+        // Phone column
+        const phoneCell = document.createElement('td');
+        const phoneTitle = document.createElement('div');
+        phoneTitle.className = 'cell-title';
+        phoneTitle.textContent = booking.phone || "No phone";
+        phoneCell.appendChild(phoneTitle);
+        row.appendChild(phoneCell);
+
+        // Date column
+        const dateCell = document.createElement('td');
+        const dateTitle = document.createElement('div');
+        dateTitle.className = 'cell-title';
+        dateTitle.textContent = formatDisplayDate(booking.booking_date);
+        dateCell.appendChild(dateTitle);
+        row.appendChild(dateCell);
+
+        // Time column
+        const timeCell = document.createElement('td');
+        const timeTitle = document.createElement('div');
+        timeTitle.className = 'cell-title';
+        timeTitle.textContent = formatDisplayTime(booking.booking_time);
+        timeCell.appendChild(timeTitle);
+        row.appendChild(timeCell);
+
+        // Status column
+        const statusCell = document.createElement('td');
+        const statusBadge = document.createElement('span');
+        statusBadge.className = `status-badge status-${booking.status || "pending"}`;
+        statusBadge.textContent = booking.status || "pending";
+        statusCell.appendChild(statusBadge);
+        row.appendChild(statusCell);
+
+        // Answers column
+        const answersCell = document.createElement('td');
+        const answersPre = document.createElement('pre');
+        answersPre.className = 'inline-pre';
+        answersPre.textContent = formatWorkflowAnswers(booking.workflow_answers);
+        answersCell.appendChild(answersPre);
+        row.appendChild(answersCell);
+
+        // Remarks column
+        const remarksCell = document.createElement('td');
+        const remarksDiv = document.createElement('div');
+        remarksDiv.className = 'cell-copy';
+        remarksDiv.textContent = booking.close_remarks || "-";
+        remarksCell.appendChild(remarksDiv);
+        row.appendChild(remarksCell);
+
+        // Created column
+        const createdCell = document.createElement('td');
+        const createdDiv = document.createElement('div');
+        createdDiv.className = 'cell-copy';
+        createdDiv.textContent = booking.created_at ? new Date(booking.created_at).toLocaleString("en-IN") : "-";
+        createdCell.appendChild(createdDiv);
+        row.appendChild(createdCell);
+
+        // Actions column
+        const actionsCell = document.createElement('td');
+        actionsCell.innerHTML = getActionMarkup(booking); // Keep this for now as it's complex
+        row.appendChild(actionsCell);
+
         bookingsTableBody.appendChild(row);
     });
 
@@ -1404,21 +1610,45 @@ function renderServicesSettingsTable(services) {
     tbody.innerHTML = "";
     services.forEach(s => {
         const tr = document.createElement("tr");
-        tr.innerHTML = `
-            <td>${s.id}</td>
-            <td><input type="text" value="${s.name}" class="inline-edit service-name-input"></td>
-            <td>
-                <span class="status-badge ${s.is_active ? 'active' : 'inactive'}">${s.is_active ? 'Active' : 'Disabled'}</span>
-            </td>
-            <td>
-                <button class="secondary compact-btn toggle-status">${s.is_active ? 'Disable' : 'Enable'}</button>
-                <button class="primary compact-btn save-service">Save</button>
-            </td>
-        `;
-        
-        tr.querySelector(".toggle-status").onclick = () => saveService(s.id, { name: tr.querySelector(".service-name-input").value, is_active: !s.is_active });
-        tr.querySelector(".save-service").onclick = () => saveService(s.id, { name: tr.querySelector(".service-name-input").value, is_active: s.is_active });
-        
+
+        // ID cell
+        const idCell = document.createElement('td');
+        idCell.textContent = s.id;
+        tr.appendChild(idCell);
+
+        // Name input cell
+        const nameCell = document.createElement('td');
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.value = s.name;
+        nameInput.className = 'inline-edit service-name-input';
+        nameCell.appendChild(nameInput);
+        tr.appendChild(nameCell);
+
+        // Status cell
+        const statusCell = document.createElement('td');
+        const statusBadge = document.createElement('span');
+        statusBadge.className = `status-badge ${s.is_active ? 'active' : 'inactive'}`;
+        statusBadge.textContent = s.is_active ? 'Active' : 'Disabled';
+        statusCell.appendChild(statusBadge);
+        tr.appendChild(statusCell);
+
+        // Actions cell
+        const actionsCell = document.createElement('td');
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'secondary compact-btn toggle-status';
+        toggleBtn.textContent = s.is_active ? 'Disable' : 'Enable';
+        toggleBtn.onclick = () => saveService(s.id, { name: tr.querySelector(".service-name-input").value, is_active: !s.is_active });
+
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'primary compact-btn save-service';
+        saveBtn.textContent = 'Save';
+        saveBtn.onclick = () => saveService(s.id, { name: tr.querySelector(".service-name-input").value, is_active: s.is_active });
+
+        actionsCell.appendChild(toggleBtn);
+        actionsCell.appendChild(saveBtn);
+        tr.appendChild(actionsCell);
+
         tbody.appendChild(tr);
     });
 }
@@ -1428,37 +1658,76 @@ function renderProvidersSettingsTable(providers, services) {
     tbody.innerHTML = "";
     providers.forEach(p => {
         const tr = document.createElement("tr");
-        const serviceOptions = services.map(s => `<option value="${s.id}" ${p.service_id == s.id ? 'selected' : ''}>${s.name}</option>`).join("");
-        
-        tr.innerHTML = `
-            <td>${p.id}</td>
-            <td><input type="text" value="${p.name}" class="inline-edit provider-name-input"></td>
-            <td>
-                <select class="inline-edit provider-service-select">
-                    <option value="">(None - All Services)</option>
-                    ${serviceOptions}
-                </select>
-            </td>
-            <td>
-                <span class="status-badge ${p.is_active ? 'active' : 'inactive'}">${p.is_active ? 'Active' : 'Disabled'}</span>
-            </td>
-            <td>
-                <button class="secondary compact-btn toggle-status">${p.is_active ? 'Disable' : 'Enable'}</button>
-                <button class="primary compact-btn save-provider">Save</button>
-            </td>
-        `;
-        
-        tr.querySelector(".toggle-status").onclick = () => saveProvider(p.id, { 
-            name: tr.querySelector(".provider-name-input").value, 
-            service_id: tr.querySelector(".provider-service-select").value,
-            is_active: !p.is_active 
+
+        // ID cell
+        const idCell = document.createElement('td');
+        idCell.textContent = p.id;
+        tr.appendChild(idCell);
+
+        // Name input cell
+        const nameCell = document.createElement('td');
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.value = p.name;
+        nameInput.className = 'inline-edit provider-name-input';
+        nameCell.appendChild(nameInput);
+        tr.appendChild(nameCell);
+
+        // Service select cell
+        const serviceCell = document.createElement('td');
+        const serviceSelect = document.createElement('select');
+        serviceSelect.className = 'inline-edit provider-service-select';
+
+        const noneOption = document.createElement('option');
+        noneOption.value = '';
+        noneOption.textContent = '(None - All Services)';
+        serviceSelect.appendChild(noneOption);
+
+        services.forEach(s => {
+            const option = document.createElement('option');
+            option.value = s.id;
+            option.textContent = s.name;
+            if (p.service_id == s.id) {
+                option.selected = true;
+            }
+            serviceSelect.appendChild(option);
         });
-        tr.querySelector(".save-provider").onclick = () => saveProvider(p.id, { 
-            name: tr.querySelector(".provider-name-input").value, 
+
+        serviceCell.appendChild(serviceSelect);
+        tr.appendChild(serviceCell);
+
+        // Status cell
+        const statusCell = document.createElement('td');
+        const statusBadge = document.createElement('span');
+        statusBadge.className = `status-badge ${p.is_active ? 'active' : 'inactive'}`;
+        statusBadge.textContent = p.is_active ? 'Active' : 'Disabled';
+        statusCell.appendChild(statusBadge);
+        tr.appendChild(statusCell);
+
+        // Actions cell
+        const actionsCell = document.createElement('td');
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'secondary compact-btn toggle-status';
+        toggleBtn.textContent = p.is_active ? 'Disable' : 'Enable';
+        toggleBtn.onclick = () => saveProvider(p.id, {
+            name: tr.querySelector(".provider-name-input").value,
             service_id: tr.querySelector(".provider-service-select").value,
-            is_active: p.is_active 
+            is_active: !p.is_active
         });
-        
+
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'primary compact-btn save-provider';
+        saveBtn.textContent = 'Save';
+        saveBtn.onclick = () => saveProvider(p.id, {
+            name: tr.querySelector(".provider-name-input").value,
+            service_id: tr.querySelector(".provider-service-select").value,
+            is_active: p.is_active
+        });
+
+        actionsCell.appendChild(toggleBtn);
+        actionsCell.appendChild(saveBtn);
+        tr.appendChild(actionsCell);
+
         tbody.appendChild(tr);
     });
 }
