@@ -1984,25 +1984,7 @@ select.form-input {
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* ============================================================
-   22. RESPONSIVE
-   ============================================================ */
-@media (max-width: 768px) {
-  .workspace-viewport { padding: 16px; }
-  .nav-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .nav-tab { font-size: 0.72rem; padding: 5px 10px; }
-  .stats-grid-premium { grid-template-columns: repeat(2, 1fr); gap: 10px; }
-  .workflow-grid-layout { grid-template-columns: 1fr; height: auto; }
-  .settings-engine-layout { grid-template-columns: 1fr; }
-  .section-title-bar { flex-direction: column; }
-  .advanced-filter-bar { flex-direction: column; align-items: stretch; }
-  .search-toolbar { flex-direction: column; }
-  .dual-inputs { flex-direction: column; width: 100%; }
-  .dual-inputs .form-input { width: 100%; }
-  .metrics-row-small { grid-template-columns: 1fr; }
-  .screen-hero h1 { font-size: 1.5rem; }
-  .section-title-bar h2 { font-size: 1.2rem; }
-}
+/* Responsive rules → see section 30 below */
 
 /* ============================================================
    23. DARK MODE CLASS (compat with app.js toggle)
@@ -2022,3 +2004,124 @@ body.dark-mode {
   scrollbar-width: thin;
   scrollbar-color: var(--ink-600) transparent;
 }
+
+/* ============================================================
+   25. ANALYTICS ENHANCEMENTS
+   ============================================================ */
+#analyticsMetricsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.metric-sub {
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  margin-top: 4px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.chart-container-large {
+  padding: 20px;
+}
+.chart-container-large .panel-header {
+  margin-bottom: 16px;
+}
+.chart-container-large .bar-chart-wrap {
+  height: 200px;
+}
+
+/* ============================================================
+   26. BROADCAST / COMMUNICATIONS
+   ============================================================ */
+.status-note {
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--ink-800);
+  border: 1px solid var(--border-soft);
+  margin-bottom: 8px;
+}
+
+/* ============================================================
+   27. EMPTY STATE SVG ICON
+   ============================================================ */
+.empty-icon svg {
+  stroke: var(--text-faint);
+  opacity: 0.5;
+}
+
+/* ============================================================
+   28. FOCUS VISIBLE (ACCESSIBILITY)
+   ============================================================ */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ============================================================
+   29. THEME TOGGLE BUTTON (SVG mode)
+   ============================================================ */
+.theme-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.theme-toggle-btn svg {
+  stroke: var(--text-sub);
+  transition: stroke var(--duration) var(--ease);
+}
+.theme-toggle-btn:hover svg {
+  stroke: var(--primary);
+}
+
+/* ============================================================
+   30. RESPONSIVE ENHANCEMENTS
+   ============================================================ */
+@media (max-width: 1024px) {
+  .communications-layout { grid-template-columns: 1fr; }
+  .sidebar-composer { order: -1; }
+  #analyticsMetricsGrid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+}
+
+@media (max-width: 768px) {
+  .workspace-viewport { padding: 12px; }
+  .nav-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .nav-tab { font-size: 0.72rem; padding: 5px 10px; }
+  .stats-grid-premium { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .workflow-grid-layout { grid-template-columns: 1fr; height: auto; }
+  .settings-engine-layout { grid-template-columns: 1fr; }
+  .section-title-bar { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .advanced-filter-bar { flex-direction: column; align-items: stretch; }
+  .search-toolbar { flex-direction: column; }
+  .dual-inputs { flex-direction: column; width: 100%; }
+  .dual-inputs .form-input { width: 100%; }
+  .metrics-row-small { grid-template-columns: repeat(2, 1fr); }
+  .screen-hero h1 { font-size: 1.3rem; }
+  .section-title-bar h2 { font-size: 1.1rem; }
+  #analyticsMetricsGrid { grid-template-columns: repeat(2, 1fr); }
+  .col-tenant, .col-name { display: none; }
+}
+
+@media (max-width: 480px) {
+  .metrics-row-small { grid-template-columns: 1fr; }
+  #analyticsMetricsGrid { grid-template-columns: 1fr 1fr; }
+  .action-btn-group { gap: 2px; }
+  .action-icon-btn { width: 26px; height: 26px; }
+}
+
+/* ============================================================
+   31. PRINT SUPPRESSION
+   ============================================================ */
+@media print {
+  .sidebar-nav, .top-header, .action-btn-group, .theme-toggle-btn { display: none !important; }
+  .workspace-viewport { padding: 0; }
+}
+

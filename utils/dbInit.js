@@ -1,26 +1,11 @@
 const db = require("../db");
 
 async function ensureDatabaseSchema() {
-    await db.query(`
-        ALTER TABLE tenants
-        ADD COLUMN IF NOT EXISTS timezone TEXT DEFAULT 'UTC'
-    `);
 
-    await db.query(`
-        ALTER TABLE tenants
-        ADD COLUMN IF NOT EXISTS business_name TEXT
-    `);
-
-    await db.query(`
-        ALTER TABLE tenants
-        ADD COLUMN IF NOT EXISTS max_parallel_appointments INTEGER NOT NULL DEFAULT 1
-    `);
-
-    await db.query(`
-        ALTER TABLE tenants
-        DROP COLUMN IF EXISTS workflow_config
-    `);
-
+    // ── Tenants table columns ──
+    await db.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS timezone TEXT DEFAULT 'UTC'`);
+    await db.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS business_name TEXT`);
+    await db.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS max_parallel_appointments INTEGER NOT NULL DEFAULT 1`);
     await db.query(`
         ALTER TABLE tenants
         ADD COLUMN IF NOT EXISTS opening_hour INTEGER DEFAULT 9,
@@ -29,186 +14,174 @@ async function ensureDatabaseSchema() {
         ADD COLUMN IF NOT EXISTS business_holidays JSONB DEFAULT '[]'::jsonb,
         ADD COLUMN IF NOT EXISTS week_offs JSONB DEFAULT '[]'::jsonb
     `);
+    await db.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS app_secret TEXT`);
+    await db.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS webhook_verify_token TEXT`);
 
-    await db.query(`
-        ALTER TABLE services
-        ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE
-    `);
+    // NOTE: we do NOT drop workflow_config anymore — safe guard
+    // await db.query(`ALTER TABLE tenants DROP COLUMN IF EXISTS workflow_config`);
 
-    await db.query(`
-        ALTER TABLE tenants
-        ADD COLUMN IF NOT EXISTS app_secret TEXT
-    `);
+    // ── Services table ──
+    await db.query(`ALTER TABLE services ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`);
 
-    await db.query(`
-        ALTER TABLE tenants
-        ADD COLUMN IF NOT EXISTS webhook_verify_token TEXT
-    `);
+    // ── Bookings table columns ──
+    await db.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS close_remarks TEXT`);
+    await db.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ`);
+    await db.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS workflow_answers JSONB DEFAULT '{}'::jsonb`);
+    await db.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS provider_id INTEGER`);
+    await db.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS provider_name TEXT`);
+    await db.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS customer_name TEXT`);
 
-    await db.query(`
-        ALTER TABLE bookings
-        ADD COLUMN IF NOT EXISTS close_remarks TEXT
-    `);
+    // ── Conversation state columns ──
+    await db.query(`ALTER TABLE conversation_state ADD COLUMN IF NOT EXISTS workflow_step TEXT`);
+    await db.query(`ALTER TABLE conversation_state ADD COLUMN IF NOT EXISTS workflow_context JSONB DEFAULT '{}'::jsonb`);
+    await db.query(`ALTER TABLE conversation_state ADD COLUMN IF NOT EXISTS customer_name TEXT`);
 
-    await db.query(`
-        ALTER TABLE bookings
-        ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ
-    `);
-
-    await db.query(`
-        ALTER TABLE bookings
-        ADD COLUMN IF NOT EXISTS workflow_answers JSONB DEFAULT '{}'::jsonb
-    `);
-
-    await db.query(`
-        ALTER TABLE bookings
-        ADD COLUMN IF NOT EXISTS provider_id INTEGER
-    `);
-
-    await db.query(`
-        ALTER TABLE bookings
-        ADD COLUMN IF NOT EXISTS provider_name TEXT
-    `);
-
-    await db.query(`
-        ALTER TABLE conversation_state
-        ADD COLUMN IF NOT EXISTS workflow_step TEXT
-    `);
-
-    await db.query(`
-        ALTER TABLE conversation_state
-        ADD COLUMN IF NOT EXISTS workflow_context JSONB DEFAULT '{}'::jsonb
-    `);
-
+    // ── Data backfills ──
     await db.query(`
         UPDATE tenants
         SET max_parallel_appointments = 1
-        WHERE max_parallel_appointments IS NULL
-           OR max_parallel_appointments < 1
+        WHERE max_parallel_appointments IS NULL OR max_parallel_appointments < 1
     `);
-
     await db.query(`
         UPDATE tenants
         SET business_name = CONCAT('Tenant ', id::text)
-        WHERE business_name IS NULL
-           OR btrim(business_name) = ''
+        WHERE business_name IS NULL OR btrim(business_name) = ''
     `);
-
     await db.query(`
         UPDATE conversation_state
         SET workflow_step = state
-        WHERE workflow_step IS NULL
-          AND state IS NOT NULL
+        WHERE workflow_step IS NULL AND state IS NOT NULL
     `);
-
     await db.query(`
         UPDATE conversation_state
         SET workflow_context = jsonb_strip_nulls(
-            jsonb_build_object(
-                'service_name', service_name,
-                'date', date,
-                'time', time
-            )
+            jsonb_build_object('service_name', service_name, 'date', date, 'time', time)
         )
-        WHERE workflow_context IS NULL
-           OR workflow_context = '{}'::jsonb
+        WHERE workflow_context IS NULL OR workflow_context = '{}'::jsonb
     `);
+    await db.query(`UPDATE bookings SET workflow_answers = '{}'::jsonb WHERE workflow_answers IS NULL`);
 
-    await db.query(`
-        UPDATE bookings
-        SET workflow_answers = '{}'::jsonb
-        WHERE workflow_answers IS NULL
-    `);
-
+    // ── Processed webhooks (dedup) ──
     await db.query(`
         CREATE TABLE IF NOT EXISTS processed_webhooks (
-            message_id TEXT PRIMARY KEY,
-            tenant_id INTEGER,
-            phone TEXT,
+            message_id      TEXT PRIMARY KEY,
+            tenant_id       INTEGER,
+            phone           TEXT,
             phone_number_id TEXT,
-            processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            processed_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
     `);
-
     await db.query(`
         CREATE INDEX IF NOT EXISTS processed_webhooks_processed_at_idx
         ON processed_webhooks (processed_at DESC)
     `);
 
+    // ── Bookings indexes ──
     await db.query(`
         CREATE INDEX IF NOT EXISTS bookings_slot_lookup_idx
         ON bookings (tenant_id, booking_date, booking_time, status)
     `);
+    await db.query(`
+        CREATE INDEX IF NOT EXISTS bookings_tenant_date_idx
+        ON bookings (tenant_id, booking_date DESC)
+    `);
+    await db.query(`
+        CREATE INDEX IF NOT EXISTS bookings_tenant_status_idx
+        ON bookings (tenant_id, status)
+    `);
 
+    // ── Conversation state index ──
+    await db.query(`
+        CREATE INDEX IF NOT EXISTS conversation_state_phone_tenant_idx
+        ON conversation_state (phone, tenant_id)
+    `);
+
+    // ── Service providers ──
     await db.query(`
         CREATE TABLE IF NOT EXISTS service_providers (
-            id SERIAL PRIMARY KEY,
-            tenant_id INTEGER NOT NULL,
+            id         SERIAL PRIMARY KEY,
+            tenant_id  INTEGER NOT NULL,
             service_id INTEGER,
-            name TEXT NOT NULL,
-            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            name       TEXT NOT NULL,
+            is_active  BOOLEAN NOT NULL DEFAULT TRUE,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
     `);
-
     await db.query(`
         CREATE INDEX IF NOT EXISTS service_providers_tenant_service_idx
         ON service_providers (tenant_id, service_id, is_active, name)
     `);
 
+    // ── Tenant week-offs (separate table) ──
     await db.query(`
-        DROP INDEX IF EXISTS bookings_active_slot_unique
+        CREATE TABLE IF NOT EXISTS tenant_week_offs (
+            id          SERIAL PRIMARY KEY,
+            tenant_id   TEXT NOT NULL,
+            day_of_week INTEGER NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
+            UNIQUE (tenant_id, day_of_week)
+        )
     `);
 
+    // ── Tenant holidays (separate table) ──
+    await db.query(`
+        CREATE TABLE IF NOT EXISTS tenant_holidays (
+            id           SERIAL PRIMARY KEY,
+            tenant_id    TEXT NOT NULL,
+            holiday_date DATE NOT NULL,
+            UNIQUE (tenant_id, holiday_date)
+        )
+    `);
+
+    // ── Remove stale index (safe) ──
+    await db.query(`DROP INDEX IF EXISTS bookings_active_slot_unique`);
+
+    // ── Cleanup old processed webhooks (keep 30 days) ──
     await db.query(`
         DELETE FROM processed_webhooks
         WHERE processed_at < NOW() - INTERVAL '30 days'
     `);
 
-    // --- WORKFLOW v2 STRUCTURE ---
+    // ── Workflow v2 ──
     await db.query(`
         CREATE TABLE IF NOT EXISTS workflow_steps (
-            id SERIAL PRIMARY KEY,
-            tenant_id INTEGER NOT NULL,
-            step_id TEXT NOT NULL,
-            kind TEXT NOT NULL,
+            id              SERIAL PRIMARY KEY,
+            tenant_id       INTEGER NOT NULL,
+            step_id         TEXT NOT NULL,
+            kind            TEXT NOT NULL,
             question_header TEXT,
-            question_body TEXT,
+            question_body   TEXT,
             question_footer TEXT,
-            next_step_id TEXT,
-            order_index INTEGER DEFAULT 0,
-            is_active BOOLEAN DEFAULT TRUE,
-            metadata JSONB DEFAULT '{}'::jsonb,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            next_step_id    TEXT,
+            order_index     INTEGER DEFAULT 0,
+            is_active       BOOLEAN DEFAULT TRUE,
+            metadata        JSONB DEFAULT '{}'::jsonb,
+            created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             UNIQUE(tenant_id, step_id)
         )
     `);
-
     await db.query(`
         CREATE TABLE IF NOT EXISTS workflow_options (
-            id SERIAL PRIMARY KEY,
-            step_db_id INTEGER REFERENCES workflow_steps(id) ON DELETE CASCADE,
-            option_id TEXT NOT NULL,
-            title TEXT NOT NULL,
-            value TEXT,
+            id                 SERIAL PRIMARY KEY,
+            step_db_id         INTEGER REFERENCES workflow_steps(id) ON DELETE CASCADE,
+            option_id          TEXT NOT NULL,
+            title              TEXT NOT NULL,
+            value              TEXT,
             next_step_override TEXT,
-            action TEXT,
-            description TEXT,
-            order_index INTEGER DEFAULT 0,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            action             TEXT,
+            description        TEXT,
+            order_index        INTEGER DEFAULT 0,
+            created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             UNIQUE(step_db_id, option_id)
         )
     `);
-
     await db.query(`
-        CREATE INDEX IF NOT EXISTS workflow_steps_tenant_idx ON workflow_steps(tenant_id, order_index)
+        CREATE INDEX IF NOT EXISTS workflow_steps_tenant_idx
+        ON workflow_steps(tenant_id, order_index)
     `);
-
     await db.query(`
-        CREATE INDEX IF NOT EXISTS workflow_options_step_idx ON workflow_options(step_db_id, order_index)
+        CREATE INDEX IF NOT EXISTS workflow_options_step_idx
+        ON workflow_options(step_db_id, order_index)
     `);
 }
 
-module.exports = {
-    ensureDatabaseSchema
-};
+module.exports = { ensureDatabaseSchema };

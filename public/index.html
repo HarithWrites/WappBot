@@ -222,10 +222,44 @@
                             </div>
                         </div>
                     </div>
+                    <div id="analyticsExtras"></div>
+
+                    <div class="panel-card chart-container-large" style="margin-top:16px">
+                        <div class="panel-header">
+                            <h3>Daily Trend — Last 14 Days</h3>
+                        </div>
+                        <div class="bar-chart-wrap">
+                            <div class="bar-chart" id="engagementBarChart">
+                                <div class="placeholder-visual">
+                                    <span class="loader-ring"></span>
+                                    <p>Loading chart data...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+                        <div class="panel-card">
+                            <div class="panel-header"><h3>Bookings by Day of Week</h3></div>
+                            <div class="bar-chart-wrap" style="height:160px">
+                                <div class="bar-chart" id="dowBarChart">
+                                    <div class="placeholder-visual"><span class="loader-ring"></span></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="panel-card">
+                            <div class="panel-header"><h3>Bookings by Hour of Day</h3></div>
+                            <div class="bar-chart-wrap" style="height:160px">
+                                <div class="bar-chart" id="hourlyBarChart">
+                                    <div class="placeholder-visual"><span class="loader-ring"></span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
                     <div class="metrics-row-small" style="margin-top:16px">
-                        <div class="stat-card-mini"><h4>Avg Response</h4><p id="statAvgResponse">2.5s</p></div>
-                        <div class="stat-card-mini"><h4>Success Rate</h4><p id="statSuccessRate">99.4%</p></div>
+                        <div class="stat-card-mini"><h4>Today</h4><p id="statAvgResponse">—</p></div>
+                        <div class="stat-card-mini"><h4>This Week</h4><p id="statSuccessRate">—</p></div>
                         <div class="stat-card-mini"><h4>Active Sessions</h4><p id="statActiveSessions">—</p></div>
                     </div>
                 </div>
@@ -302,7 +336,9 @@
                             <tbody id="bookingsTableBody"></tbody>
                         </table>
                         <div id="dashboardEmpty" class="empty-state-visual hidden">
-                            <div class="empty-icon">📋</div>
+                            <div class="empty-icon">
+                                <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                            </div>
                             <h4>No Bookings Found</h4>
                             <p>No records match your current filters. Try adjusting the search criteria.</p>
                         </div>
@@ -345,9 +381,10 @@
                             </div>
                             <div class="field-block">
                                 <label>Message</label>
-                                <textarea id="messageContent" rows="6" class="form-input" placeholder="Type your WhatsApp message here...&#10;&#10;Use {{name}} for customer name."></textarea>
+                                <textarea id="messageContent" rows="6" class="form-input" placeholder="Type your WhatsApp message here..."></textarea>
                             </div>
-                            <button type="submit" class="primary full-width">
+                            <p id="broadcastStatus" class="status-note" style="display:none"></p>
+                            <button type="submit" class="primary full-width" id="broadcastSubmitBtn">
                                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                                 Send Message
                             </button>
@@ -669,7 +706,19 @@
             <span>Sunset</span>
         </button>
     </div>
-    <button class="theme-toggle-btn" id="themeToggleBtn" title="Change theme">🎨</button>
+    <button class="theme-toggle-btn" id="themeToggleBtn" title="Change theme">
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="5"/>
+        <line x1="12" y1="1" x2="12" y2="3"/>
+        <line x1="12" y1="21" x2="12" y2="23"/>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+        <line x1="1" y1="12" x2="3" y2="12"/>
+        <line x1="21" y1="12" x2="23" y2="12"/>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+    </svg>
+</button>
 </div>
 
 <!-- ════════════════════════════════════════════════

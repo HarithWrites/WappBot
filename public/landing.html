@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WappBot — WhatsApp Booking Automation for Businesses</title>
+<meta name="description" content="Automate your bookings via WhatsApp. WappBot lets your customers book appointments 24/7 without lifting a finger.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink-950:#08080a;--ink-900:#0e0e11;--ink-800:#1a1a1f;--ink-700:#252529;--ink-600:#35353b;
+  --amber:#d4a039;--amber-light:#fbbf24;--amber-glow:rgba(212,160,57,0.15);
+  --text:#f4f4f5;--text-sub:#a1a1aa;--text-faint:#71717a;
+  --mint:#34d399;--coral:#fb7185;--sky:#60a5fa;
+  --radius:14px;--font:'Sora',sans-serif;--body:'DM Sans',sans-serif;
+}
+html{scroll-behavior:smooth}
+body{background:var(--ink-950);color:var(--text);font-family:var(--body);line-height:1.6;overflow-x:hidden}
+
+/* ── NAV ── */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:16px 48px;background:rgba(8,8,10,0.85);backdrop-filter:blur(16px);border-bottom:1px solid rgba(212,160,57,0.1)}
+.nav-logo{font-family:var(--font);font-weight:800;font-size:1.3rem;color:var(--amber-light);letter-spacing:-0.02em}
+.nav-logo span{color:var(--text);opacity:0.7}
+.nav-links{display:flex;gap:32px;list-style:none}
+.nav-links a{color:var(--text-sub);text-decoration:none;font-size:0.88rem;font-weight:500;transition:color 0.2s}
+.nav-links a:hover{color:var(--amber-light)}
+.nav-cta{background:var(--amber);color:#000;padding:10px 24px;border-radius:8px;font-weight:700;font-size:0.88rem;text-decoration:none;font-family:var(--font);transition:all 0.2s;border:none;cursor:pointer}
+.nav-cta:hover{background:var(--amber-light);transform:translateY(-1px);box-shadow:0 4px 20px rgba(212,160,57,0.4)}
+
+/* ── HERO ── */
+.hero{min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;padding:120px 24px 80px;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:800px;height:800px;background:radial-gradient(ellipse at center,rgba(212,160,57,0.12) 0%,transparent 70%);pointer-events:none}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(212,160,57,0.1);border:1px solid rgba(212,160,57,0.25);border-radius:100px;padding:6px 16px;font-size:0.78rem;font-weight:600;color:var(--amber-light);margin-bottom:28px;letter-spacing:0.04em}
+.hero-badge::before{content:'●';color:var(--mint);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+h1{font-family:var(--font);font-size:clamp(2.4rem,6vw,4.2rem);font-weight:800;line-height:1.1;letter-spacing:-0.03em;max-width:800px;margin:0 auto 20px}
+h1 span{background:linear-gradient(135deg,var(--amber-light),var(--amber));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero-sub{font-size:clamp(1rem,2vw,1.2rem);color:var(--text-sub);max-width:560px;margin:0 auto 40px}
+.hero-actions{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+.btn-primary{background:var(--amber);color:#000;padding:14px 32px;border-radius:10px;font-weight:700;font-size:1rem;text-decoration:none;font-family:var(--font);transition:all 0.2s;display:inline-flex;align-items:center;gap:8px}
+.btn-primary:hover{background:var(--amber-light);transform:translateY(-2px);box-shadow:0 8px 32px rgba(212,160,57,0.4)}
+.btn-secondary{background:transparent;color:var(--text);padding:14px 32px;border-radius:10px;font-weight:600;font-size:1rem;text-decoration:none;font-family:var(--font);border:1px solid rgba(255,255,255,0.15);transition:all 0.2s}
+.btn-secondary:hover{border-color:rgba(212,160,57,0.4);color:var(--amber-light)}
+
+/* ── STATS BAR ── */
+.stats-bar{background:var(--ink-800);border-top:1px solid rgba(212,160,57,0.1);border-bottom:1px solid rgba(212,160,57,0.1);padding:32px 48px;display:flex;justify-content:center;gap:64px;flex-wrap:wrap}
+.stat-item{text-align:center}
+.stat-num{font-family:var(--font);font-size:2rem;font-weight:800;color:var(--amber-light)}
+.stat-label{font-size:0.8rem;color:var(--text-faint);margin-top:4px}
+
+/* ── SECTIONS ── */
+section{padding:100px 24px}
+.container{max-width:1100px;margin:0 auto}
+.section-tag{font-size:0.75rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--amber);margin-bottom:12px}
+h2{font-family:var(--font);font-size:clamp(1.8rem,4vw,2.8rem);font-weight:800;letter-spacing:-0.02em;line-height:1.2;margin-bottom:16px}
+.section-sub{color:var(--text-sub);font-size:1rem;max-width:540px;margin-bottom:56px}
+
+/* ── HOW IT WORKS ── */
+.how-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.how-card{background:var(--ink-800);border:1px solid rgba(255,255,255,0.06);border-radius:var(--radius);padding:32px;position:relative;overflow:hidden;transition:transform 0.2s,border-color 0.2s}
+.how-card:hover{transform:translateY(-4px);border-color:rgba(212,160,57,0.3)}
+.how-num{font-family:var(--font);font-size:3rem;font-weight:800;color:rgba(212,160,57,0.15);position:absolute;top:16px;right:20px}
+.how-icon{width:44px;height:44px;background:var(--amber-glow);border:1px solid rgba(212,160,57,0.2);border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:16px}
+.how-icon svg{width:22px;height:22px;stroke:var(--amber);fill:none;stroke-width:2}
+.how-card h3{font-family:var(--font);font-size:1.1rem;font-weight:700;margin-bottom:8px}
+.how-card p{color:var(--text-sub);font-size:0.88rem}
+
+/* ── FEATURES ── */
+.features-bg{background:var(--ink-900)}
+.feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.feat-card{background:var(--ink-800);border:1px solid rgba(255,255,255,0.06);border-radius:var(--radius);padding:28px;transition:all 0.25s}
+.feat-card:hover{border-color:rgba(212,160,57,0.3);background:rgba(26,26,31,0.9);transform:translateY(-3px)}
+.feat-icon{font-size:1.8rem;margin-bottom:14px}
+.feat-card h3{font-family:var(--font);font-size:1rem;font-weight:700;margin-bottom:8px}
+.feat-card p{color:var(--text-sub);font-size:0.84rem;line-height:1.6}
+
+/* ── PRICING ── */
+.pricing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.price-card{background:var(--ink-800);border:1px solid rgba(255,255,255,0.08);border-radius:var(--radius);padding:36px;position:relative;transition:transform 0.2s}
+.price-card.popular{border-color:var(--amber);background:rgba(26,26,31,0.95)}
+.popular-badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--amber);color:#000;font-size:0.72rem;font-weight:700;padding:4px 16px;border-radius:100px;font-family:var(--font);letter-spacing:0.05em;white-space:nowrap}
+.price-tier{font-family:var(--font);font-size:0.8rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-faint);margin-bottom:8px}
+.price-amount{font-family:var(--font);font-size:2.6rem;font-weight:800;color:var(--text);line-height:1}
+.price-amount span{font-size:1rem;font-weight:500;color:var(--text-sub)}
+.price-desc{color:var(--text-sub);font-size:0.84rem;margin:12px 0 24px}
+.price-features{list-style:none;margin-bottom:32px;display:flex;flex-direction:column;gap:10px}
+.price-features li{font-size:0.85rem;color:var(--text-sub);display:flex;align-items:center;gap:8px}
+.price-features li::before{content:'✓';color:var(--mint);font-weight:700;flex-shrink:0}
+.price-btn{display:block;text-align:center;padding:12px;border-radius:8px;font-weight:700;font-size:0.9rem;text-decoration:none;font-family:var(--font);transition:all 0.2s}
+.price-btn-amber{background:var(--amber);color:#000}
+.price-btn-amber:hover{background:var(--amber-light)}
+.price-btn-outline{border:1px solid rgba(255,255,255,0.15);color:var(--text)}
+.price-btn-outline:hover{border-color:var(--amber);color:var(--amber)}
+
+/* ── WHY US ── */
+.why-grid{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center}
+.why-list{display:flex;flex-direction:column;gap:24px}
+.why-item{display:flex;gap:16px;align-items:flex-start}
+.why-dot{width:36px;height:36px;background:var(--amber-glow);border:1px solid rgba(212,160,57,0.25);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
+.why-dot svg{width:16px;height:16px;stroke:var(--amber);fill:none;stroke-width:2.5}
+.why-item h4{font-family:var(--font);font-size:0.95rem;font-weight:700;margin-bottom:4px}
+.why-item p{color:var(--text-sub);font-size:0.84rem}
+.why-visual{background:var(--ink-800);border:1px solid rgba(212,160,57,0.15);border-radius:20px;padding:28px;position:relative}
+.chat-bubble{background:var(--ink-700);border-radius:12px 12px 12px 2px;padding:12px 16px;margin-bottom:12px;font-size:0.84rem;color:var(--text-sub);max-width:80%}
+.chat-bubble.bot{background:rgba(212,160,57,0.1);border:1px solid rgba(212,160,57,0.2);border-radius:12px 12px 2px 12px;margin-left:auto;color:var(--text)}
+.chat-label{font-size:0.68rem;color:var(--text-faint);margin-bottom:4px;font-weight:600}
+
+/* ── CTA ── */
+.cta-section{text-align:center;padding:100px 24px;background:linear-gradient(135deg,rgba(212,160,57,0.08) 0%,transparent 50%)}
+.cta-section h2{margin-bottom:16px}
+.cta-section p{color:var(--text-sub);max-width:480px;margin:0 auto 40px}
+
+/* ── FOOTER ── */
+footer{background:var(--ink-900);border-top:1px solid rgba(255,255,255,0.06);padding:40px 48px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px}
+.footer-left{font-family:var(--font);font-weight:700;color:var(--amber-light)}
+.footer-right{color:var(--text-faint);font-size:0.82rem}
+
+/* ── RESPONSIVE ── */
+@media(max-width:900px){
+  .how-grid,.feat-grid,.pricing-grid{grid-template-columns:1fr}
+  .why-grid{grid-template-columns:1fr}
+  .why-visual{display:none}
+  nav{padding:14px 20px}
+  .nav-links{display:none}
+  .stats-bar{gap:32px}
+}
+@media(max-width:600px){
+  .hero{padding:100px 16px 60px}
+  section{padding:64px 16px}
+  footer{padding:24px 20px;flex-direction:column;text-align:center}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">Wapp<span>Bot</span></div>
+  <ul class="nav-links">
+    <li><a href="#how">How It Works</a></li>
+    <li><a href="#features">Features</a></li>
+    <li><a href="#pricing">Pricing</a></li>
+    <li><a href="#why">Why WappBot</a></li>
+  </ul>
+  <a href="/dashboard" class="nav-cta">Login to Dashboard →</a>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div>
+    <div class="hero-badge">🟢 Live — Serving businesses 24/7</div>
+    <h1>Automate Your Bookings<br>via <span>WhatsApp</span></h1>
+    <p class="hero-sub">Let customers book appointments around the clock — no app downloads, no forms. Just a WhatsApp message.</p>
+    <div class="hero-actions">
+      <a href="/dashboard" class="btn-primary">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        Login to Dashboard
+      </a>
+      <a href="#how" class="btn-secondary">See How It Works</a>
+    </div>
+  </div>
+</section>
+
+<!-- STATS -->
+<div class="stats-bar">
+  <div class="stat-item"><div class="stat-num">24/7</div><div class="stat-label">Booking availability</div></div>
+  <div class="stat-item"><div class="stat-num">2min</div><div class="stat-label">Average booking time</div></div>
+  <div class="stat-item"><div class="stat-num">0</div><div class="stat-label">Missed appointments</div></div>
+  <div class="stat-item"><div class="stat-num">100%</div><div class="stat-label">WhatsApp native</div></div>
+</div>
+
+<!-- HOW IT WORKS -->
+<section id="how">
+  <div class="container">
+    <div class="section-tag">How It Works</div>
+    <h2>Three steps. Fully automated.</h2>
+    <p class="section-sub">From WhatsApp message to confirmed appointment — hands-free, every time.</p>
+    <div class="how-grid">
+      <div class="how-card">
+        <div class="how-num">01</div>
+        <div class="how-icon"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+        <h3>Customer says "Hi"</h3>
+        <p>Your customer sends a WhatsApp message. WappBot instantly greets them and guides them through booking — no waiting, no staff needed.</p>
+      </div>
+      <div class="how-card">
+        <div class="how-num">02</div>
+        <div class="how-icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+        <h3>Bot collects details</h3>
+        <p>Service, provider, date, and time — all collected through a natural WhatsApp conversation using smart interactive menus.</p>
+      </div>
+      <div class="how-card">
+        <div class="how-num">03</div>
+        <div class="how-icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+        <h3>You approve &amp; confirm</h3>
+        <p>Review the booking in your dashboard. One click to approve — and the customer instantly receives a WhatsApp confirmation.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features" class="features-bg">
+  <div class="container">
+    <div class="section-tag">Features</div>
+    <h2>Everything you need to run bookings at scale</h2>
+    <p class="section-sub">Built for service businesses that want a professional, hands-free booking experience.</p>
+    <div class="feat-grid">
+      <div class="feat-card">
+        <div class="feat-icon">💬</div>
+        <h3>WhatsApp-Native Bot</h3>
+        <p>Conversational booking flow built entirely inside WhatsApp. No app downloads or external links required.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">📅</div>
+        <h3>Smart Scheduling</h3>
+        <p>Automatically filters holidays, week-offs, and fully booked slots. Customers only see real availability.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">📊</div>
+        <h3>Real-Time Dashboard</h3>
+        <p>Live analytics with booking trends, peak hours, top services, and customer insights — all in one place.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">✅</div>
+        <h3>1-Click Approvals</h3>
+        <p>Approve, reject, or waitlist bookings from your dashboard. Customer is notified on WhatsApp instantly.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">📢</div>
+        <h3>Broadcast Messaging</h3>
+        <p>Send promotions, reminders, or updates to all your customers directly via WhatsApp with one click.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">🏢</div>
+        <h3>Multi-Business Support</h3>
+        <p>Manage multiple branches or business accounts from a single global admin dashboard.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- WHY WAPPBOT -->
+<section id="why">
+  <div class="container">
+    <div class="section-tag">Why WappBot</div>
+    <h2>Your customers already use WhatsApp</h2>
+    <p class="section-sub">Meet them where they are — not on a website form they'll never fill out.</p>
+    <div class="why-grid">
+      <div class="why-list">
+        <div class="why-item">
+          <div class="why-dot"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+          <div><h4>No missed bookings</h4><p>Bot handles enquiries 24/7 — even at midnight, on weekends, and during holidays.</p></div>
+        </div>
+        <div class="why-item">
+          <div class="why-dot"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+          <div><h4>Zero training needed</h4><p>No new app to learn. Your staff approves bookings from a clean, intuitive dashboard.</p></div>
+        </div>
+        <div class="why-item">
+          <div class="why-dot"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+          <div><h4>Higher conversion rate</h4><p>WhatsApp messages have 98% open rates vs 20% for email. More customers complete their bookings.</p></div>
+        </div>
+        <div class="why-item">
+          <div class="why-dot"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+          <div><h4>Instant customer notifications</h4><p>Confirmations, reminders, and updates land straight in their WhatsApp inbox — no SMS costs.</p></div>
+        </div>
+      </div>
+      <div class="why-visual">
+        <div class="chat-label">CUSTOMER</div>
+        <div class="chat-bubble">Hi 👋</div>
+        <div class="chat-label" style="text-align:right">WAPPBOT</div>
+        <div class="chat-bubble bot">Welcome to Glamour Studio! 💄 May I know your name?</div>
+        <div class="chat-bubble">Sarah</div>
+        <div class="chat-bubble bot">Hi Sarah! 🌟 Which service would you like today?<br><br>• Hair Cut<br>• Facial<br>• Manicure</div>
+        <div class="chat-bubble">Hair Cut</div>
+        <div class="chat-bubble bot">📅 Pick a date:<br>• Mon 05 May<br>• Tue 06 May<br>• Wed 07 May</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section id="pricing" style="background:var(--ink-900)">
+  <div class="container">
+    <div class="section-tag">Pricing</div>
+    <h2>Simple, transparent pricing</h2>
+    <p class="section-sub">No hidden fees. Cancel anytime. Start free.</p>
+    <div class="pricing-grid">
+      <div class="price-card">
+        <div class="price-tier">Starter</div>
+        <div class="price-amount">₹999 <span>/ month</span></div>
+        <div class="price-desc">Perfect for solo professionals and small studios.</div>
+        <ul class="price-features">
+          <li>1 Business Account</li>
+          <li>Unlimited bookings</li>
+          <li>WhatsApp bot included</li>
+          <li>Basic analytics</li>
+          <li>Email support</li>
+        </ul>
+        <a href="/dashboard" class="price-btn price-btn-outline">Get Started</a>
+      </div>
+      <div class="price-card popular">
+        <div class="popular-badge">MOST POPULAR</div>
+        <div class="price-tier">Growth</div>
+        <div class="price-amount">₹2,499 <span>/ month</span></div>
+        <div class="price-desc">For growing businesses with multiple staff members.</div>
+        <ul class="price-features">
+          <li>3 Business Accounts</li>
+          <li>Unlimited bookings</li>
+          <li>WhatsApp broadcast</li>
+          <li>Advanced analytics</li>
+          <li>Priority support</li>
+          <li>Custom workflows</li>
+        </ul>
+        <a href="/dashboard" class="price-btn price-btn-amber">Start Free Trial</a>
+      </div>
+      <div class="price-card">
+        <div class="price-tier">Enterprise</div>
+        <div class="price-amount">Custom</div>
+        <div class="price-desc">For chains, franchises, and high-volume operations.</div>
+        <ul class="price-features">
+          <li>Unlimited accounts</li>
+          <li>Dedicated support</li>
+          <li>Custom integrations</li>
+          <li>SLA guarantee</li>
+          <li>On-boarding assistance</li>
+          <li>White-label option</li>
+        </ul>
+        <a href="/dashboard" class="price-btn price-btn-outline">Contact Us</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FINAL CTA -->
+<section class="cta-section">
+  <div class="container">
+    <div class="section-tag">Get Started</div>
+    <h2>Ready to automate your bookings?</h2>
+    <p>Login to your dashboard and start serving customers 24/7 — starting today.</p>
+    <a href="/dashboard" class="btn-primary" style="display:inline-flex;font-size:1.05rem;padding:16px 40px">
+      Login to Dashboard →
+    </a>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-left">WappBot</div>
+  <div class="footer-right">© 2026 WappBot. WhatsApp booking automation for modern businesses.</div>
+</footer>
+
+</body>
+</html>

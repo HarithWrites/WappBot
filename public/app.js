@@ -461,7 +461,8 @@ async function submitBookingAction(e) {
         });
 
         closeActionModal();
-        showToast(`Booking ${action}d successfully — WhatsApp notification sent to customer`, "success");
+        const actionLabels = { approve: "approved", reject: "rejected", waiting: "set to waiting", close: "closed" };
+        showToast(`Booking ${actionLabels[action] || action} — WhatsApp notification sent to customer`, "success");
         await loadBookings(true);
         await loadOverviewStats();
     } catch (err) {
@@ -481,22 +482,126 @@ async function loadAnalytics() {
     const tenant = getSelectedTenant();
     if (!tenant) { showToast("Select a tenant first", "warning"); return; }
 
+    const grid = document.getElementById("analyticsMetricsGrid");
+    if (grid) grid.innerHTML = `<div style="padding:32px;text-align:center;grid-column:1/-1"><span class="loader-ring"></span></div>`;
+
     try {
         const data = await fetchJson(`/admin/analytics?tenantId=${tenant.id}`);
 
-        // Populate metric cards
+        // ── Summary metric cards ──
         setEl("metricConversations", data.totalConversations ?? "—");
         setEl("metricBookings",      data.totalBookings ?? "—");
         setEl("metricConversion",    data.conversionRate !== undefined ? `${data.conversionRate}%` : "—");
         setEl("metricPopular",       data.popularService || "—");
         setEl("metricMsgSent",       data.messagesSent ?? "—");
-        setEl("metricAvgResponse",   data.avgResponseTime ? `${data.avgResponseTime}s` : "—");
+        setEl("metricAvgResponse",   data.pendingBookings !== undefined ? `${data.pendingBookings} pending` : "—");
         setEl("statActiveSessions",  data.activeUsers ?? "—");
+        setEl("statAvgResponse",     data.bookingsToday ?? "—");
+        setEl("statSuccessRate",     data.bookingsThisWeek !== undefined ? `${data.bookingsThisWeek} this week` : "—");
 
-        // Render bar chart
-        renderBarChart(data.engagementTrends || []);
-        showToast("Analytics updated", "success");
+        // ── Build enhanced analytics panel ──
+        if (grid) {
+            const growth = data.monthlyGrowthPct !== null && data.monthlyGrowthPct !== undefined
+                ? `<span style="color:${data.monthlyGrowthPct >= 0 ? 'var(--mint-400)' : 'var(--coral-400)'}">${data.monthlyGrowthPct >= 0 ? '↑' : '↓'}${Math.abs(data.monthlyGrowthPct)}% vs last month</span>`
+                : `<span style="color:var(--text-faint)">No comparison data</span>`;
+
+            const statusBreakdown = data.bookingsByStatus || {};
+            const statusHtml = Object.entries(statusBreakdown).map(([st, cnt]) =>
+                `<div class="metric-card" style="padding:12px 16px">
+                    <h4 style="text-transform:capitalize">${st}</h4>
+                    <p style="font-size:1.4rem">${cnt}</p>
+                 </div>`
+            ).join("");
+
+            const topServicesHtml = (data.topServices || []).map((s, i) =>
+                `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-soft)">
+                    <span style="width:20px;height:20px;border-radius:50%;background:var(--primary-glow);display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;color:var(--primary)">${i+1}</span>
+                    <span style="flex:1;font-size:0.82rem;font-weight:500">${escHtml(s.service_name)}</span>
+                    <span style="font-size:0.82rem;font-weight:700;color:var(--primary)">${s.count}</span>
+                 </div>`
+            ).join("") || `<p style="color:var(--text-faint);font-size:0.8rem;padding:8px 0">No data yet</p>`;
+
+            const topCustomersHtml = (data.topCustomers || []).map((c, i) =>
+                `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-soft)">
+                    <span style="width:20px;height:20px;border-radius:50%;background:rgba(96,165,250,0.1);display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;color:var(--sky-400)">${i+1}</span>
+                    <span style="flex:1;font-size:0.82rem;font-weight:500">${escHtml(c.customer)}</span>
+                    <span style="font-size:0.82rem;font-weight:700;color:var(--sky-400)">${c.count} bookings</span>
+                 </div>`
+            ).join("") || `<p style="color:var(--text-faint);font-size:0.8rem;padding:8px 0">No customer data yet</p>`;
+
+            grid.innerHTML = `
+                <div class="metric-card">
+                    <h4>Total Conversations</h4>
+                    <p>${data.totalConversations ?? "—"}</p>
+                </div>
+                <div class="metric-card">
+                    <h4>Total Bookings</h4>
+                    <p>${data.totalBookings ?? "—"}</p>
+                    <p class="metric-sub">${growth}</p>
+                </div>
+                <div class="metric-card">
+                    <h4>Conversion Rate</h4>
+                    <p>${data.conversionRate !== undefined ? data.conversionRate + "%" : "—"}</p>
+                    <p class="metric-sub">chat → booking</p>
+                </div>
+                <div class="metric-card">
+                    <h4>Popular Service</h4>
+                    <p style="font-size:0.95rem">${escHtml(data.popularService || "N/A")}</p>
+                </div>
+                <div class="metric-card">
+                    <h4>Today's Bookings</h4>
+                    <p>${data.bookingsToday ?? "—"}</p>
+                </div>
+                <div class="metric-card">
+                    <h4>This Week</h4>
+                    <p>${data.bookingsThisWeek ?? "—"}</p>
+                </div>
+                <div class="metric-card">
+                    <h4>This Month</h4>
+                    <p>${data.bookingsThisMonth ?? "—"}</p>
+                </div>
+                <div class="metric-card">
+                    <h4>Peak Hour</h4>
+                    <p style="font-size:0.95rem">${data.peakHour || "N/A"}</p>
+                </div>
+                <div class="metric-card">
+                    <h4>Pending Review</h4>
+                    <p style="color:var(--amber-400)">${data.pendingBookings ?? "—"}</p>
+                </div>
+                <div class="metric-card">
+                    <h4>Messages Processed</h4>
+                    <p>${data.messagesReceived ?? "—"}</p>
+                </div>
+                ${statusHtml}
+            `;
+
+            // Extra panels below the grid
+            const extras = document.getElementById("analyticsExtras");
+            if (extras) {
+                extras.innerHTML = `
+                    <div class="panel-card" style="margin-top:16px;padding:20px">
+                        <div class="panel-header"><h3>Top Services</h3></div>
+                        <div style="margin-top:12px">${topServicesHtml}</div>
+                    </div>
+                    <div class="panel-card" style="margin-top:16px;padding:20px">
+                        <div class="panel-header"><h3>Top Customers</h3></div>
+                        <div style="margin-top:12px">${topCustomersHtml}</div>
+                    </div>
+                `;
+            }
+        }
+
+        // ── Booking trend chart (14-day) ──
+        renderBarChart(data.engagementTrends || [], "engagementBarChart");
+
+        // ── Day of week chart ──
+        renderBarChart(data.bookingsByDayOfWeek || [], "dowBarChart");
+
+        // ── Hourly chart ──
+        renderBarChart(data.bookingsByHour || [], "hourlyBarChart");
+
     } catch (err) {
+        if (grid) grid.innerHTML = `<div style="padding:32px;text-align:center;grid-column:1/-1;color:var(--coral-400)"><p>⚠️ Failed to load analytics. <button onclick="loadAnalytics()" class="secondary compact">Retry</button></p></div>`;
         showToast("Analytics sync failed", "error");
     }
 }
@@ -506,11 +611,11 @@ function setEl(id, val) {
     if (el) el.textContent = val;
 }
 
-function renderBarChart(trends) {
-    const container = document.getElementById("engagementBarChart");
+function renderBarChart(trends, containerId = "engagementBarChart") {
+    const container = document.getElementById(containerId);
     if (!container) return;
     if (!trends.length) {
-        container.innerHTML = `<div class="placeholder-visual"><p>No engagement data available.</p></div>`;
+        container.innerHTML = `<div class="placeholder-visual"><p>No data available yet.</p></div>`;
         return;
     }
 
@@ -902,7 +1007,9 @@ function renderTenantOverview() {
     } else {
         els.tenantOverviewList.innerHTML = portalData.tenants.map(t => `
             <article class="tenant-node-card" onclick="selectTenantAndGo('${t.id}')">
-                <div class="node-icon">🏪</div>
+                <div class="node-icon">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                </div>
                 <div class="node-info">
                     <h4>${escHtml(t.business_name || 'Business')}</h4>
                     <p>ID: ${t.id} · ${t.timezone || 'UTC'}</p>
@@ -1182,8 +1289,49 @@ function initApp() {
     document.getElementById("messageForm")?.addEventListener("submit", async (e) => {
         e.preventDefault();
         const content = document.getElementById("messageContent")?.value.trim();
+        const messageType = document.getElementById("messageType")?.value;
+        const targetPhone = document.getElementById("targetPhone")?.value.trim();
+        const commTenant = document.getElementById("commTenantSelect")?.value;
+        const submitBtn = document.getElementById("broadcastSubmitBtn");
+        const statusEl = document.getElementById("broadcastStatus");
+
         if (!content) return showToast("Message content is empty", "error");
-        showToast("Broadcast feature coming soon — message queued", "info");
+        if (messageType === "target" && !targetPhone) return showToast("Please enter a target phone number", "error");
+
+        // Confirm before sending broadcast
+        const confirmMsg = messageType === "broadcast"
+            ? "Send this message to ALL your contacts? This cannot be undone."
+            : `Send message to ${targetPhone}?`;
+        if (!confirm(confirmMsg)) return;
+
+        if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = `<span class="loader-ring" style="width:13px;height:13px;border-width:2px"></span> Sending...`; }
+        if (statusEl) { statusEl.style.display = ""; statusEl.textContent = "Sending..."; statusEl.style.color = "var(--text-muted)"; }
+
+        try {
+            const body = {
+                tenantId: commTenant || selectedTenantId,
+                message: content
+            };
+            if (messageType === "target" && targetPhone) body.targetPhone = targetPhone;
+
+            const result = await fetchJson("/admin/broadcast", {
+                method: "POST",
+                body: JSON.stringify(body)
+            });
+
+            const sentMsg = `✓ Sent to ${result.sent} contact${result.sent === 1 ? "" : "s"}${result.failed > 0 ? ` (${result.failed} failed)` : ""}`;
+            if (statusEl) { statusEl.textContent = sentMsg; statusEl.style.color = "var(--mint-400)"; }
+            showToast(sentMsg, "success");
+            document.getElementById("messageContent").value = "";
+        } catch (err) {
+            if (statusEl) { statusEl.textContent = `✕ Failed: ${err.message}`; statusEl.style.color = "var(--coral-400)"; }
+            showToast(`Broadcast failed: ${err.message}`, "error");
+        } finally {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Send Message`;
+            }
+        }
     });
 
     // ── Theme Picker ──
@@ -1203,9 +1351,7 @@ function initApp() {
         document.querySelectorAll(".theme-swatch").forEach(s => {
             s.classList.toggle("active", s.dataset.theme === themeId);
         });
-        // Update toggle button emoji
-        const t = themes.find(t => t.id === themeId);
-        if (themeToggleBtn && t) themeToggleBtn.textContent = t.icon;
+        // Do NOT overwrite the toggle button content (it has an SVG icon)
     }
 
     themeToggleBtn?.addEventListener("click", (e) => {
