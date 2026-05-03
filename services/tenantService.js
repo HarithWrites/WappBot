@@ -84,11 +84,78 @@ async function updateTenantSettings(tenantId, settings) {
     return res.rows[0];
 }
 
+// ── Week-offs (separate table) ──
+async function getWeekOffs(tenantId) {
+    const res = await db.query(
+        "SELECT day_of_week FROM tenant_week_offs WHERE tenant_id=$1 ORDER BY day_of_week",
+        [String(tenantId)]
+    );
+    return res.rows.map(r => r.day_of_week);
+}
+
+async function setWeekOffs(tenantId, days) {
+    const client = await db.connect();
+    try {
+        await client.query("BEGIN");
+        await client.query("DELETE FROM tenant_week_offs WHERE tenant_id=$1", [String(tenantId)]);
+        for (const day of (days || [])) {
+            const d = Number(day);
+            if (d >= 0 && d <= 6) {
+                await client.query(
+                    "INSERT INTO tenant_week_offs (tenant_id, day_of_week) VALUES ($1,$2) ON CONFLICT DO NOTHING",
+                    [String(tenantId), d]
+                );
+            }
+        }
+        await client.query("COMMIT");
+    } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+    } finally {
+        client.release();
+    }
+}
+
+// ── Holidays (separate table) ──
+async function getHolidays(tenantId) {
+    const res = await db.query(
+        "SELECT to_char(holiday_date, 'YYYY-MM-DD') AS holiday_date FROM tenant_holidays WHERE tenant_id=$1 ORDER BY holiday_date",
+        [String(tenantId)]
+    );
+    return res.rows.map(r => r.holiday_date);
+}
+
+async function setHolidays(tenantId, dates) {
+    const client = await db.connect();
+    try {
+        await client.query("BEGIN");
+        await client.query("DELETE FROM tenant_holidays WHERE tenant_id=$1", [String(tenantId)]);
+        for (const dateStr of (dates || [])) {
+            if (dateStr) {
+                await client.query(
+                    "INSERT INTO tenant_holidays (tenant_id, holiday_date) VALUES ($1,$2::date) ON CONFLICT DO NOTHING",
+                    [String(tenantId), dateStr]
+                );
+            }
+        }
+        await client.query("COMMIT");
+    } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+    } finally {
+        client.release();
+    }
+}
+
 module.exports = {
     getAllTenants,
     getTenantById,
     getTenantByBusinessName,
     getTenantByPhoneNumberId,
     getTenantByAdminToken,
-    updateTenantSettings
+    updateTenantSettings,
+    getWeekOffs,
+    setWeekOffs,
+    getHolidays,
+    setHolidays
 };

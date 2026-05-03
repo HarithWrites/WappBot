@@ -1,309 +1,100 @@
+/**
+ * WappBot Admin Portal - Client Application v2.0
+ * Premium Enterprise Logic: Accurate Data Binding, Action Flows, Analytics, Settings Confirmation.
+ */
+
 // ==========================================
-// 1. STATE & CONFIGURATION
+// 1. GLOBAL STATE
 // ==========================================
-let adminToken = "";
-let stream = null;
-let streamTenantToken = null;
-let portalData = { scope: "tenant", tenants: [] };
+let adminToken     = "";
+let portalData     = { scope: "tenant", tenants: [] };
 let selectedTenantId = null;
-let currentFilter = "all";
-let currentRange = "all";
-let currentPage = 1;
-let pageSize = 14;
-let currentScreen = "overviewScreen";
-let summaryCounts = {
-    today: 0,
-    this_week: 0,
-    this_month: 0,
-    all: 0,
-};
-let bookingsResponse = {
-    items: [],
-    total: 0,
-    page: 1,
-    pageSize
-};
-let closeBookingMeta = null;
-let currentSettingsTab = "general";
+let currentScreen  = "overviewScreen";
+let currentFilter  = "all";
+let currentPage    = 1;
+const PAGE_SIZE    = 15;
+
+let bookingsCache  = [];           // flat cache for current page rows
+let bookingsTotal  = 0;
+let closeBookingMeta = null;       // { id, tenantId, action }
 let currentSettingHolidays = [];
 let workflowStepsData = [];
-let selectedWorkflowTenant = null;
-let workflowCurrentPage = 1;
-let workflowPageSize = 10;
+let stream         = null;
+
+// Pending settings-save callback (resolved after confirmation)
+let pendingSaveCallback = null;
 
 // ==========================================
-// 2. DOM ELEMENTS
+// 2. DOM REFS
 // ==========================================
-const loginScreen = document.getElementById("loginScreen");
-const dashboardShell = document.getElementById("dashboardShell");
-const loginForm = document.getElementById("loginForm");
-const tenantInput = document.getElementById("tenantId");
-const loginStatus = document.getElementById("loginStatus");
-const logoutButton = document.getElementById("logoutButton");
-const tenantName = document.getElementById("tenantName");
-const connectionStatusText = document.getElementById("connectionStatusText");
-const connectionStatusDot = document.getElementById("connectionStatusDot");
-const homeConnectionLabel = document.getElementById("homeConnectionLabel");
-const overviewStatus = document.getElementById("overviewStatus");
-const tenantOverviewList = document.getElementById("tenantOverviewList");
-const overviewTenantCount = document.getElementById("overviewTenantCount");
-const screenButtons = document.querySelectorAll("[data-screen-target]");
-const screens = document.querySelectorAll(".workspace-screen");
-const refreshGlobalButton = document.getElementById("refreshGlobalButton");
-const refreshOverviewButton = document.getElementById("refreshOverviewButton");
-const refreshBookingsButton = document.getElementById("refreshBookingsButton");
-const refreshAnalyticsButton = document.getElementById("refreshAnalyticsButton");
-const refreshWorkflowButton = document.getElementById("refreshWorkflowButton");
-const refreshSettingsButton = document.getElementById("refreshSettingsButton");
-const bookingsTableBody = document.getElementById("bookingsTableBody");
-const dashboardEmpty = document.getElementById("dashboardEmpty");
-const bookingsStatus = document.getElementById("bookingsStatus");
-const searchInput = document.getElementById("searchInput");
-const dateInput = document.getElementById("dateFilter");
-const tenantFilter = document.getElementById("tenantFilter");
-const prevPageButton = document.getElementById("prevPageButton");
-const nextPageButton = document.getElementById("nextPageButton");
-const pageLabel = document.getElementById("pageLabel");
-const closeModal = document.getElementById("closeModal");
-const closeForm = document.getElementById("closeForm");
-const closeRemarks = document.getElementById("closeRemarks");
-const closeModalDismiss = document.getElementById("closeModalDismiss");
-const closeModalSummary = document.getElementById("closeModalSummary");
+let els = {};
 
-// ==========================================
-// 3. UTILITIES & HELPERS
-// ==========================================
-function showToast(message, type = "success") {
-    const container = document.getElementById("toastContainer");
-    if (!container) return;
-    
-    const toast = document.createElement("div");
-    toast.className = `toast ${type}`;
-    toast.textContent = message;
-    container.appendChild(toast);
-    
-    setTimeout(() => {
-        toast.classList.add("fade-out");
-        setTimeout(() => toast.remove(), 300);
-    }, 4000);
-}
+function updateDomRefs() {
+    els = {
+        // Screens
+        loginScreen:         document.getElementById("loginScreen"),
+        dashboardShell:      document.getElementById("dashboardShell"),
+        loginForm:           document.getElementById("loginForm"),
+        tenantInput:         document.getElementById("tenantId"),
+        loginStatus:         document.getElementById("loginStatus"),
+        logoutButton:        document.getElementById("logoutButton"),
+        tenantName:          document.getElementById("tenantName"),
+        connectionStatusText:document.getElementById("connectionStatusText"),
+        connectionStatusDot: document.getElementById("connectionStatusDot"),
+        overviewStatus:      document.getElementById("overviewStatus"),
+        tenantOverviewList:  document.getElementById("tenantOverviewList"),
+        overviewTenantCount: document.getElementById("overviewTenantCount"),
+        screenButtons:       document.querySelectorAll("[data-screen-target]"),
+        screens:             document.querySelectorAll(".workspace-screen"),
 
-function normalizeDateValue(value) {
-    if (!value) {
-        return "";
-    }
+        // Bookings
+        bookingsTableBody:   document.getElementById("bookingsTableBody"),
+        dashboardEmpty:      document.getElementById("dashboardEmpty"),
+        bookingsStatus:      document.getElementById("bookingsStatus"),
+        searchInput:         document.getElementById("searchInput"),
+        dateInput:           document.getElementById("dateFilter"),
+        tenantFilter:        document.getElementById("tenantFilter"),
+        prevPageButton:      document.getElementById("prevPageButton"),
+        nextPageButton:      document.getElementById("nextPageButton"),
+        pageLabel:           document.getElementById("pageLabel"),
 
-    const raw = String(value);
-    return raw.includes("T") ? raw.slice(0, 10) : raw;
-}
+        // Settings
+        holidayList:             document.getElementById("holidayList"),
+        weekOffsContainer:       document.getElementById("weekOffsContainer"),
+        settingsPanes:           document.querySelectorAll(".settings-pane"),
+        settingsTabs:            document.querySelectorAll(".settings-nav-pills .pill"),
 
-function normalizeTimeValue(value) {
-    if (!value) {
-        return "";
-    }
+        // Action Modal
+        actionModal:             document.getElementById("actionModal"),
+        actionModalSurface:      document.getElementById("actionModalSurface"),
+        actionModalLabel:        document.getElementById("actionModalLabel"),
+        actionModalTitle:        document.getElementById("actionModalTitle"),
+        actionForm:              document.getElementById("actionForm"),
+        actionRemarks:           document.getElementById("actionRemarks"),
+        actionModalDismiss:      document.getElementById("actionModalDismiss"),
+        actionModalCancel:       document.getElementById("actionModalCancel"),
+        actionSubmitButton:      document.getElementById("actionSubmitButton"),
+        remarksWrap:             document.getElementById("remarksWrap"),
+        remarksLabel:            document.getElementById("remarksLabel"),
 
-    const raw = String(value);
-    if (raw.includes("T")) {
-        const timePart = raw.split("T")[1] || "";
-        return timePart.replace("Z", "").slice(0, 8);
-    }
+        // Booking summary fields
+        summaryPhone:    document.getElementById("summaryPhone"),
+        summaryService:  document.getElementById("summaryService"),
+        summaryDate:     document.getElementById("summaryDate"),
+        summaryTime:     document.getElementById("summaryTime"),
+        summaryProvider: document.getElementById("summaryProvider"),
 
-    return raw.slice(0, 8);
-}
-
-function formatDisplayDate(dateString) {
-    const normalizedDate = normalizeDateValue(dateString);
-    if (!normalizedDate) {
-        return "No date";
-    }
-
-    const date = new Date(`${normalizedDate}T00:00:00`);
-
-    if (Number.isNaN(date.getTime())) {
-        return normalizedDate;
-    }
-
-    return new Intl.DateTimeFormat("en-GB", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric"
-    }).format(date);
-}
-
-function formatDisplayTime(timeString) {
-    const normalizedTime = normalizeTimeValue(timeString);
-    const [hours, minutes] = normalizedTime.split(":");
-
-    if (hours == null || minutes == null) {
-        return normalizedTime || "No time";
-    }
-
-    const date = new Date();
-    date.setHours(Number(hours), Number(minutes), 0, 0);
-
-    if (Number.isNaN(date.getTime())) {
-        return normalizedTime || "No time";
-    }
-
-    return new Intl.DateTimeFormat("en-US", {
-        hour: "numeric",
-        minute: "2-digit"
-    }).format(date);
-}
-
-function safeJsonParse(value, fallback = null) {
-    try {
-        return JSON.parse(value);
-    } catch (err) {
-        console.error("JSON Parse Error:", err.message);
-        return { _error: err.message };
-    }
-}
-
-function formatWorkflowConfig(value) {
-    return JSON.stringify(value || {}, null, 2);
-}
-
-function getSelectedTenant() {
-    if (!portalData.tenants.length) {
-        return null;
-    }
-
-    return portalData.tenants.find((tenant) => String(tenant.id) === String(selectedTenantId))
-        || portalData.tenants[0];
-}
-
-function getTenantLabel(tenant) {
-    return tenant?.business_name || `Tenant ${tenant?.id || ""}`;
-}
-
-function formatWorkflowAnswers(answers) {
-    if (!answers || typeof answers !== "object") {
-        return "No extra answers";
-    }
-
-    const lines = Object.entries(answers).map(([key, value]) => {
-        if (value && typeof value === "object") {
-            return `${key}: ${value.title || value.value || value.option_id || "-"}`;
-        }
-
-        return `${key}: ${value}`;
-    });
-
-    return lines.length ? lines.join("\n") : "No extra answers";
-}
-
-function customizeSingleTenantUI() {
-    if (portalData.scope === "global") return;
-    
-    // Find specific elements to remove/change (b, d, e, g, l)
-    document.querySelectorAll('h2, h3, p, span').forEach(el => { // Exclude 'div' to prevent over-hiding
-        // Prevent modifying/hiding large parent layout containers by skipping elements that have children
-        // This check is less critical if 'div' is excluded, but still good for other tags
-        if (el.children.length > 0 && el.tagName !== 'SPAN') return; // Allow spans with children (e.g., status badges)
-        if (!el.textContent) return;
-        const text = el.textContent.trim();
-        
-        // Remove "Bookings" header from its section
-        if (text === 'Bookings') {
-            el.style.display = 'none';
-            return;
-        }
-
-        // g: Remove booking operation descriptions
-        if (text.includes('Booking operations') || text.includes('Compact, paginated tables for high-volume booking operations across statuses and tenants.')) el.style.display = 'none';
-        
-        // l: Remove operations snapshot descriptions
-        if (text.includes('Operations snapshot') || text.includes('Monitor all booking queues, tenant coverage, and live portal status at a glance.')) el.style.display = 'none';
-    });
-
-    // h. Move refresh button next to sign out button
-    if (refreshBookingsButton && logoutButton && logoutButton.parentNode) {
-        logoutButton.parentNode.insertBefore(refreshBookingsButton, logoutButton);
-    }
-
-    // i. Hide the tenant filter entirely
-    if (tenantFilter) tenantFilter.style.display = 'none';
-
-    // 1c & 1d. Layout for search bar, date picker, clear button, and toggles
-    const bookingsScreen = document.getElementById('bookingsScreen');
-    const controlsBar = bookingsScreen?.querySelector('.controls-bar');
-
-    if (controlsBar) {
-        // Ensure controlsBar is a flex container for proper alignment
-        controlsBar.style.display = 'flex';
-        controlsBar.style.justifyContent = 'space-between'; // Distribute space between items
-        controlsBar.style.alignItems = 'center';
-        controlsBar.style.flexWrap = 'wrap'; // Allow wrapping on smaller screens
-        controlsBar.style.gap = '15px'; // Add some gap between main sections
-
-        // Create or get toggle group (middle)
-        let toggleGroup = document.querySelector('.date-toggles');
-        if (!toggleGroup) {
-            toggleGroup = document.createElement("div");
-            toggleGroup.className = "date-toggles";
-            toggleGroup.style.display = "flex";
-            toggleGroup.style.gap = "5px";
-
-            ['today', 'tomorrow', 'future', 'past'].forEach(range => {
-                const btn = document.createElement("button");
-                btn.type = "button";
-                btn.className = `pill ${currentRange === range ? 'active' : ''}`;
-                btn.textContent = range.charAt(0).toUpperCase() + range.slice(1);
-                btn.dataset.range = range;
-                
-                btn.addEventListener("click", async () => {
-                    currentRange = range;
-                    currentFilter = "all";
-                    if (dateInput) {
-                        dateInput.value = "";
-                        if (dateInput.type === "date") dateInput.type = "text";
-                    }
-                    
-                    toggleGroup.querySelectorAll('.pill').forEach(b => b.classList.remove('active'));
-                    btn.classList.add('active');
-                    
-                    currentPage = 1;
-                    await loadBookings();
-                });
-                toggleGroup.appendChild(btn);
-            });
-            controlsBar.appendChild(toggleGroup); // Temporarily append
-        } else {
-            toggleGroup.querySelectorAll('.pill').forEach(b => b.classList.toggle('active', b.dataset.range === currentRange));
-        }
-
-        // Create or get search wrapper (right)
-        let searchWrapper = document.getElementById('rightSearchWrapper');
-        if (!searchWrapper) {
-            searchWrapper = document.createElement('div');
-            searchWrapper.id = 'rightSearchWrapper';
-            searchWrapper.style.display = 'flex';
-            searchWrapper.style.gap = '10px';
-            searchWrapper.style.alignItems = 'center';
-            
-            // Move existing search elements into this wrapper if they are still in controlsBar
-            if (searchInput && searchInput.parentElement === controlsBar) searchWrapper.appendChild(searchInput);
-            if (dateInput && dateInput.parentElement === controlsBar) searchWrapper.appendChild(dateInput);
-            const clearBtn = document.getElementById('clearButton');
-            if (clearBtn && clearBtn.parentElement === controlsBar) searchWrapper.appendChild(clearBtn);
-            
-            controlsBar.appendChild(searchWrapper); // Temporarily append
-        }
-
-        // Final re-ordering of children in controlsBar: toggleGroup, searchWrapper
-        const childrenInOrder = [];
-        if (toggleGroup) childrenInOrder.push(toggleGroup);
-        if (searchWrapper) childrenInOrder.push(searchWrapper);
-
-        // Clear and re-append to ensure correct order
-        controlsBar.innerHTML = ''; // Clear existing children
-        childrenInOrder.forEach(child => controlsBar.appendChild(child));
-    }
+        // Confirm Dialog
+        confirmDialog:       document.getElementById("confirmDialog"),
+        confirmDialogTitle:  document.getElementById("confirmDialogTitle"),
+        confirmDialogMsg:    document.getElementById("confirmDialogMsg"),
+        confirmDialogCancel: document.getElementById("confirmDialogCancel"),
+        confirmDialogOk:     document.getElementById("confirmDialogOk"),
+    };
 }
 
 // ==========================================
-// 4. AUTH & SESSION MANAGEMENT
+// 3. AUTH
 // ==========================================
 function saveToken(token) {
     adminToken = token;
@@ -313,1883 +104,1165 @@ function saveToken(token) {
 function clearToken() {
     adminToken = "";
     localStorage.removeItem("adminToken");
-    tenantInput.value = "";
-}
-
-function handleUnauthorized() {
-    clearToken();
-    showLogin("Your session expired or the token was invalid. Sign in again to continue.");
-}
-
-function showLogin(message = "Your token stays saved on this browser until you sign out.") {
     closeStream();
-    closeCloseModal();
-    portalData = { scope: "tenant", tenants: [] };
-    selectedTenantId = null;
-    bookingsResponse = { items: [], total: 0, page: 1, pageSize };
-    summaryCounts = { today: 0, this_week: 0, this_month: 0, all: 0 };
-    render();
-    loginScreen.classList.remove("hidden");
-    dashboardShell.classList.add("hidden");
-    loginStatus.textContent = message;
-    tenantInput.focus();
+    showLogin();
+}
+
+function handleUnauthorized(duringLogin = false) {
+    if (duringLogin) {
+        // During login, just clear the token — don't redirect yet
+        adminToken = "";
+        return;
+    }
+    clearToken();
+    showLogin("Session expired. Please re-authenticate.");
+}
+
+function showLogin(msg = "") {
+    els.loginScreen?.classList.remove("hidden");
+    els.dashboardShell?.classList.add("hidden");
+    if (msg && els.loginStatus) els.loginStatus.textContent = msg;
 }
 
 function showDashboard() {
-    loginScreen.classList.add("hidden");
-    dashboardShell.classList.remove("hidden");
+    els.loginScreen?.classList.add("hidden");
+    els.dashboardShell?.classList.remove("hidden");
+}
+
+function getSelectedTenant() {
+    if (!portalData.tenants.length) return null;
+    return portalData.tenants.find(t => String(t.id) === String(selectedTenantId)) || portalData.tenants[0];
 }
 
 // ==========================================
-// 5. API SERVICE (Data & URLs)
+// 4. API HELPER
 // ==========================================
-function getTokenQuery() {
-    const params = new URLSearchParams();
-    params.set("token", adminToken);
-    return params;
-}
-
-function buildPortalDataUrl() {
-    return `/admin/portal-data?${getTokenQuery().toString()}`;
-}
-
-function buildBookingsUrl() {
-    const params = getTokenQuery();
-    const selectedTenant = tenantFilter.value || "";
-
-    if (selectedTenant) {
-        params.set("tenantId", selectedTenant);
-    }
-
-    if (currentFilter && currentFilter !== "all") {
-        params.set("status", currentFilter);
-    }
-
-    if (currentRange && currentRange !== "all") {
-        params.set("range", currentRange);
-    }
-
-    if (searchInput.value.trim()) {
-        params.set("search", searchInput.value.trim());
-    }
-
-    if (dateInput.value) {
-        params.set("date", dateInput.value);
-    }
-
-    params.set("page", String(currentPage));
-    params.set("pageSize", String(pageSize));
-
-    return `/admin/bookings?${params.toString()}`;
-}
-
-async function fetchJson(url, options = {}) {
+async function fetchJson(url, options = {}, isLoginAttempt = false) {
     const headers = {
         ...options.headers,
-        "Authorization": `Bearer ${adminToken}`
+        "Authorization": `Bearer ${adminToken}`,
+        "Content-Type": "application/json"
     };
-    
     const res = await fetch(url, { ...options, headers });
 
     if (res.status === 401 || res.status === 403) {
+        if (isLoginAttempt) {
+            throw new Error("InvalidCredentials");
+        }
         handleUnauthorized();
         throw new Error("Unauthorized");
     }
 
     const data = await res.json().catch(() => null);
-
-    if (!res.ok) {
-        throw new Error(data?.error || "Request failed");
-    }
-
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
     return data;
 }
 
+// ==========================================
+// 5. PORTAL REFRESH
+// ==========================================
+async function refreshPortal(silent = false) {
+    if (!adminToken) return;
+    try {
+        await loadPortalData(silent);
+        await loadBookings(silent);
+        showDashboard();
+
+        if (currentScreen === "workflowScreen")   loadWorkflowData();
+        else if (currentScreen === "settingsScreen")  loadSettings();
+        else if (currentScreen === "analyticsScreen") loadAnalytics();
+
+        initStream();
+    } catch (err) {
+        console.error("Portal Refresh Failed:", err);
+        if (err.message === "Unauthorized") handleUnauthorized();
+    }
+}
+
+// ==========================================
+// 6. PORTAL DATA (OVERVIEW)
+// ==========================================
 async function loadPortalData(silent = false) {
-    if (!adminToken) {
-        return;
-    }
+    if (!silent && els.overviewStatus) els.overviewStatus.textContent = "Syncing accounts...";
+    const data = await fetchJson("/admin/portal-data");
 
-    if (!silent) {
-        overviewStatus.textContent = "Loading tenant controls and workflow data...";
-    }
-
-    const data = await fetchJson(buildPortalDataUrl());
     portalData = {
-        scope: data.scope || "tenant",
+        scope:   data.scope || "tenant",
         tenants: Array.isArray(data.tenants) ? data.tenants : []
     };
 
-    if (!selectedTenantId || !portalData.tenants.some((tenant) => String(tenant.id) === String(selectedTenantId))) {
-        selectedTenantId = portalData.tenants[0]?.id || null;
+    if (!selectedTenantId && portalData.tenants.length) {
+        selectedTenantId = String(portalData.tenants[0].id);
     }
 
-    updateTenantFilterOptions();
-    updateHeaderLabels();
+    updateHeaderUI();
     renderTenantOverview();
-    renderTenantLists();
-    customizeSingleTenantUI();
+    populateTenantSelectors();
+    await loadOverviewStats();
 }
 
-function renderTenantLists() {
-    renderTenantSettingsList("tenantListWorkflow");
-    renderTenantSettingsList("tenantListSettings");
-}
-
-async function refreshSummaryCounts() {
-    if (!adminToken) {
-        return;
-    }
-
-    const selectedTenant = tenantFilter.value || "";
-
-    // m. Unique count summaries based on scope
-    if (portalData.scope === "global") {
+async function loadOverviewStats() {
+    // Fetch bookings totals to populate overview stats
+    try {
         const ranges = ["today", "this_week", "this_month", "all"];
-        const results = await Promise.all(ranges.map(async (range) => {
-            const params = getTokenQuery();
-            if (selectedTenant) params.set("tenantId", selectedTenant);
-            params.set("page", "1");
-            params.set("pageSize", "1");
-            if (range !== "all") params.set("range", range);
-            const response = await fetchJson(`/admin/bookings?${params.toString()}`);
-            return [range, response.total || 0];
-        }));
-        summaryCounts = Object.fromEntries(results);
-    } else {
-        const statuses = ["pending", "waiting", "confirmed", "rejected", "closed"];
-        const results = await Promise.all(statuses.map(async (status) => {
-            const params = getTokenQuery();
-            if (selectedTenant) params.set("tenantId", selectedTenant);
-            // 1e. Dynamically sync with the active range (fixes "today showing 0" when fetching Future/Past stats)
-            params.set("range", currentRange || "all");
-            params.set("status", status);
-            params.set("page", "1");
-            params.set("pageSize", "1");
-            const response = await fetchJson(`/admin/bookings?${params.toString()}`);
-            return [status, response.total || 0];
-        }));
-        summaryCounts = Object.fromEntries(results);
-        summaryCounts.last_updated = new Date().toLocaleString();
-    }
-}
-
-async function loadBookings(silent = false) {
-    if (!adminToken) {
-        return;
-    }
-
-    if (!silent) {
-        bookingsStatus.textContent = "Loading bookings...";
-    }
-    
-    const response = await fetchJson(buildBookingsUrl());
-    bookingsResponse = {
-        items: Array.isArray(response.items) ? response.items : [],
-        total: response.total || 0,
-        page: response.page || currentPage,
-        pageSize: response.pageSize || pageSize
-    };
-    currentPage = bookingsResponse.page;
-    await refreshSummaryCounts();
-    renderOverviewStats();
-    renderBookingsTable();
-}
-
-async function refreshPortal(silent = false) {
-    try {
-        showDashboard();
-        await loadPortalData(silent);
-
-        // Enforce specific initial configuration per portal
-        if (portalData.scope !== "global" && currentRange === "all") {
-            currentRange = "today";
-        }
-
-        await loadBookings(silent);
-        if (!silent) {
-            overviewStatus.textContent = portalData.scope === "global" ? `Portal ready. Managing ${portalData.tenants.length} tenant(s).` : `Portal ready.`;
-            connectionStatusText.textContent = "Live connected";
-            connectionStatusDot.className = "status-dot connected";
-            homeConnectionLabel.textContent = "Connected";
-        }
-        connectStream(adminToken);
-    } catch (err) {
-        if (err.message !== "Unauthorized") {
-            console.error("refreshPortal error:", err);
-            overviewStatus.textContent = "Could not load portal data right now.";
-            connectionStatusText.textContent = "Disconnected";
-            connectionStatusDot.className = "status-dot";
-            homeConnectionLabel.textContent = "Error";
-        }
-    }
-}
-
-// ==========================================
-// 6. REAL-TIME SERVICE (SSE)
-// ==========================================
-function connectStream(token) {
-    if (!token || (stream && streamTenantToken === token)) {
-        return;
-    }
-
-    closeStream();
-    streamTenantToken = token;
-    stream = new EventSource(`/admin/bookings/stream?token=${encodeURIComponent(token)}`);
-
-    stream.onopen = () => {
-        connectionStatusText.textContent = "Live connected";
-        connectionStatusDot.className = "status-dot connected";
-        homeConnectionLabel.textContent = "Connected";
-    };
-
-    stream.onmessage = async (event) => {
-        try {
-            const payload = JSON.parse(event.data);
-            if (payload.type === "connected") {
-                return;
-            }
-            
-            if (payload.type === "created") {
-                showToast(`New booking received! (#${payload.bookingId})`, "success");
-            } else if (payload.type === "updated") {
-                showToast(`Booking #${payload.bookingId} was updated.`, "success");
-            }
-        } catch (err) {
-            console.error("stream parse error:", err);
-        }
-
-        await refreshPortal(true); // Silent background refresh so UI doesn't flash
-    };
-
-    stream.onerror = () => {
-        connectionStatusText.textContent = "Retrying...";
-        connectionStatusDot.className = "status-dot retrying";
-        homeConnectionLabel.textContent = "Retrying";
-    };
-}
-
-function closeStream() {
-    if (stream) {
-        stream.close();
-        stream = null;
-    }
-    streamTenantToken = null;
-}
-
-// ==========================================
-// NEW FUNCTIONS FOR ENHANCED DASHBOARD
-// ==========================================
-
-async function loadAnalytics() {
-    if (!adminToken) return;
-
-    try {
-        // Load analytics data
-        const analyticsData = await fetchJson(`/admin/analytics?${getTokenQuery().toString()}`);
-
-        // Update metrics
-        document.getElementById('totalConversations').textContent = analyticsData.totalConversations || 0;
-        document.getElementById('conversionRate').textContent = `${analyticsData.conversionRate || 0}%`;
-        document.getElementById('avgResponseTime').textContent = `${analyticsData.avgResponseTime || 0}s`;
-        document.getElementById('popularService').textContent = analyticsData.popularService || 'N/A';
-
-        // Update engagement table
-        document.getElementById('messagesSent').textContent = analyticsData.messagesSent || 0;
-        document.getElementById('messagesReceived').textContent = analyticsData.messagesReceived || 0;
-        document.getElementById('activeUsers').textContent = analyticsData.activeUsers || 0;
-        document.getElementById('avgSessionDuration').textContent = `${analyticsData.avgSessionDuration || 0}m`;
-
-        // Render charts (placeholder for now)
-        renderAnalyticsCharts(analyticsData);
-
-    } catch (error) {
-        console.error('Failed to load analytics:', error);
-        showToast('Failed to load analytics data', 'error');
-    }
-}
-
-async function loadCommunications() {
-    if (!adminToken) return;
-
-    try {
-        // Load message history
-        const messagesData = await fetchJson(`/admin/messages?${getTokenQuery().toString()}`);
-        renderMessageHistory(messagesData);
-
-        // Load user segments for targeting
-        const usersData = await fetchJson(`/admin/users?${getTokenQuery().toString()}`);
-        populateUserSegments(usersData);
-
-    } catch (error) {
-        console.error('Failed to load communications:', error);
-        showToast('Failed to load communications data', 'error');
-    }
-}
-
-async function loadWorkflowData() {
-    if (!adminToken) return;
-
-    const tenantSelect = document.getElementById('workflowTenantSelect');
-    if (!tenantSelect) return;
-
-    // Populate tenant dropdown
-    tenantSelect.innerHTML = '<option value="">Choose a tenant...</option>';
-    portalData.tenants.forEach(tenant => {
-        const option = document.createElement('option');
-        option.value = tenant.id;
-        option.textContent = tenant.name;
-        tenantSelect.appendChild(option);
-    });
-
-    // If a tenant was previously selected, keep it selected
-    if (selectedWorkflowTenant) {
-        tenantSelect.value = selectedWorkflowTenant;
-        await loadWorkflowSteps(selectedWorkflowTenant);
-    }
-}
-
-async function loadWorkflowSteps(tenantId) {
-    if (!tenantId) {
-        document.getElementById('workflowTableBody').innerHTML = `
-            <tr>
-                <td colspan="7" class="empty-state">
-                    <div class="empty-state-content">
-                        <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                            <polyline points="14,2 14,8 20,8"></polyline>
-                            <line x1="16" y1="13" x2="8" y2="13"></line>
-                            <line x1="16" y1="17" x2="8" y2="17"></line>
-                            <polyline points="10,9 9,9 8,9"></polyline>
-                        </svg>
-                        <p>Select a tenant to view workflow steps</p>
-                    </div>
-                </td>
-            </tr>
-        `;
-        return;
-    }
-
-    try {
-        const response = await fetchJson(`/admin/workflow/${tenantId}?${getTokenQuery().toString()}`);
-        renderWorkflowTable(response.steps || []);
-    } catch (error) {
-        console.error('Failed to load workflow steps:', error);
-        showToast('Failed to load workflow steps', 'error');
-    }
-}
-
-function renderAnalyticsCharts(data) {
-    // Placeholder for chart rendering
-    // In a real implementation, you would use Chart.js or similar library
-    console.log('Rendering analytics charts with data:', data);
-}
-
-function renderMessageHistory(messages) {
-    const tbody = document.getElementById('messagesTableBody');
-    if (!tbody) return;
-
-    if (!messages || messages.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No messages sent yet.</td></tr>';
-        return;
-    }
-
-    // SECURITY: Clear existing content safely
-    tbody.innerHTML = '';
-
-    // SECURITY: Create elements safely to prevent XSS
-    messages.forEach(msg => {
-        const row = document.createElement('tr');
-
-        // Type cell - safe
-        const typeCell = document.createElement('td');
-        typeCell.textContent = msg.type || '';
-        row.appendChild(typeCell);
-
-        // Content cell - ESCAPE HTML to prevent XSS
-        const contentCell = document.createElement('td');
-        const content = String(msg.content || '');
-        contentCell.textContent = content.length > 50 ? content.substring(0, 50) + '...' : content;
-        row.appendChild(contentCell);
-
-        // Recipients cell - safe number
-        const recipientsCell = document.createElement('td');
-        recipientsCell.textContent = msg.recipientCount || 0;
-        row.appendChild(recipientsCell);
-
-        // Sent date - safe date formatting
-        const sentCell = document.createElement('td');
-        sentCell.textContent = msg.sentAt ? new Date(msg.sentAt).toLocaleDateString() : '';
-        row.appendChild(sentCell);
-
-        // Status cell - safe with CSS class
-        const statusCell = document.createElement('td');
-        const statusBadge = document.createElement('span');
-        statusBadge.className = `status-badge ${msg.status || 'unknown'}`;
-        statusBadge.textContent = msg.status || 'unknown';
-        statusCell.appendChild(statusBadge);
-        row.appendChild(statusCell);
-
-        // Actions cell - safe button
-        const actionsCell = document.createElement('td');
-        const viewButton = document.createElement('button');
-        viewButton.className = 'secondary compact-btn';
-        viewButton.textContent = 'View';
-        viewButton.onclick = () => viewMessage(msg.id);
-        actionsCell.appendChild(viewButton);
-        row.appendChild(actionsCell);
-
-        tbody.appendChild(row);
-    });
-}
-
-function populateUserSegments(users) {
-    const select = document.getElementById('individualUsers');
-    if (!select) return;
-
-    select.innerHTML = '<option value="">Select users...</option>';
-    users.forEach(user => {
-        const option = document.createElement('option');
-        option.value = user.id;
-        option.textContent = `${user.name} (${user.phone})`;
-        select.appendChild(option);
-    });
-}
-
-function renderWorkflowTable(steps) {
-    const tbody = document.getElementById('workflowTableBody');
-    if (!tbody) return;
-
-    // Clear existing content
-    tbody.innerHTML = '';
-
-    if (!steps || steps.length === 0) {
-        const tr = document.createElement('tr');
-        const td = document.createElement('td');
-        td.colSpan = 7;
-        td.className = 'empty-state';
-
-        const div = document.createElement('div');
-        div.className = 'empty-state-content';
-
-        const p = document.createElement('p');
-        p.textContent = 'No workflow steps configured';
-
-        const button = document.createElement('button');
-        button.className = 'primary compact-btn';
-        button.textContent = 'Add First Step';
-        button.onclick = addNewWorkflowStep;
-
-        div.appendChild(p);
-        div.appendChild(button);
-        td.appendChild(div);
-        tr.appendChild(td);
-        tbody.appendChild(tr);
-        return;
-    }
-
-    steps.forEach((step, index) => {
-        const tr = document.createElement('tr');
-
-        // Order
-        const tdOrder = document.createElement('td');
-        tdOrder.textContent = step.order;
-        tr.appendChild(tdOrder);
-
-        // Type
-        const tdType = document.createElement('td');
-        const spanType = document.createElement('span');
-        spanType.className = `step-type ${step.type}`;
-        spanType.textContent = step.type;
-        tdType.appendChild(spanType);
-        tr.appendChild(tdType);
-
-        // Message
-        const tdMessage = document.createElement('td');
-        tdMessage.textContent = step.message;
-        tr.appendChild(tdMessage);
-
-        // Options
-        const tdOptions = document.createElement('td');
-        tdOptions.textContent = step.options ? step.options.join(', ') : 'N/A';
-        tr.appendChild(tdOptions);
-
-        // Next Step
-        const tdNext = document.createElement('td');
-        tdNext.textContent = step.nextStep || 'End';
-        tr.appendChild(tdNext);
-
-        // Status
-        const tdStatus = document.createElement('td');
-        const spanStatus = document.createElement('span');
-        spanStatus.className = `status-badge ${step.status}`;
-        spanStatus.textContent = step.status;
-        tdStatus.appendChild(spanStatus);
-        tr.appendChild(tdStatus);
-
-        // Actions
-        const tdActions = document.createElement('td');
-
-        // Edit button
-        const editBtn = document.createElement('button');
-        editBtn.className = 'icon-button small';
-        editBtn.title = 'Edit';
-        editBtn.onclick = () => editWorkflowStep(step.id);
-
-        const editSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        editSvg.setAttribute('viewBox', '0 0 24 24');
-        editSvg.setAttribute('width', '16');
-        editSvg.setAttribute('height', '16');
-        editSvg.setAttribute('fill', 'none');
-        editSvg.setAttribute('stroke', 'currentColor');
-        editSvg.setAttribute('stroke-width', '2');
-
-        const editPath1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        editPath1.setAttribute('d', 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7');
-        editSvg.appendChild(editPath1);
-
-        const editPath2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        editPath2.setAttribute('d', 'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z');
-        editSvg.appendChild(editPath2);
-
-        editBtn.appendChild(editSvg);
-        tdActions.appendChild(editBtn);
-
-        // Delete button
-        const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'icon-button small';
-        deleteBtn.title = 'Delete';
-        deleteBtn.onclick = () => deleteWorkflowStep(step.id);
-
-        const deleteSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        deleteSvg.setAttribute('viewBox', '0 0 24 24');
-        deleteSvg.setAttribute('width', '16');
-        deleteSvg.setAttribute('height', '16');
-        deleteSvg.setAttribute('fill', 'none');
-        deleteSvg.setAttribute('stroke', 'currentColor');
-        deleteSvg.setAttribute('stroke-width', '2');
-
-        const deletePolyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-        deletePolyline.setAttribute('points', '3,6 5,6 21,6');
-        deleteSvg.appendChild(deletePolyline);
-
-        const deletePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        deletePath.setAttribute('d', 'M19,6v14a2,2 0 0,1-2,2H7a2,2 0 0,1-2-2V6m3,0V4a2,2 0 0,1,2-2h4a2,2 0 0,1,2,2v2');
-        deleteSvg.appendChild(deletePath);
-
-        const deleteLine1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        deleteLine1.setAttribute('x1', '10');
-        deleteLine1.setAttribute('y1', '11');
-        deleteLine1.setAttribute('x2', '10');
-        deleteLine1.setAttribute('y2', '17');
-        deleteSvg.appendChild(deleteLine1);
-
-        const deleteLine2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        deleteLine2.setAttribute('x1', '14');
-        deleteLine2.setAttribute('y1', '11');
-        deleteLine2.setAttribute('x2', '14');
-        deleteLine2.setAttribute('y2', '17');
-        deleteSvg.appendChild(deleteLine2);
-
-        deleteBtn.appendChild(deleteSvg);
-        tdActions.appendChild(deleteBtn);
-
-        tr.appendChild(tdActions);
-        tbody.appendChild(tr);
-    });
-}
-
-// ==========================================
-// 7. UI & RENDERERS
-// ==========================================
-function setActiveScreen(screenId) {
-    currentScreen = screenId;
-
-    screenButtons.forEach((button) => {
-        button.classList.toggle("active", button.dataset.screenTarget === screenId);
-    });
-
-    screens.forEach((screen) => {
-        screen.classList.toggle("hidden", screen.id !== screenId);
-    });
-}
-
-function updateHeaderLabels() {
-    const selectedTenant = getSelectedTenant();
-    const portalTitle = portalData.scope === "global"
-        ? "All Tenant Control Center"
-        : (selectedTenant ? getTenantLabel(selectedTenant) : "WappBot Control Center");
-
-    tenantName.textContent = portalTitle;
-}
-
-function renderOverviewStats() {
-    if (portalData.scope === "global") {
-        const elToday = document.getElementById("statToday");
-        if (elToday) elToday.textContent = summaryCounts.today || 0;
-        const elWeek = document.getElementById("statThisWeek");
-        if (elWeek) elWeek.textContent = summaryCounts.this_week || 0;
-        const elMonth = document.getElementById("statThisMonth");
-        if (elMonth) elMonth.textContent = summaryCounts.this_month || 0;
-        const elTotal = document.getElementById("statTotal");
-        if (elTotal) elTotal.textContent = summaryCounts.all || 0;
-        if (overviewTenantCount) overviewTenantCount.textContent = `${portalData.tenants.length} tenant${portalData.tenants.length === 1 ? "" : "s"}`;
-    } else {
-        // m. Render completely new layout elements dynamically strictly for single tenants
-        const statsContainer = document.getElementById("statToday")?.closest('.stats-grid') || document.getElementById("statToday")?.parentElement;
-        if (statsContainer) {
-            // 1e. Dynamically format label to reflect selected range
-            const rangeStr = (currentRange && currentRange !== "all") ? currentRange : "all time";
-            const rangeLabel = rangeStr === "all time" ? "Total" : rangeStr.charAt(0).toUpperCase() + rangeStr.slice(1);
-
-            statsContainer.innerHTML = `
-                <div class="stat-card stat-pending" data-filter="pending"><h3>Pending (${rangeLabel})</h3><p class="stat-value">${summaryCounts.pending || 0}</p></div>
-                <div class="stat-card stat-waiting" data-filter="waiting"><h3>Waiting (${rangeLabel})</h3><p class="stat-value">${summaryCounts.waiting || 0}</p></div>
-                <div class="stat-card stat-confirmed" data-filter="confirmed"><h3>Confirmed (${rangeLabel})</h3><p class="stat-value">${summaryCounts.confirmed || 0}</p></div>
-                <div class="stat-card stat-rejected" data-filter="rejected"><h3>Rejected (${rangeLabel})</h3><p class="stat-value">${summaryCounts.rejected || 0}</p></div>
-                <div class="stat-card stat-closed" data-filter="closed"><h3>Closed (${rangeLabel})</h3><p class="stat-value">${summaryCounts.closed || 0}</p></div>
-            `;
-            let lastUpdatedEl = document.getElementById("lastUpdatedTime");
-            if (!lastUpdatedEl) {
-                lastUpdatedEl = document.createElement("p");
-                lastUpdatedEl.id = "lastUpdatedTime";
-                lastUpdatedEl.className = "status-note";
-                statsContainer.parentNode.insertBefore(lastUpdatedEl, statsContainer.nextSibling);
-            }
-            lastUpdatedEl.textContent = `Last updated: ${summaryCounts.last_updated || new Date().toLocaleString()}`;
-        }
-        if (overviewTenantCount) overviewTenantCount.style.display = 'none';
-    }
-}
-
-function renderTenantOverview() {
-    tenantOverviewList.innerHTML = "";
-
-    if (!portalData.tenants.length) {
-        const p = document.createElement('p');
-        p.className = 'status-note';
-        p.textContent = 'No tenants available.';
-        tenantOverviewList.appendChild(p);
-        return;
-    }
-
-    portalData.tenants.forEach((tenant) => {
-        const item = document.createElement("button");
-        item.type = "button";
-        item.className = "tenant-overview-item";
-        item.style.cursor = "default"; // Items are not clickable for now
-
-        const titleSpan = document.createElement('span');
-        titleSpan.className = 'tenant-overview-title';
-        titleSpan.textContent = getTenantLabel(tenant);
-
-        const copySpan = document.createElement('span');
-        copySpan.className = 'tenant-overview-copy';
-        copySpan.textContent = `${tenant.services.length} services, ${tenant.providers.length} providers`;
-
-        item.appendChild(titleSpan);
-        item.appendChild(copySpan);
-        tenantOverviewList.appendChild(item);
-    });
-}
-
-function updateTenantFilterOptions() {
-    tenantFilter.innerHTML = "";
-
-    const allOption = document.createElement("option");
-    allOption.value = "";
-    allOption.textContent = portalData.scope === "global" ? "All tenants" : "Current tenant";
-    tenantFilter.appendChild(allOption);
-
-    portalData.tenants.forEach((tenant) => {
-        const option = document.createElement("option");
-        option.value = String(tenant.id);
-        option.textContent = getTenantLabel(tenant);
-        tenantFilter.appendChild(option);
-    });
-
-    if (portalData.scope !== "global") {
-        tenantFilter.value = portalData.tenants[0] ? String(portalData.tenants[0].id) : "";
-        tenantFilter.disabled = true;
-        tenantFilter.style.display = "none";
-    } else if (!portalData.tenants.some((tenant) => String(tenant.id) === tenantFilter.value)) {
-        tenantFilter.value = "";
-        tenantFilter.disabled = false;
-        tenantFilter.style.display = "inline-block";
-    }
-}
-
-function getActionMarkup(booking) {
-    const status = booking.status || "pending";
-    const tenantId = booking.tenant_id;
-
-    const icons = {
-        approve: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"></path></svg>`,
-        waiting: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`,
-        reject: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
-        close: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 8v13H3V8"></path><path d="M1 3h22v5H1z"></path><path d="M10 12h4"></path></svg>`
-    };
-
-    if (status === "confirmed") {
-        return `
-            <div class="action-stack">
-                <button class="action-btn close" data-action="close" data-id="${booking.id}" data-tenant-id="${tenantId}" title="Close Booking">
-                    ${icons.close}
-                </button>
-            </div>
-        `;
-    }
-
-    if (status === "pending") {
-        return `
-            <div class="action-stack">
-                <button class="action-btn approve" data-action="approve" data-id="${booking.id}" data-tenant-id="${tenantId}" title="Confirm">
-                    ${icons.approve}
-                </button>
-                <button class="action-btn waiting" data-action="waiting" data-id="${booking.id}" data-tenant-id="${tenantId}" title="Set to Waiting">
-                    ${icons.waiting}
-                </button>
-                <button class="action-btn reject" data-action="reject" data-id="${booking.id}" data-tenant-id="${tenantId}" title="Reject">
-                    ${icons.reject}
-                </button>
-            </div>
-        `;
-    }
-
-    if (status === "waiting") {
-        return `
-            <div class="action-stack">
-                <button class="action-btn approve" data-action="approve" data-id="${booking.id}" data-tenant-id="${tenantId}" title="Confirm">
-                    ${icons.approve}
-                </button>
-                <button class="action-btn reject" data-action="reject" data-id="${booking.id}" data-tenant-id="${tenantId}" title="Reject">
-                    ${icons.reject}
-                </button>
-            </div>
-        `;
-    }
-
-    return '<span class="cell-copy">No actions</span>';
-}
-
-function renderBookingsTable() {
-    bookingsTableBody.innerHTML = "";
-    const bookings = bookingsResponse.items || [];
-
-    if (!bookings.length) {
-        dashboardEmpty.classList.remove("hidden");
-        bookingsStatus.textContent = "No bookings found for the current view.";
-        pageLabel.textContent = "Page 1";
-        prevPageButton.disabled = true;
-        nextPageButton.disabled = true;
-        return;
-    }
-
-    dashboardEmpty.classList.add("hidden");
-
-    // f. Hide generic Tenant Table Headers contextually 
-    const table = bookingsTableBody.closest('table');
-    if (table) {
-        const ths = table.querySelectorAll('th');
-        if (ths.length > 0 && ths[0].textContent.includes('Tenant')) {
-            ths[0].style.display = portalData.scope === "global" ? '' : 'none';
-        }
-    }
-
-    const isGlobal = portalData.scope === "global";
-
-    bookings.forEach((booking) => {
-        const row = document.createElement("tr");
-
-        // Tenant column (if global scope)
-        if (isGlobal) {
-            const tenantCell = document.createElement('td');
-            const tenantTitle = document.createElement('div');
-            tenantTitle.className = 'cell-title';
-            tenantTitle.textContent = booking.tenant_name || getTenantLabel(getSelectedTenant());
-            const tenantCopy = document.createElement('div');
-            tenantCopy.className = 'cell-copy';
-            tenantCopy.textContent = `Tenant ID ${booking.tenant_id}`;
-            tenantCell.appendChild(tenantTitle);
-            tenantCell.appendChild(tenantCopy);
-            row.appendChild(tenantCell);
-        }
-
-        // Service column
-        const serviceCell = document.createElement('td');
-        const serviceTitle = document.createElement('div');
-        serviceTitle.className = 'cell-title';
-        serviceTitle.textContent = booking.service_name || "Unnamed service";
-        const serviceCopy = document.createElement('div');
-        serviceCopy.className = 'cell-copy';
-        serviceCopy.textContent = `Booking #${booking.id}`;
-        serviceCell.appendChild(serviceTitle);
-        serviceCell.appendChild(serviceCopy);
-        row.appendChild(serviceCell);
-
-        // Provider column
-        const providerCell = document.createElement('td');
-        const providerTitle = document.createElement('div');
-        providerTitle.className = 'cell-title';
-        providerTitle.textContent = booking.provider_name || "Not selected";
-        const providerCopy = document.createElement('div');
-        providerCopy.className = 'cell-copy';
-        providerCopy.textContent = booking.provider_id ? `Provider #${booking.provider_id}` : "Configured via workflow";
-        providerCell.appendChild(providerTitle);
-        providerCell.appendChild(providerCopy);
-        row.appendChild(providerCell);
-
-        // Phone column
-        const phoneCell = document.createElement('td');
-        const phoneTitle = document.createElement('div');
-        phoneTitle.className = 'cell-title';
-        phoneTitle.textContent = booking.phone || "No phone";
-        phoneCell.appendChild(phoneTitle);
-        row.appendChild(phoneCell);
-
-        // Date column
-        const dateCell = document.createElement('td');
-        const dateTitle = document.createElement('div');
-        dateTitle.className = 'cell-title';
-        dateTitle.textContent = formatDisplayDate(booking.booking_date);
-        dateCell.appendChild(dateTitle);
-        row.appendChild(dateCell);
-
-        // Time column
-        const timeCell = document.createElement('td');
-        const timeTitle = document.createElement('div');
-        timeTitle.className = 'cell-title';
-        timeTitle.textContent = formatDisplayTime(booking.booking_time);
-        timeCell.appendChild(timeTitle);
-        row.appendChild(timeCell);
-
-        // Status column
-        const statusCell = document.createElement('td');
-        const statusBadge = document.createElement('span');
-        statusBadge.className = `status-badge status-${booking.status || "pending"}`;
-        statusBadge.textContent = booking.status || "pending";
-        statusCell.appendChild(statusBadge);
-        row.appendChild(statusCell);
-
-        // Answers column
-        const answersCell = document.createElement('td');
-        const answersPre = document.createElement('pre');
-        answersPre.className = 'inline-pre';
-        answersPre.textContent = formatWorkflowAnswers(booking.workflow_answers);
-        answersCell.appendChild(answersPre);
-        row.appendChild(answersCell);
-
-        // Remarks column
-        const remarksCell = document.createElement('td');
-        const remarksDiv = document.createElement('div');
-        remarksDiv.className = 'cell-copy';
-        remarksDiv.textContent = booking.close_remarks || "-";
-        remarksCell.appendChild(remarksDiv);
-        row.appendChild(remarksCell);
-
-        // Created column
-        const createdCell = document.createElement('td');
-        const createdDiv = document.createElement('div');
-        createdDiv.className = 'cell-copy';
-        createdDiv.textContent = booking.created_at ? new Date(booking.created_at).toLocaleString("en-IN") : "-";
-        createdCell.appendChild(createdDiv);
-        row.appendChild(createdCell);
-
-        // Actions column
-        const actionsCell = document.createElement('td');
-        actionsCell.innerHTML = getActionMarkup(booking); // Keep this for now as it's complex
-        row.appendChild(actionsCell);
-
-        bookingsTableBody.appendChild(row);
-    });
-
-    const totalPages = Math.max(1, Math.ceil((bookingsResponse.total || 0) / bookingsResponse.pageSize));
-    bookingsStatus.textContent = `Showing ${bookings.length} booking(s) on page ${bookingsResponse.page} of ${totalPages}. Total ${bookingsResponse.total} booking(s).`;
-    pageLabel.textContent = `Page ${bookingsResponse.page} of ${totalPages}`;
-    prevPageButton.disabled = bookingsResponse.page <= 1;
-    nextPageButton.disabled = bookingsResponse.page >= totalPages;
-}
-
-function render() {
-    updateHeaderLabels();
-    renderOverviewStats();
-    renderTenantOverview();
-    renderBookingsTable();
-}
-
-// ==========================================
-// 8. ACTIONS & BUSINESS LOGIC
-// ==========================================
-
-async function updateBookingStatus(bookingId, action, options = {}) {
-    const endpoint = action === "approve"
-        ? "/admin/approve"
-        : action === "reject"
-            ? "/admin/reject"
-            : action === "waiting"
-                ? "/admin/waiting"
-                : "/admin/close";
-
-    bookingsStatus.textContent = "Updating booking...";
-
-    try {
-        await fetchJson(endpoint, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                token: adminToken,
-                tenantId: options.tenantId,
-                bookingId,
-                remarks: options.remarks || ""
-            })
+        const ids = ["statToday", "statThisWeek", "statThisMonth", "statTotal"];
+
+        const fetches = ranges.map(range =>
+            fetchJson(`/admin/bookings?page=1&pageSize=1&range=${range}`).catch(() => ({ total: 0 }))
+        );
+        const results = await Promise.all(fetches);
+
+        results.forEach((r, i) => {
+            const el = document.getElementById(ids[i]);
+            if (el) el.textContent = r.total ?? 0;
         });
 
-        closeCloseModal();
-        showToast("Booking updated successfully", "success");
-        await refreshPortal(true); // Silent refresh
+        // Trend for today vs yesterday (best-effort)
+        const todayEl = document.getElementById("trendToday");
+        if (todayEl && results[0]?.total !== undefined) {
+            todayEl.textContent = results[0].total > 0 ? "Active bookings today" : "No bookings yet today";
+        }
     } catch (err) {
-        if (err.message !== "Unauthorized") {
-            console.error("updateBookingStatus error:", err);
-            showToast(err.message || "Could not update the booking right now.", "error");
+        console.warn("Stats load failed:", err);
+    }
+}
+
+// ==========================================
+// 7. BOOKINGS
+// ==========================================
+async function loadBookings(silent = false) {
+    if (!silent && els.bookingsStatus) els.bookingsStatus.textContent = "Loading bookings...";
+
+    const params = new URLSearchParams({
+        page:     currentPage,
+        pageSize: PAGE_SIZE,
+        status:   currentFilter === "all" ? "" : currentFilter,
+        date:     els.dateInput?.value || "",
+        tenantId: els.tenantFilter?.value || "",
+        search:   els.searchInput?.value || ""
+    });
+
+    try {
+        const data = await fetchJson(`/admin/bookings?${params}`);
+        bookingsCache = data.items || [];
+        bookingsTotal = data.total || 0;
+        renderBookingsTable();
+        updatePaginationUI(data);
+    } catch (err) {
+        if (err.message !== "Unauthorized" && els.bookingsStatus)
+            els.bookingsStatus.textContent = "Failed to load bookings.";
+    }
+}
+
+function updatePaginationUI(data) {
+    const totalPages = Math.max(1, Math.ceil(bookingsTotal / PAGE_SIZE));
+    if (els.pageLabel)      els.pageLabel.textContent = `Page ${currentPage} / ${totalPages}`;
+    if (els.prevPageButton) els.prevPageButton.disabled = currentPage <= 1;
+    if (els.nextPageButton) els.nextPageButton.disabled = currentPage >= totalPages;
+}
+
+// ==========================================
+// 8. BOOKINGS TABLE RENDERER
+// ==========================================
+function renderBookingsTable() {
+    if (!els.bookingsTableBody) return;
+    els.bookingsTableBody.innerHTML = "";
+
+    if (!bookingsCache.length) {
+        els.dashboardEmpty?.classList.remove("hidden");
+        if (els.bookingsStatus) els.bookingsStatus.textContent = "No records match your filters.";
+        return;
+    }
+
+    els.dashboardEmpty?.classList.add("hidden");
+    if (els.bookingsStatus) els.bookingsStatus.textContent = `Showing ${bookingsCache.length} of ${bookingsTotal} bookings`;
+
+    bookingsCache.forEach(b => {
+        const tr = document.createElement("tr");
+        const dateStr = b.booking_date ? new Date(b.booking_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "2-digit" }) : "—";
+
+        // Determine which buttons are disabled based on current status
+        const isConfirmed = b.status === "confirmed";
+        const isRejected  = b.status === "rejected";
+        const isClosed    = b.status === "closed";
+        const disableApprove = isConfirmed || isClosed || isRejected;
+        const disableReject  = isRejected  || isClosed;
+        const disableWaiting = isClosed    || isConfirmed;
+        const disableClose   = isClosed;
+
+        tr.innerHTML = `
+            <td class="col-tenant">
+                <div class="cell-primary truncate" title="${b.tenant_name || 'N/A'}">${b.tenant_name || 'N/A'}</div>
+                <div class="cell-sub">ID:${b.tenant_id}</div>
+            </td>
+            <td class="col-service">
+                <div class="truncate" title="${b.service_name || '—'}" style="font-size:0.78rem;font-weight:500">${b.service_name || '—'}</div>
+                <div class="cell-sub truncate" title="${b.provider_name || ''}">${b.provider_name || '—'}</div>
+            </td>
+            <td class="col-contact">
+                <div class="cell-mono truncate">${b.phone || '—'}</div>
+            </td>
+            <td class="col-name">
+                <div class="truncate" style="font-size:0.78rem">${b.customer_name ? escHtml(b.customer_name) : '<span style="color:var(--text-faint)">—</span>'}</div>
+            </td>
+            <td class="col-schedule">
+                <div style="font-size:0.78rem;font-weight:500">${dateStr}</div>
+                <div class="cell-sub">${b.booking_time || '—'}</div>
+            </td>
+            <td class="col-status">
+                <span class="status-badge ${b.status || 'pending'}">${b.status || 'pending'}</span>
+            </td>
+            <td class="col-actions">
+                <div class="action-btn-group">
+                    <button class="action-icon-btn approve" title="Approve"
+                        onclick="openActionModal('${b.id}','${b.tenant_id}','approve',this)"
+                        ${disableApprove ? 'disabled' : ''}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    </button>
+                    <button class="action-icon-btn reject" title="Reject"
+                        onclick="openActionModal('${b.id}','${b.tenant_id}','reject',this)"
+                        ${disableReject ? 'disabled' : ''}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                    <button class="action-icon-btn waiting" title="Set Waiting"
+                        onclick="openActionModal('${b.id}','${b.tenant_id}','waiting',this)"
+                        ${disableWaiting ? 'disabled' : ''}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    </button>
+                    <button class="action-icon-btn archive" title="Close"
+                        onclick="openActionModal('${b.id}','${b.tenant_id}','close',this)"
+                        ${disableClose ? 'disabled' : ''}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+                    </button>
+                </div>
+            </td>
+        `;
+        els.bookingsTableBody.appendChild(tr);
+    });
+}
+
+// ==========================================
+// 9. ACTION MODAL (Approve / Reject / Waiting / Close)
+// ==========================================
+const ACTION_CONFIG = {
+    approve: {
+        label:   "Approve Booking",
+        title:   "Confirm Approval",
+        btnText: "✓ Approve & Notify",
+        btnClass:"primary",
+        cssClass:"modal-approve",
+        requiresRemarks: false,
+        remarksLabel:    "Optional note for customer"
+    },
+    reject: {
+        label:   "Reject Booking",
+        title:   "Confirm Rejection",
+        btnText: "✗ Reject & Notify",
+        btnClass:"primary",
+        cssClass:"modal-reject",
+        requiresRemarks: true,
+        remarksLabel:    "Reason for rejection (required)"
+    },
+    waiting: {
+        label:   "Set Waiting",
+        title:   "Place On Waitlist",
+        btnText: "⏳ Confirm Waiting",
+        btnClass:"primary",
+        cssClass:"modal-waiting",
+        requiresRemarks: false,
+        remarksLabel:    "Optional message to customer"
+    },
+    close: {
+        label:   "Close Booking",
+        title:   "Archive Booking",
+        btnText: "Archive & Notify",
+        btnClass:"primary",
+        cssClass:"modal-close",
+        requiresRemarks: true,
+        remarksLabel:    "Closure remarks (required)"
+    }
+};
+
+window.openActionModal = (bookingId, tenantId, action, triggerBtn) => {
+    const cfg = ACTION_CONFIG[action];
+    if (!cfg || !els.actionModal) return;
+
+    // Store meta
+    closeBookingMeta = { bookingId, tenantId, action };
+
+    // Find booking row data from cache
+    const b = bookingsCache.find(x => String(x.id) === String(bookingId)) || {};
+
+    // Configure modal appearance
+    els.actionModalSurface.className = `modal-surface panel-card ${cfg.cssClass}`;
+    if (els.actionModalLabel) els.actionModalLabel.textContent = cfg.label;
+    if (els.actionModalTitle) els.actionModalTitle.textContent = cfg.title;
+    if (els.actionSubmitButton) els.actionSubmitButton.textContent = cfg.btnText;
+    if (els.actionRemarks) els.actionRemarks.value = "";
+
+    // Remarks field
+    if (els.remarksLabel) els.remarksLabel.textContent = cfg.remarksLabel;
+    if (els.remarksWrap) {
+        els.remarksWrap.style.display = "";
+        els.actionRemarks.required = cfg.requiresRemarks;
+        els.actionRemarks.placeholder = cfg.requiresRemarks
+            ? "Required — please provide a reason..."
+            : "Optional notes for the customer...";
+    }
+
+    // Populate booking summary
+    const dateStr = b.booking_date ? new Date(b.booking_date).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }) : "—";
+    if (els.summaryPhone)    els.summaryPhone.textContent    = b.phone || "—";
+    const summaryName = document.getElementById("summaryName");
+    if (summaryName)         summaryName.textContent         = b.customer_name || "—";
+    if (els.summaryService)  els.summaryService.textContent  = b.service_name || "—";
+    if (els.summaryDate)     els.summaryDate.textContent     = dateStr;
+    if (els.summaryTime)     els.summaryTime.textContent     = b.booking_time || "—";
+    if (els.summaryProvider) els.summaryProvider.textContent = b.provider_name || "—";
+
+    // Show modal
+    els.actionModal.classList.remove("hidden");
+    els.actionRemarks?.focus();
+};
+
+function closeActionModal() {
+    els.actionModal?.classList.add("hidden");
+    closeBookingMeta = null;
+    if (els.actionRemarks) els.actionRemarks.value = "";
+}
+
+async function submitBookingAction(e) {
+    e.preventDefault();
+    if (!closeBookingMeta) return;
+
+    const { bookingId, tenantId, action } = closeBookingMeta;
+    const remarks = els.actionRemarks?.value.trim() || "";
+    const cfg = ACTION_CONFIG[action];
+
+    // Validate required remarks
+    if (cfg.requiresRemarks && !remarks) {
+        showToast(`${cfg.label}: remarks are required`, "error");
+        els.actionRemarks?.focus();
+        return;
+    }
+
+    // Disable submit during processing
+    if (els.actionSubmitButton) {
+        els.actionSubmitButton.disabled = true;
+        els.actionSubmitButton.innerHTML = `<span class="loader-ring" style="width:14px;height:14px;border-width:2px"></span> Processing...`;
+    }
+
+    const ENDPOINT_MAP = { approve: "approve", reject: "reject", waiting: "waiting", close: "close" };
+
+    try {
+        await fetchJson(`/admin/${ENDPOINT_MAP[action]}`, {
+            method: "POST",
+            body: JSON.stringify({ bookingId, tenantId, remarks, comment: remarks })
+        });
+
+        closeActionModal();
+        showToast(`Booking ${action}d successfully — WhatsApp notification sent to customer`, "success");
+        await loadBookings(true);
+        await loadOverviewStats();
+    } catch (err) {
+        showToast(`Action failed: ${err.message}`, "error");
+    } finally {
+        if (els.actionSubmitButton) {
+            els.actionSubmitButton.disabled = false;
+            els.actionSubmitButton.textContent = cfg?.btnText || "Confirm";
         }
     }
 }
 
-function openCloseModal(booking) {
-    closeBookingMeta = booking;
-    closeRemarks.value = booking.close_remarks || "";
-    closeModalSummary.textContent = `${booking.service_name} - ${booking.phone} - ${formatDisplayDate(booking.booking_date)} at ${formatDisplayTime(booking.booking_time)}`;
-    closeModal.classList.remove("hidden");
-    closeRemarks.focus();
-}
-
-function closeCloseModal() {
-    closeBookingMeta = null;
-    closeRemarks.value = "";
-    closeModal.classList.add("hidden");
-}
-
-function renderTenantSettingsList(containerId) {
-    const list = document.getElementById(containerId);
-    if (!list) return;
-
-    list.innerHTML = "";
-
-    // Hide sidebar if only one tenant or in tenant-scoped view
-    const sidebar = list.closest(".tenant-directory");
-    if (portalData.scope !== "global") {
-        if (sidebar) sidebar.style.display = "none";
-        return;
-    }
-
-    if (sidebar) sidebar.style.display = "block";
-
-    portalData.tenants.forEach((tenant) => {
-        const item = document.createElement("button");
-        item.type = "button";
-        item.className = "tenant-directory-item";
-        if (String(tenant.id) === String(selectedTenantId)) item.classList.add("active");
-
-        item.innerHTML = `
-            <div class="tenant-title">${getTenantLabel(tenant)}</div>
-            <div class="tenant-id">ID ${tenant.id}</div>
-        `;
-
-        item.onclick = async () => {
-            selectedTenantId = tenant.id;
-            document.querySelectorAll(".tenant-directory-item").forEach(el => el.classList.remove("active"));
-            
-            // Sync all lists
-            document.querySelectorAll(`[data-tenant-id="${tenant.id}"]`).forEach(el => el.classList.add('active'));
-            
-            if (currentScreen === "workflowScreen") {
-                document.getElementById("workflowEditorTitle").textContent = getTenantLabel(tenant);
-                await loadWorkflowData();
-            } else if (currentScreen === "settingsScreen") {
-                await loadSettings();
-            }
-        };
-        item.dataset.tenantId = tenant.id;
-
-        list.appendChild(item);
-    });
-}
-// 8. SETTINGS MANAGEMENT
 // ==========================================
-
-
-
-async function loadSettings() {
-    const selectedTenant = getSelectedTenant();
-    if (!selectedTenant) return;
+// 10. ANALYTICS
+// ==========================================
+async function loadAnalytics() {
+    const tenant = getSelectedTenant();
+    if (!tenant) { showToast("Select a tenant first", "warning"); return; }
 
     try {
-        const data = await fetchJson(`/admin/settings?tenantId=${selectedTenant.id}`);
-        renderSettings(data);
+        const data = await fetchJson(`/admin/analytics?tenantId=${tenant.id}`);
+
+        // Populate metric cards
+        setEl("metricConversations", data.totalConversations ?? "—");
+        setEl("metricBookings",      data.totalBookings ?? "—");
+        setEl("metricConversion",    data.conversionRate !== undefined ? `${data.conversionRate}%` : "—");
+        setEl("metricPopular",       data.popularService || "—");
+        setEl("metricMsgSent",       data.messagesSent ?? "—");
+        setEl("metricAvgResponse",   data.avgResponseTime ? `${data.avgResponseTime}s` : "—");
+        setEl("statActiveSessions",  data.activeUsers ?? "—");
+
+        // Render bar chart
+        renderBarChart(data.engagementTrends || []);
+        showToast("Analytics updated", "success");
     } catch (err) {
-        console.error("loadSettings error:", err);
-        showToast("Error loading settings", "error");
+        showToast("Analytics sync failed", "error");
     }
 }
 
-function renderSettings(data) {
-    const { tenant, services, providers } = data;
-    
-    // 1. General Tab
-    document.getElementById("businessNameInput").value = tenant.business_name || "";
-    document.getElementById("timezoneInput").value = tenant.timezone || "UTC";
-    document.getElementById("parallelInput").value = tenant.max_parallel_appointments || 1;
-
-    // WhatsApp Fields
-    document.getElementById("phoneNumberIdInput").value = tenant.phone_number_id || "";
-    document.getElementById("whatsappTokenInput").value = tenant.token || "";
-    document.getElementById("appSecretInput").value = tenant.app_secret || "";
-    document.getElementById("verifyTokenInput").value = tenant.webhook_verify_token || "";
-
-    // 2. Schedule Tab
-    document.getElementById("openingHourInput").value = tenant.opening_hour ?? 9;
-    document.getElementById("closingHourInput").value = tenant.closing_hour ?? 21;
-    document.getElementById("slotDurationInput").value = tenant.slot_duration ?? 60;
-
-    // Week Offs
-    const weekOffs = Array.isArray(tenant.week_offs) ? tenant.week_offs : [];
-    document.querySelectorAll("#weekOffsContainer input[type='checkbox']").forEach(cb => {
-        cb.checked = weekOffs.includes(parseInt(cb.value));
-    });
-
-    // Holidays
-    currentSettingHolidays = Array.isArray(tenant.business_holidays) ? tenant.business_holidays : [];
-    renderHolidayList();
-
-    // 3. Services Tab
-    renderServicesSettingsTable(services);
-
-    // 4. Providers Tab
-    renderProvidersSettingsTable(providers, services);
+function setEl(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
 }
 
-
-
-async function loadWorkflowData() {
-    const selectedTenant = getSelectedTenant();
-    if (!selectedTenant) return;
-
-    try {
-        const data = await fetchJson(`/admin/workflow?tenantId=${selectedTenant.id}`);
-        workflowStepsData = data.steps || [];
-        renderWorkflowBuilder();
-    } catch (err) {
-        console.error("loadWorkflowData error:", err);
-        showToast("Error loading workflow", "error");
-    }
-}
-
-function renderWorkflowBuilder() {
-    const list = document.getElementById("workflowStepsList");
-    if (!list) return;
-
-    if (workflowStepsData.length === 0) {
-        list.innerHTML = `<div class="empty-state"><p>No steps configured. Click "Add New Step" to begin.</p></div>`;
+function renderBarChart(trends) {
+    const container = document.getElementById("engagementBarChart");
+    if (!container) return;
+    if (!trends.length) {
+        container.innerHTML = `<div class="placeholder-visual"><p>No engagement data available.</p></div>`;
         return;
     }
 
-    list.innerHTML = "";
-    workflowStepsData.forEach((step, index) => {
-        const card = createStepCard(step, index);
-        list.appendChild(card);
+    const max = Math.max(...trends.map(t => t.count || 0), 1);
+    container.innerHTML = trends.map(t => {
+        const pct = Math.max(4, Math.round(((t.count || 0) / max) * 100));
+        return `
+            <div class="bar-col">
+                <div class="bar-value">${t.count || 0}</div>
+                <div class="bar-fill" style="height:${pct}%"></div>
+                <div class="bar-label">${t.label || ''}</div>
+            </div>
+        `;
+    }).join("");
+}
+
+// ==========================================
+// 11. SETTINGS — with Confirmation Dialog
+// ==========================================
+async function loadSettings() {
+    const tenant = getSelectedTenant();
+    if (!tenant) return;
+
+    try {
+        const data = await fetchJson(`/admin/settings?tenantId=${tenant.id}`);
+        // API returns { tenant, services, providers }
+        const s = data.tenant || {};
+
+        safeSetVal("timezoneInput",     s.timezone     || "Asia/Kolkata");
+        safeSetVal("slotDurationInput", s.slot_duration || 30);
+        safeSetVal("openingHourInput",  s.opening_hour  !== undefined ? s.opening_hour : 9);
+        safeSetVal("closingHourInput",  s.closing_hour  !== undefined ? s.closing_hour : 21);
+        safeSetVal("phoneNumberIdInput",s.phone_number_id || "");
+        safeSetVal("appSecretInput",    s.app_secret   || "");
+
+        currentSettingHolidays = Array.isArray(s.business_holidays) ? [...s.business_holidays] : [];
+        renderHolidays();
+        renderWeekOffs(Array.isArray(s.week_offs) ? s.week_offs : []);
+        renderServicesTable(data.services || []);
+        renderProvidersTable(data.providers || []);
+    } catch (err) {
+        showToast(`Settings load error: ${err.message}`, "error");
+    }
+}
+
+function safeSetVal(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.value = val ?? "";
+}
+
+function renderHolidays() {
+    const list = document.getElementById("holidayList");
+    if (!list) return;
+    if (!currentSettingHolidays.length) {
+        list.innerHTML = `<li style="color:var(--text-faint);font-size:0.78rem;padding:8px 0">No holidays configured.</li>`;
+        return;
+    }
+    list.innerHTML = currentSettingHolidays.map((h, i) => `
+        <li class="exclusion-tag">
+            <span>${h}</span>
+            <button onclick="removeExclusion(${i})" title="Remove">×</button>
+        </li>
+    `).join("");
+}
+
+function renderWeekOffs(offs) {
+    const container = document.getElementById("weekOffsContainer");
+    if (!container) return;
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    container.innerHTML = days.map((d, i) => `
+        <label class="day-chip">
+            <input type="checkbox" value="${i}" ${offs.includes(i) ? "checked" : ""}>
+            <span>${d}</span>
+        </label>
+    `).join("");
+}
+
+function renderServicesTable(services) {
+    const tbody = document.getElementById("servicesSettingsTableBody");
+    if (!tbody) return;
+    tbody.innerHTML = services.length ? services.map(s => `
+        <tr>
+            <td class="cell-sub">${s.id}</td>
+            <td><input type="text" class="form-input compact service-name" value="${escHtml(s.name)}" data-id="${s.id}"></td>
+            <td>
+                <button class="secondary compact toggle-active" data-id="${s.id}" data-type="service" data-active="${s.is_active ? '1' : '0'}"
+                    style="min-width:72px;color:${s.is_active ? 'var(--mint-400)' : 'var(--coral-400)'}">
+                    ${s.is_active ? '✓ Active' : '✗ Inactive'}
+                </button>
+            </td>
+            <td><button class="secondary compact" onclick="saveService('${s.id}')">
+                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                Save
+            </button></td>
+        </tr>
+    `).join("") : `<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted);font-size:0.8rem">No services found.</td></tr>`;
+
+    // Wire up toggle buttons
+    tbody.querySelectorAll(".toggle-active[data-type='service']").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const isActive = btn.dataset.active === "1";
+            btn.dataset.active = isActive ? "0" : "1";
+            btn.textContent = isActive ? "✗ Inactive" : "✓ Active";
+            btn.style.color = isActive ? "var(--coral-400)" : "var(--mint-400)";
+        });
     });
 }
 
-const STEP_KINDS = [
-    { value: "service", label: "Service Selection" },
-    { value: "custom_choice", label: "Custom Choices (Buttons/List)" },
-    { value: "date_choice", label: "Date Selection" },
-    { value: "relative_date_list", label: "Relative Date List" },
-    { value: "time_period", label: "Time Window Selection" },
-    { value: "time_slot", label: "Time Slot Selection" },
-    { value: "confirmation", label: "Final Confirmation" },
-    { value: "text", label: "Raw Text Input" }
-];
+function renderProvidersTable(providers) {
+    const tbody = document.getElementById("providersSettingsTableBody");
+    if (!tbody) return;
+    tbody.innerHTML = providers.length ? providers.map(p => `
+        <tr>
+            <td class="cell-sub">${p.id}</td>
+            <td><input type="text" class="form-input compact provider-name" value="${escHtml(p.name)}" data-id="${p.id}"></td>
+            <td class="cell-sub">${p.service_name || '—'}</td>
+            <td>
+                <button class="secondary compact toggle-active" data-id="${p.id}" data-type="provider" data-active="${p.is_active ? '1' : '0'}"
+                    style="min-width:72px;color:${p.is_active ? 'var(--mint-400)' : 'var(--coral-400)'}">
+                    ${p.is_active ? '✓ Active' : '✗ Inactive'}
+                </button>
+            </td>
+            <td><button class="secondary compact" onclick="saveProvider('${p.id}')">
+                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                Save
+            </button></td>
+        </tr>
+    `).join("") : `<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted);font-size:0.8rem">No providers found.</td></tr>`;
 
-function createStepCard(step, index) {
-    const card = document.createElement("div");
-    card.className = "step-card";
-    card.dataset.id = step.step_id;
+    // Wire up toggle buttons
+    tbody.querySelectorAll(".toggle-active[data-type='provider']").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const isActive = btn.dataset.active === "1";
+            btn.dataset.active = isActive ? "0" : "1";
+            btn.textContent = isActive ? "✗ Inactive" : "✓ Active";
+            btn.style.color = isActive ? "var(--coral-400)" : "var(--mint-400)";
+        });
+    });
+}
 
-    const kindOptions = STEP_KINDS.map(k => `<option value="${k.value}" ${step.kind === k.value ? 'selected' : ''}>${k.label}</option>`).join("");
-    
-    // Build Options List
-    const hasOptions = ["custom_choice", "date_choice", "confirmation"].includes(step.kind);
-    const optionsHtml = step.options.map(opt => `
-        <div class="option-item" data-opt-id="${opt.id}">
-            <input type="text" value="${opt.title}" placeholder="Button Title" class="compact-input opt-title">
-            <input type="text" value="${opt.value}" placeholder="Value" class="compact-input opt-value">
-            <input type="text" value="${opt.next || ''}" placeholder="Next Step ID" class="compact-input opt-next">
-            <button class="secondary btn-icon delete-opt" title="Remove">&times;</button>
+// ── Save functions (with confirmation dialog) ──
+
+function showConfirmDialog(title, msg, onConfirm) {
+    if (!els.confirmDialog) { onConfirm(); return; }
+    if (els.confirmDialogTitle) els.confirmDialogTitle.textContent = title;
+    if (els.confirmDialogMsg)   els.confirmDialogMsg.textContent   = msg;
+    pendingSaveCallback = onConfirm;
+    els.confirmDialog.classList.remove("hidden");
+}
+
+async function saveGeneralSettings() {
+    const tenant = getSelectedTenant();
+    if (!tenant) return showToast("Select a business first", "error");
+
+    showConfirmDialog(
+        "Save General Settings?",
+        `This will update timezone, slot duration and WhatsApp credentials for "${tenant.business_name}".`,
+        async () => {
+            const payload = {
+                timezone:        document.getElementById("timezoneInput")?.value.trim(),
+                slot_duration:   parseInt(document.getElementById("slotDurationInput")?.value) || 30,
+                phone_number_id: document.getElementById("phoneNumberIdInput")?.value.trim(),
+                app_secret:      document.getElementById("appSecretInput")?.value.trim() || undefined
+            };
+            await saveSettingsConfig(payload);
+        }
+    );
+}
+
+async function saveScheduleSettings() {
+    const tenant = getSelectedTenant();
+    if (!tenant) return showToast("Select a business first", "error");
+
+    showConfirmDialog(
+        "Save Schedule Settings?",
+        `This will update business hours, weekly days off and holidays for "${tenant.business_name}".`,
+        async () => {
+            const weekOffs = Array.from(document.querySelectorAll("#weekOffsContainer input:checked")).map(cb => parseInt(cb.value));
+            const payload = {
+                opening_hour:      parseInt(document.getElementById("openingHourInput")?.value) || 9,
+                closing_hour:      parseInt(document.getElementById("closingHourInput")?.value) || 21,
+                week_offs:         weekOffs,
+                business_holidays: currentSettingHolidays
+            };
+            await saveSettingsConfig(payload);
+        }
+    );
+}
+
+async function saveSettingsConfig(settings) {
+    try {
+        await fetchJson("/admin/settings/config", {
+            method: "PUT",
+            body: JSON.stringify({ tenantId: selectedTenantId, settings })
+        });
+        showToast("✓ Settings saved successfully", "success");
+        // Re-load to confirm persistence
+        setTimeout(() => loadSettings(), 600);
+    } catch (err) {
+        showToast(`Save failed: ${err.message}`, "error");
+    }
+}
+
+window.removeExclusion = (i) => { currentSettingHolidays.splice(i, 1); renderHolidays(); };
+
+window.saveService = async (id) => {
+    const input = document.querySelector(`.service-name[data-id="${id}"]`);
+    const toggleBtn = document.querySelector(`.toggle-active[data-type='service'][data-id="${id}"]`);
+    if (!input) return;
+    const isActive = toggleBtn ? toggleBtn.dataset.active === "1" : true;
+    try {
+        await fetchJson("/admin/settings/services", {
+            method: "POST",
+            body: JSON.stringify({ tenantId: selectedTenantId, service: { id, name: input.value.trim(), is_active: isActive } })
+        });
+        showToast(`Service "${input.value.trim()}" updated`, "success");
+        loadSettings(); // Reload to sync badges
+    } catch (err) {
+        showToast(`Service save failed: ${err.message}`, "error");
+    }
+};
+
+window.saveProvider = async (id) => {
+    const input = document.querySelector(`.provider-name[data-id="${id}"]`);
+    const toggleBtn = document.querySelector(`.toggle-active[data-type='provider'][data-id="${id}"]`);
+    if (!input) return;
+    const isActive = toggleBtn ? toggleBtn.dataset.active === "1" : true;
+    try {
+        await fetchJson("/admin/settings/providers", {
+            method: "POST",
+            body: JSON.stringify({ tenantId: selectedTenantId, provider: { id, name: input.value.trim(), is_active: isActive } })
+        });
+        showToast(`Provider "${input.value.trim()}" updated`, "success");
+        loadSettings();
+    } catch (err) {
+        showToast(`Provider save failed: ${err.message}`, "error");
+    }
+};
+
+// ==========================================
+// 12. WORKFLOW
+// ==========================================
+async function loadWorkflowData() {
+    const container = document.getElementById("workflowStepsList");
+    const title     = document.getElementById("workflowEditorTitle");
+    const tenant    = getSelectedTenant();
+    if (!tenant) return;
+
+    if (title) title.textContent = `Workflow: ${tenant.business_name}`;
+    if (container) container.innerHTML = `<div style="padding:32px;text-align:center"><span class="loader-ring"></span></div>`;
+
+    try {
+        const data = await fetchJson(`/admin/workflow?tenantId=${tenant.id}`);
+        workflowStepsData = data.workflow || [];
+        renderWorkflowCards();
+    } catch (err) {
+        showToast("Workflow load failed", "error");
+    }
+}
+
+function renderWorkflowCards() {
+    const container = document.getElementById("workflowStepsList");
+    if (!container) return;
+
+    if (!workflowStepsData.length) {
+        container.innerHTML = `<div class="editor-empty"><p>No workflow nodes found. Click "+ Add Node" to create the first step.</p></div>`;
+        return;
+    }
+
+    container.innerHTML = workflowStepsData
+        .slice().sort((a, b) => (a.order_index || 0) - (b.order_index || 0))
+        .map(s => `
+        <div class="workflow-step-card" data-step-id="${s.step_id}">
+            <div class="card-head">
+                <span class="step-order">#${s.order_index}</span>
+                <span class="step-kind-badge">${(s.kind || "message").toUpperCase()}</span>
+                <div class="card-controls">
+                    <button class="icon-btn-sm" onclick="saveWorkflowNode('${s.step_id}')" title="Save node">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                    </button>
+                    <button class="icon-btn-sm danger" onclick="deleteWorkflowNode('${s.step_id}')" title="Delete node">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <label>Step ID</label>
+                <input type="text" class="node-id-input" value="${escHtml(s.step_id)}" readonly>
+                <label>Header / Title</label>
+                <input type="text" class="node-header" value="${escHtml(s.question_header || '')}" placeholder="Message header...">
+                <label>Body / Message</label>
+                <textarea class="node-body" rows="3" placeholder="Message body...">${escHtml(s.question_body || '')}</textarea>
+                <label>Next Step ID</label>
+                <input type="text" class="node-next" value="${escHtml(s.next_step_id || '')}" placeholder="Step ID or leave blank for end">
+            </div>
         </div>
     `).join("");
-
-    card.innerHTML = `
-        <div class="step-card-header">
-            <div class="step-title-row">
-                <span class="step-id-badge">${step.step_id}</span>
-                <span class="step-kind-badge">${step.kind}</span>
-            </div>
-            <div class="step-actions">
-                <button class="secondary btn-icon move-up" ${index === 0 ? 'disabled' : ''} title="Move Up">↑</button>
-                <button class="secondary btn-icon move-down" ${index === workflowStepsData.length - 1 ? 'disabled' : ''} title="Move Down">↓</button>
-                <button class="danger-soft btn-icon delete-step" title="Delete Step">&times;</button>
-            </div>
-        </div>
-        <div class="step-content">
-            <div class="step-form-grid">
-                <label>
-                    <span>Question Kind</span>
-                    <select class="compact-input step-kind">${kindOptions}</select>
-                </label>
-                <label>
-                    <span>Question Header</span>
-                    <input type="text" class="compact-input step-header" value="${step.question_header || ''}">
-                </label>
-                <label>
-                    <span>Question Body</span>
-                    <textarea class="compact-input step-body" rows="3">${step.question_body || ''}</textarea>
-                </label>
-                <label>
-                    <span>Question Footer</span>
-                    <input type="text" class="compact-input step-footer" value="${step.question_footer || ''}">
-                </label>
-                <label>
-                    <span>Fallback Next Step</span>
-                    <input type="text" class="compact-input step-next" value="${step.next_step_id || ''}">
-                </label>
-            </div>
-
-            ${hasOptions ? `
-                <div class="options-section">
-                    <div class="builder-header">
-                        <label class="eyebrow">Interactive Options (Buttons)</label>
-                        <button class="secondary compact-btn add-opt-btn">+ Add Button</button>
-                    </div>
-                    <div class="options-list">${optionsHtml}</div>
-                </div>
-            ` : ''}
-
-            <div class="form-actions" style="justify-content: flex-end; margin-top: 16px;">
-                <button class="primary save-step-btn">Update Step</button>
-            </div>
-        </div>
-    `;
-
-    // Event Listeners for Step
-    card.querySelector(".save-step-btn").onclick = () => saveWorkflowStep(step.step_id, card);
-    card.querySelector(".delete-step").onclick = () => deleteWorkflowStepUI(step.step_id);
-    card.querySelector(".move-up")?.addEventListener("click", () => reorderWorkflowStepUI(index, index - 1));
-    card.querySelector(".move-down")?.addEventListener("click", () => reorderWorkflowStepUI(index, index + 1));
-
-    if (hasOptions) {
-        card.querySelector(".add-opt-btn").onclick = () => addOptionUI(step.id, card);
-        card.querySelectorAll(".delete-opt").forEach(btn => {
-            btn.onclick = () => btn.closest(".option-item").remove();
-        });
-    }
-
-    return card;
 }
 
-async function saveWorkflowStep(stepId, card) {
-    const selectedTenant = getSelectedTenant();
-    if (!selectedTenant) return;
+window.saveWorkflowNode = async (id) => {
+    const card = document.querySelector(`[data-step-id="${id}"]`);
+    if (!card) return;
 
-    const options = Array.from(card.querySelectorAll(".option-item")).map(opt => ({
-        option_id: opt.querySelector(".opt-title").value.toLowerCase().replace(/[^a-z0-9]/g, '_'),
-        title: opt.querySelector(".opt-title").value,
-        value: opt.querySelector(".opt-value").value,
-        next_step_override: opt.querySelector(".opt-next").value
-    }));
-
-    const stepData = {
-        step_id: stepId,
-        kind: card.querySelector(".step-kind").value,
-        question_header: card.querySelector(".step-header").value,
-        question_body: card.querySelector(".step-body").value,
-        question_footer: card.querySelector(".step-footer").value,
-        next_step_id: card.querySelector(".step-next").value,
-        options // Pass options too if needed for bulk upsert, but we'll stick to a simple strategy
+    const payload = {
+        step_id:         id,
+        question_header: card.querySelector(".node-header")?.value.trim() || "",
+        question_body:   card.querySelector(".node-body")?.value.trim()   || "",
+        next_step_id:    card.querySelector(".node-next")?.value.trim()   || null
     };
 
     try {
-        const data = await fetchJson(`/admin/workflow/step`, {
+        await fetchJson("/admin/workflow/step", {
             method: "POST",
-            body: JSON.stringify({ tenantId: selectedTenant.id, step: stepData })
+            body: JSON.stringify({ tenantId: selectedTenantId, step: payload })
         });
-        if (data.success) {
-            // After step is saved, also upsert all options
-            if (options.length > 0) {
-                for (const opt of options) {
-                    await fetchJson(`/admin/workflow/option`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ tenantId: selectedTenant.id, option: opt })
-                    });
-                }
-            }
-            showToast("Step updated successfully", "success");
-            loadWorkflowData();
-        }
+        showToast("Workflow node saved", "success");
     } catch (err) {
-        showToast("Save step failed", "error");
+        showToast("Node save failed", "error");
     }
-}
+};
 
-async function deleteWorkflowStepUI(stepId) {
-    if (!confirm(`Are you sure you want to delete step '${stepId}'?`)) return;
-    const selectedTenant = getSelectedTenant();
+window.deleteWorkflowNode = async (id) => {
+    if (!confirm(`Delete workflow step "${id}"? This cannot be undone.`)) return;
     try {
-        await fetchJson(`/admin/workflow/step`, {
+        await fetchJson("/admin/workflow/step", {
             method: "DELETE",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ tenantId: selectedTenant.id, stepId })
+            body: JSON.stringify({ tenantId: selectedTenantId, stepId: id })
         });
-        showToast("Step deleted");
+        showToast("Node deleted", "success");
         loadWorkflowData();
     } catch (err) {
         showToast("Delete failed", "error");
     }
-}
+};
 
-async function reorderWorkflowStepUI(fromIndex, toIndex) {
-    const selectedTenant = getSelectedTenant();
-    const updatedSteps = [...workflowStepsData];
-    const [moved] = updatedSteps.splice(fromIndex, 1);
-    updatedSteps.splice(toIndex, 0, moved);
+async function addNewWorkflowStep() {
+    const tenant = getSelectedTenant();
+    if (!tenant) return showToast("Select a business first", "error");
 
-    const steps = updatedSteps.map(s => s.step_id);
+    const stepId = `step_${Date.now()}`;
+    const nextOrder = (workflowStepsData.length > 0)
+        ? Math.max(...workflowStepsData.map(s => s.order_index || 0)) + 1
+        : 1;
 
     try {
-        await fetchJson(`/admin/workflow/reorder`, {
+        await fetchJson("/admin/workflow/step", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ tenantId: selectedTenant.id, steps })
+            body: JSON.stringify({
+                tenantId: selectedTenantId,
+                step: { step_id: stepId, question_header: "New Step", question_body: "", next_step_id: null, order_index: nextOrder, kind: "message" }
+            })
         });
+        showToast("New node added", "success");
         loadWorkflowData();
     } catch (err) {
-        showToast("Reorder failed", "error");
+        showToast("Could not add node", "error");
     }
 }
 
-function addOptionUI(stepDbId, card) {
-    const list = card.querySelector(".options-list");
-    const div = document.createElement("div");
-    div.className = "option-item";
-    div.innerHTML = `
-        <input type="text" placeholder="Button Title" class="compact-input opt-title">
-        <input type="text" placeholder="Value" class="compact-input opt-value">
-        <input type="text" placeholder="Next Step ID" class="compact-input opt-next">
-        <button class="secondary btn-icon delete-opt" title="Remove">&times;</button>
-    `;
-    div.querySelector(".delete-opt").onclick = () => div.remove();
-    list.appendChild(div);
+// ==========================================
+// 13. UI HELPERS
+// ==========================================
+function updateHeaderUI() {
+    const selected = getSelectedTenant();
+    if (els.tenantName) {
+        els.tenantName.textContent = portalData.scope === "global"
+            ? "Global Control"
+            : (selected?.business_name || "Enterprise Control");
+    }
+
+    // Hide Workflow section for tenant-scoped users
+    const workflowBtns = document.querySelectorAll(".workflow-nav-btn");
+    const workflowScreen = document.getElementById("workflowScreen");
+    if (portalData.scope === "tenant") {
+        workflowBtns.forEach(b => b.style.display = "none");
+        if (workflowScreen) workflowScreen.style.display = "none";
+        // If currently on workflow screen, go to overview
+        if (currentScreen === "workflowScreen") setActiveScreen("overviewScreen");
+    } else {
+        workflowBtns.forEach(b => b.style.display = "");
+        if (workflowScreen) workflowScreen.style.display = "";
+    }
 }
 
-function renderHolidayList() {
-    const list = document.getElementById("holidayList");
-    list.innerHTML = "";
-    currentSettingHolidays.sort().forEach((date, index) => {
-        const li = document.createElement("li");
-        li.className = "tag-item";
-        li.innerHTML = `<span>${date}</span><button type="button" class="del-btn">&times;</button>`;
-        li.querySelector(".del-btn").onclick = () => {
-            currentSettingHolidays.splice(index, 1);
-            renderHolidayList();
-        };
-        list.appendChild(li);
-    });
+function renderTenantOverview() {
+    if (!els.tenantOverviewList) return;
+    if (!portalData.tenants.length) {
+        els.tenantOverviewList.innerHTML = `<p style="color:var(--text-muted);font-size:0.8rem;padding:16px">No business accounts found.</p>`;
+    } else {
+        els.tenantOverviewList.innerHTML = portalData.tenants.map(t => `
+            <article class="tenant-node-card" onclick="selectTenantAndGo('${t.id}')">
+                <div class="node-icon">🏪</div>
+                <div class="node-info">
+                    <h4>${escHtml(t.business_name || 'Business')}</h4>
+                    <p>ID: ${t.id} · ${t.timezone || 'UTC'}</p>
+                </div>
+            </article>
+        `).join("");
+    }
+
+    if (els.overviewTenantCount) els.overviewTenantCount.textContent = `${portalData.tenants.length} Active`;
+    if (els.overviewStatus) els.overviewStatus.textContent = "All accounts synced.";
 }
 
-function renderServicesSettingsTable(services) {
-    const tbody = document.getElementById("servicesSettingsTableBody");
-    tbody.innerHTML = "";
-    services.forEach(s => {
-        const tr = document.createElement("tr");
+window.selectTenantAndGo = (id) => {
+    selectedTenantId = String(id);
+    setActiveScreen("bookingsScreen");
+    if (els.tenantFilter) els.tenantFilter.value = id;
+    loadBookings();
+};
 
-        // ID cell
-        const idCell = document.createElement('td');
-        idCell.textContent = s.id;
-        tr.appendChild(idCell);
+function populateTenantSelectors() {
+    const optionsHtml = `<option value="">All Businesses</option>` +
+        portalData.tenants.map(t => `<option value="${t.id}">${escHtml(t.business_name)}</option>`).join("");
 
-        // Name input cell
-        const nameCell = document.createElement('td');
-        const nameInput = document.createElement('input');
-        nameInput.type = 'text';
-        nameInput.value = s.name;
-        nameInput.className = 'inline-edit service-name-input';
-        nameCell.appendChild(nameInput);
-        tr.appendChild(nameCell);
+    if (els.tenantFilter) els.tenantFilter.innerHTML = optionsHtml;
 
-        // Status cell
-        const statusCell = document.createElement('td');
-        const statusBadge = document.createElement('span');
-        statusBadge.className = `status-badge ${s.is_active ? 'active' : 'inactive'}`;
-        statusBadge.textContent = s.is_active ? 'Active' : 'Disabled';
-        statusCell.appendChild(statusBadge);
-        tr.appendChild(statusCell);
+    const commSelect = document.getElementById("commTenantSelect");
+    if (commSelect) commSelect.innerHTML = optionsHtml;
 
-        // Actions cell
-        const actionsCell = document.createElement('td');
-        const toggleBtn = document.createElement('button');
-        toggleBtn.className = 'secondary compact-btn toggle-status';
-        toggleBtn.textContent = s.is_active ? 'Disable' : 'Enable';
-        toggleBtn.onclick = () => saveService(s.id, { name: tr.querySelector(".service-name-input").value, is_active: !s.is_active });
+    const listHtml = portalData.tenants.map(t => `
+        <button class="v-list-item ${String(t.id) === String(selectedTenantId) ? "active" : ""}"
+            onclick="selectLocalTenant('${t.id}')">
+            ${escHtml(t.business_name)}
+        </button>
+    `).join("");
 
-        const saveBtn = document.createElement('button');
-        saveBtn.className = 'primary compact-btn save-service';
-        saveBtn.textContent = 'Save';
-        saveBtn.onclick = () => saveService(s.id, { name: tr.querySelector(".service-name-input").value, is_active: s.is_active });
-
-        actionsCell.appendChild(toggleBtn);
-        actionsCell.appendChild(saveBtn);
-        tr.appendChild(actionsCell);
-
-        tbody.appendChild(tr);
-    });
+    const flowList = document.getElementById("tenantListWorkflow");
+    const settList = document.getElementById("tenantListSettings");
+    if (flowList) flowList.innerHTML = listHtml;
+    if (settList) settList.innerHTML = listHtml;
 }
 
-function renderProvidersSettingsTable(providers, services) {
-    const tbody = document.getElementById("providersSettingsTableBody");
-    tbody.innerHTML = "";
-    providers.forEach(p => {
-        const tr = document.createElement("tr");
+window.selectLocalTenant = (id) => {
+    selectedTenantId = String(id);
+    populateTenantSelectors();
+    if (currentScreen === "workflowScreen") loadWorkflowData();
+    else if (currentScreen === "settingsScreen") loadSettings();
+};
 
-        // ID cell
-        const idCell = document.createElement('td');
-        idCell.textContent = p.id;
-        tr.appendChild(idCell);
+function setActiveScreen(id) {
+    currentScreen = id;
+    els.screens?.forEach(s => s.classList.toggle("hidden", s.id !== id));
+    els.screenButtons?.forEach(b => b.classList.toggle("active", b.dataset.screenTarget === id));
+}
 
-        // Name input cell
-        const nameCell = document.createElement('td');
-        const nameInput = document.createElement('input');
-        nameInput.type = 'text';
-        nameInput.value = p.name;
-        nameInput.className = 'inline-edit provider-name-input';
-        nameCell.appendChild(nameInput);
-        tr.appendChild(nameCell);
+function escHtml(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
 
-        // Service select cell
-        const serviceCell = document.createElement('td');
-        const serviceSelect = document.createElement('select');
-        serviceSelect.className = 'inline-edit provider-service-select';
+// ==========================================
+// 14. REALTIME STREAM
+// ==========================================
+function initStream() {
+    if (stream && stream.readyState === EventSource.OPEN) return;
+    closeStream();
 
-        const noneOption = document.createElement('option');
-        noneOption.value = '';
-        noneOption.textContent = '(None - All Services)';
-        serviceSelect.appendChild(noneOption);
+    const url = `/admin/bookings/stream?token=${adminToken}`;
+    stream = new EventSource(url);
 
-        services.forEach(s => {
-            const option = document.createElement('option');
-            option.value = s.id;
-            option.textContent = s.name;
-            if (p.service_id == s.id) {
-                option.selected = true;
+    stream.onopen = () => {
+        if (els.connectionStatusDot) els.connectionStatusDot.className = "status-dot online";
+        if (els.connectionStatusText) els.connectionStatusText.textContent = "Live";
+    };
+    stream.onerror = () => {
+        if (els.connectionStatusDot) els.connectionStatusDot.className = "status-dot offline";
+        if (els.connectionStatusText) els.connectionStatusText.textContent = "Reconnecting...";
+    };
+    stream.onmessage = (e) => {
+        try {
+            const event = JSON.parse(e.data);
+            if (event.type === "connected") return;
+            showToast(`New activity: ${event.type}`, "info");
+            if (currentScreen === "bookingsScreen" || currentScreen === "overviewScreen") {
+                refreshPortal(true);
             }
-            serviceSelect.appendChild(option);
-        });
-
-        serviceCell.appendChild(serviceSelect);
-        tr.appendChild(serviceCell);
-
-        // Status cell
-        const statusCell = document.createElement('td');
-        const statusBadge = document.createElement('span');
-        statusBadge.className = `status-badge ${p.is_active ? 'active' : 'inactive'}`;
-        statusBadge.textContent = p.is_active ? 'Active' : 'Disabled';
-        statusCell.appendChild(statusBadge);
-        tr.appendChild(statusCell);
-
-        // Actions cell
-        const actionsCell = document.createElement('td');
-        const toggleBtn = document.createElement('button');
-        toggleBtn.className = 'secondary compact-btn toggle-status';
-        toggleBtn.textContent = p.is_active ? 'Disable' : 'Enable';
-        toggleBtn.onclick = () => saveProvider(p.id, {
-            name: tr.querySelector(".provider-name-input").value,
-            service_id: tr.querySelector(".provider-service-select").value,
-            is_active: !p.is_active
-        });
-
-        const saveBtn = document.createElement('button');
-        saveBtn.className = 'primary compact-btn save-provider';
-        saveBtn.textContent = 'Save';
-        saveBtn.onclick = () => saveProvider(p.id, {
-            name: tr.querySelector(".provider-name-input").value,
-            service_id: tr.querySelector(".provider-service-select").value,
-            is_active: p.is_active
-        });
-
-        actionsCell.appendChild(toggleBtn);
-        actionsCell.appendChild(saveBtn);
-        tr.appendChild(actionsCell);
-
-        tbody.appendChild(tr);
-    });
+        } catch {}
+    };
 }
 
-async function saveSettingsConfig(settings) {
-    const selectedTenant = getSelectedTenant();
-    if (!selectedTenant) return;
-
-    try {
-        await fetchJson(`/admin/settings/config`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ tenantId: selectedTenant.id, settings })
-        });
-        showToast("Settings saved", "success");
-        await loadSettings();
-    } catch (err) {
-        showToast("Save failed", "error");
-    }
+function closeStream() {
+    if (stream) { stream.close(); stream = null; }
 }
 
-async function saveService(id, data) {
-    const selectedTenant = getSelectedTenant();
-    try {
-        await fetchJson(`/admin/settings/services`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ tenantId: selectedTenant.id, service: { id, ...data } })
-        });
-        showToast("Service updated", "success");
-        await loadSettings();
-    } catch (err) {
-        showToast("Service update failed", "error");
-    }
+// ==========================================
+// 15. TOAST NOTIFICATIONS
+// ==========================================
+const TOAST_ICONS = {
+    success: "✓",
+    error:   "✕",
+    info:    "ℹ",
+    warning: "⚠"
+};
+
+function showToast(msg, type = "success") {
+    const c = document.getElementById("toastContainer");
+    if (!c) return;
+    const div = document.createElement("div");
+    div.className = `toast-item ${type}`;
+    div.innerHTML = `<span class="toast-icon">${TOAST_ICONS[type] || "•"}</span><span class="toast-msg">${msg}</span>`;
+    c.appendChild(div);
+    setTimeout(() => {
+        div.classList.add("fade-out");
+        setTimeout(() => div.remove(), 400);
+    }, 4500);
 }
 
-async function saveProvider(id, data) {
-    const selectedTenant = getSelectedTenant();
-    try {
-        await fetchJson(`/admin/settings/providers`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ tenantId: selectedTenant.id, provider: { id, ...data } })
-        });
-        showToast("Provider updated", "success");
-        await loadSettings();
-    } catch (err) {
-        showToast("Provider update failed", "error");
-    }
-}
+// ==========================================
+// 16. INITIALIZATION
+// ==========================================
+function initApp() {
+    updateDomRefs();
 
-function initSettingsEvents() {
-    const tabButtons = document.querySelectorAll(".settings-tabs .pill");
-    tabButtons.forEach(btn => {
-        btn.addEventListener("click", () => {
-            currentSettingsTab = btn.dataset.tab;
-            tabButtons.forEach(b => b.classList.toggle("active", b === btn));
-            document.querySelectorAll(".settings-tab-pane").forEach(pane => {
-                pane.classList.toggle("hidden", pane.id !== `tab-${currentSettingsTab}`);
-            });
-        });
-    });
-
-    // General Form
-    document.getElementById("generalSettingsForm").addEventListener("submit", (e) => {
+    // ── Login ──
+    els.loginForm?.addEventListener("submit", async (e) => {
         e.preventDefault();
-        saveSettingsConfig({
-            timezone: document.getElementById("timezoneInput").value,
-            max_parallel_appointments: parseInt(document.getElementById("parallelInput").value),
-            phone_number_id: document.getElementById("phoneNumberIdInput").value,
-            token: document.getElementById("whatsappTokenInput").value,
-            app_secret: document.getElementById("appSecretInput").value,
-            webhook_verify_token: document.getElementById("verifyTokenInput").value
+        const token = els.tenantInput?.value.trim();
+        if (!token) return;
+        const btn = document.getElementById("loginButton");
+        if (btn) { btn.disabled = true; btn.innerHTML = `<span class="loader-ring" style="width:14px;height:14px;border-width:2px"></span> Authenticating...`; }
+        adminToken = token;
+        try {
+            // Pass isLoginAttempt=true so 401 throws meaningful error instead of redirecting
+            const data = await fetchJson("/admin/portal-data", {}, true);
+            portalData = data;
+            saveToken(token);
+            await refreshPortal();
+        } catch (err) {
+            if (btn) { btn.disabled = false; btn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Unlock Portal`; }
+            const msg = err.message === "InvalidCredentials" ? "Invalid token. Please try again." : `Error: ${err.message}`;
+            if (els.loginStatus) {
+                els.loginStatus.textContent = msg;
+                els.loginStatus.style.color = "var(--coral-400)";
+            }
+            adminToken = "";
+        }
+    });
+
+    // ── Login show/hide token ──
+    document.getElementById("loginShowToken")?.addEventListener("click", () => {
+        const inp = document.getElementById("tenantId");
+        if (inp) inp.type = inp.type === "password" ? "text" : "password";
+    });
+
+    // ── Logout ──
+    els.logoutButton?.addEventListener("click", (e) => { e.preventDefault(); clearToken(); });
+
+    // ── Navigation ──
+    els.screenButtons?.forEach(btn => {
+        btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            const id = btn.dataset.screenTarget;
+            setActiveScreen(id);
+            if (id === "workflowScreen")       loadWorkflowData();
+            else if (id === "settingsScreen")  loadSettings();
+            else if (id === "analyticsScreen") loadAnalytics();
+            else if (id === "bookingsScreen")  loadBookings();
+            else if (id === "overviewScreen")  loadOverviewStats();
         });
     });
 
-    // Schedule Form
-    document.getElementById("scheduleSettingsForm").addEventListener("submit", (e) => {
-        e.preventDefault();
-        const weekOffs = Array.from(document.querySelectorAll("#weekOffsContainer input:checked")).map(cb => parseInt(cb.value));
-        saveSettingsConfig({
-            opening_hour: parseInt(document.getElementById("openingHourInput").value),
-            closing_hour: parseInt(document.getElementById("closingHourInput").value),
-            slot_duration: parseInt(document.getElementById("slotDurationInput").value),
-            week_offs: weekOffs,
-            business_holidays: currentSettingHolidays
+    // ── Bookings Filters ──
+    document.querySelectorAll("#bookingsScreen .filter-segments .pill")?.forEach(pill => {
+        pill.addEventListener("click", () => {
+            currentFilter = pill.dataset.filter;
+            currentPage   = 1;
+            document.querySelectorAll("#bookingsScreen .filter-segments .pill").forEach(p => p.classList.toggle("active", p === pill));
+            loadBookings();
         });
     });
 
-    // Holiday Addition
-    document.getElementById("addHolidayBtn").onclick = () => {
-        const val = document.getElementById("newHolidayInput").value;
+    // ── Search (debounced) ──
+    let searchTimeout;
+    els.searchInput?.addEventListener("input", () => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => { currentPage = 1; loadBookings(); }, 500);
+    });
+
+    // ── Date & Tenant Filters ──
+    els.dateInput?.addEventListener("change",   () => { currentPage = 1; loadBookings(); });
+    els.tenantFilter?.addEventListener("change", () => { currentPage = 1; loadBookings(); });
+
+    // ── Clear Filters ──
+    document.getElementById("clearButton")?.addEventListener("click", () => {
+        if (els.searchInput) els.searchInput.value = "";
+        if (els.dateInput)   els.dateInput.value   = "";
+        if (els.tenantFilter) els.tenantFilter.value = "";
+        currentFilter = "all";
+        currentPage   = 1;
+        document.querySelectorAll("#bookingsScreen .filter-segments .pill").forEach(p => p.classList.toggle("active", p.dataset.filter === "all"));
+        loadBookings();
+    });
+
+    // ── Pagination ──
+    document.getElementById("prevPageButton")?.addEventListener("click", () => { if (currentPage > 1) { currentPage--; loadBookings(); } });
+    document.getElementById("nextPageButton")?.addEventListener("click", () => { currentPage++; loadBookings(); });
+
+    // ── Action Modal ──
+    els.actionModalDismiss?.addEventListener("click", closeActionModal);
+    els.actionModalCancel?.addEventListener("click",  closeActionModal);
+    els.actionForm?.addEventListener("submit", submitBookingAction);
+    els.actionModal?.addEventListener("click", (e) => { if (e.target === els.actionModal) closeActionModal(); });
+
+    // ── Confirm Dialog ──
+    els.confirmDialogCancel?.addEventListener("click", () => {
+        els.confirmDialog?.classList.add("hidden");
+        pendingSaveCallback = null;
+    });
+    els.confirmDialogOk?.addEventListener("click", async () => {
+        els.confirmDialog?.classList.add("hidden");
+        if (pendingSaveCallback) {
+            await pendingSaveCallback();
+            pendingSaveCallback = null;
+        }
+    });
+
+    // ── Settings Tabs ──
+    els.settingsTabs?.forEach(tab => {
+        tab.addEventListener("click", () => {
+            const target = tab.dataset.tab;
+            els.settingsTabs.forEach(t  => t.classList.toggle("active", t === tab));
+            els.settingsPanes?.forEach(p => p.classList.toggle("hidden", p.id !== `${target}SettingsPane`));
+        });
+    });
+
+    // ── Settings Save Buttons ──
+    document.getElementById("saveGeneralSettings")?.addEventListener("click", (e) => { e.preventDefault(); saveGeneralSettings(); });
+    document.getElementById("saveScheduleSettings")?.addEventListener("click", (e) => { e.preventDefault(); saveScheduleSettings(); });
+
+    // ── App Secret toggle ──
+    document.getElementById("toggleAppSecret")?.addEventListener("click", () => {
+        const inp = document.getElementById("appSecretInput");
+        if (inp) inp.type = inp.type === "password" ? "text" : "password";
+    });
+
+    // ── Holiday Add ──
+    document.getElementById("addHolidayBtn")?.addEventListener("click", () => {
+        const input = document.getElementById("holidayInput");
+        const val = input?.value;
         if (val && !currentSettingHolidays.includes(val)) {
             currentSettingHolidays.push(val);
-            renderHolidayList();
-            document.getElementById("newHolidayInput").value = "";
+            renderHolidays();
+            input.value = "";
         }
-    };
+    });
 
-    // Add New Buttons
-    document.getElementById("addNewStepButton").onclick = () => {
-        const stepId = prompt("Enter a unique ID for this step (e.g. 'check_insurance'):");
-        if (!stepId) return;
-        const kind = prompt("Enter kind (service, custom_choice, date_choice, confirmation, text):", "custom_choice");
-        if (!kind) return;
-        
-        saveWorkflowStep(stepId.trim().toLowerCase().replace(/ /g, '_'), {
-            querySelector: (sel) => {
-                const defaults = {
-                    ".step-kind": { value: kind },
-                    ".step-header": { value: "New Question" },
-                    ".step-body": { value: "Please choose an option." },
-                    ".step-footer": { value: "" },
-                    ".step-next": { value: "" }
-                };
-                return defaults[sel] || { value: "" };
-            },
-            querySelectorAll: () => []
+    // ── Workflow Buttons ──
+    document.getElementById("addNewStepButton")?.addEventListener("click", addNewWorkflowStep);
+    document.getElementById("refreshWorkflowButton")?.addEventListener("click", loadWorkflowData);
+
+    // ── Refresh Buttons ──
+    document.getElementById("refreshGlobalButton")?.addEventListener("click", () => refreshPortal(false));
+    document.getElementById("refreshOverviewButton")?.addEventListener("click", () => loadPortalData(false));
+    document.getElementById("refreshBookingsButton")?.addEventListener("click", () => loadBookings(false));
+    document.getElementById("refreshAnalyticsButton")?.addEventListener("click", loadAnalytics);
+    document.getElementById("refreshSettingsButton")?.addEventListener("click", loadSettings);
+    document.getElementById("refreshCommunicationsButton")?.addEventListener("click", loadMessages);
+
+    // ── Communications ──
+    document.getElementById("messageType")?.addEventListener("change", (e) => {
+        const phoneWrap = document.getElementById("targetPhoneWrap");
+        if (phoneWrap) phoneWrap.style.display = e.target.value === "target" ? "" : "none";
+    });
+    document.getElementById("messageForm")?.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const content = document.getElementById("messageContent")?.value.trim();
+        if (!content) return showToast("Message content is empty", "error");
+        showToast("Broadcast feature coming soon — message queued", "info");
+    });
+
+    // ── Theme Picker ──
+    const themes = [
+        { id: "midnight-amber", icon: "🌑" },
+        { id: "daylight",       icon: "☀️" },
+        { id: "aurora",         icon: "🌌" },
+        { id: "sunset",         icon: "🌅" }
+    ];
+    const themeToggleBtn = document.getElementById("themeToggleBtn");
+    const themePalette   = document.getElementById("themePalette");
+
+    function applyTheme(themeId) {
+        document.body.setAttribute("data-theme", themeId);
+        localStorage.setItem("adminTheme", themeId);
+        // Update active swatch
+        document.querySelectorAll(".theme-swatch").forEach(s => {
+            s.classList.toggle("active", s.dataset.theme === themeId);
         });
-    };
+        // Update toggle button emoji
+        const t = themes.find(t => t.id === themeId);
+        if (themeToggleBtn && t) themeToggleBtn.textContent = t.icon;
+    }
 
-    document.getElementById("addNewServiceBtn").onclick = () => {
-        const name = prompt("Enter service name:");
-        if (name) saveService(null, { name, is_active: true });
-    };
-
-    document.getElementById("addNewProviderBtn").onclick = () => {
-        const name = prompt("Enter provider name:");
-        if (name) saveProvider(null, { name, is_active: true });
-    };
-}
-
-// ==========================================
-// WORKFLOW EVENT LISTENERS
-// ==========================================
-
-// Workflow tenant selection
-document.getElementById('workflowTenantSelect')?.addEventListener('change', async (e) => {
-    selectedWorkflowTenant = e.target.value;
-    await loadWorkflowSteps(selectedWorkflowTenant);
-});
-
-// Workflow search
-document.getElementById('workflowSearch')?.addEventListener('input', (e) => {
-    // Implement search filtering
-    const searchTerm = e.target.value.toLowerCase();
-    const rows = document.querySelectorAll('#workflowTableBody tr');
-    rows.forEach(row => {
-        const text = row.textContent.toLowerCase();
-        row.style.display = text.includes(searchTerm) ? '' : 'none';
+    themeToggleBtn?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        themePalette?.classList.toggle("hidden");
     });
-});
 
-// Workflow type filter
-document.getElementById('stepTypeFilter')?.addEventListener('change', (e) => {
-    const filter = e.target.value;
-    const rows = document.querySelectorAll('#workflowTableBody tr');
-    rows.forEach(row => {
-        if (filter === 'all') {
-            row.style.display = '';
-        } else {
-            const typeCell = row.querySelector('td:nth-child(2)');
-            const type = typeCell?.textContent.toLowerCase();
-            row.style.display = type === filter ? '' : 'none';
+    document.querySelectorAll(".theme-swatch").forEach(swatch => {
+        swatch.addEventListener("click", () => {
+            applyTheme(swatch.dataset.theme);
+            themePalette?.classList.add("hidden");
+        });
+    });
+
+    // Close palette if clicking outside
+    document.addEventListener("click", (e) => {
+        if (!e.target.closest("#themePickerWrap")) {
+            themePalette?.classList.add("hidden");
         }
     });
-});
 
-// Add workflow step button
-document.getElementById('addWorkflowStepButton')?.addEventListener('click', () => {
-    if (!selectedWorkflowTenant) {
-        showToast('Please select a tenant first', 'error');
-        return;
-    }
-    showWorkflowModal();
-});
-
-// Communications form
-document.getElementById('messageForm')?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    // Implement message sending logic
-    showToast('Message sending functionality coming soon', 'info');
-});
-
-// Workflow modal functions
-function showWorkflowModal(stepData = null) {
-    const modal = document.getElementById('workflowModal');
-    const form = document.getElementById('workflowStepForm');
-    const title = document.getElementById('workflowModalTitle');
-
-    if (stepData) {
-        title.textContent = 'Edit Step';
-        // Populate form with step data
-        document.getElementById('stepOrder').value = stepData.order || '';
-        document.getElementById('stepType').value = stepData.type || 'question';
-        document.getElementById('stepMessage').value = stepData.message || '';
-        document.getElementById('stepOptions').value = stepData.options ? stepData.options.join('\n') : '';
-        document.getElementById('nextStep').value = stepData.nextStep || '';
-        document.getElementById('stepStatus').value = stepData.status || 'active';
+    // ── Restore Session ──
+    const saved = localStorage.getItem("adminToken");
+    if (saved) {
+        adminToken = saved;
+        if (els.tenantInput) els.tenantInput.value = saved;
+        refreshPortal();
     } else {
-        title.textContent = 'Add New Step';
-        form.reset();
+        showLogin();
     }
 
-    modal.classList.remove('hidden');
+    // ── Apply Saved Theme ──
+    const savedTheme = localStorage.getItem("adminTheme") || "midnight-amber";
+    applyTheme(savedTheme);
 }
 
-function hideWorkflowModal() {
-    document.getElementById('workflowModal').classList.add('hidden');
-}
-
-// Global functions for workflow actions
-function addNewWorkflowStep() {
-    showWorkflowModal();
-}
-
-function editWorkflowStep(stepId) {
-    // Find step data and show modal
-    showToast('Edit functionality coming soon', 'info');
-}
-
-function deleteWorkflowStep(stepId) {
-    if (confirm('Are you sure you want to delete this workflow step?')) {
-        showToast('Delete functionality coming soon', 'info');
-    }
-}
-
-function viewMessage(messageId) {
-    showToast('View message functionality coming soon', 'info');
-}
-
-// Workflow modal event listeners
-document.getElementById('workflowModalClose')?.addEventListener('click', hideWorkflowModal);
-document.getElementById('workflowCancelButton')?.addEventListener('click', hideWorkflowModal);
-
-document.getElementById('workflowStepForm')?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    // Implement save logic
-    showToast('Save functionality coming soon', 'info');
-    hideWorkflowModal();
-});
-
-// ==========================================
-// 10. EVENT LISTENERS
-// ==========================================
-loginForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const token = tenantInput.value.trim();
-
-    if (!token) {
-        loginStatus.textContent = "Enter your admin token to continue.";
-        return;
-    }
-
-    loginStatus.textContent = "Signing you in...";
-    saveToken(token);
-    await refreshPortal();
-});
-
-logoutButton.addEventListener("click", () => {
-    clearToken();
-    showLogin("Signed out. Enter your admin token to open the portal again.");
-});
-
-screenButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-        const target = button.dataset.screenTarget;
-        setActiveScreen(target);
-        if (target === "analyticsScreen") {
-            loadAnalytics();
-        } else if (target === "communicationsScreen") {
-            loadCommunications();
-        } else if (target === "workflowScreen") {
-            loadWorkflowData();
-        } else if (target === "settingsScreen") {
-            loadSettings();
-        }
-    });
-});
-
-refreshGlobalButton.addEventListener("click", refreshPortal);
-refreshBookingsButton.addEventListener("click", loadBookings);
-refreshOverviewButton?.addEventListener("click", refreshPortal);
-refreshAnalyticsButton?.addEventListener("click", loadAnalytics);
-refreshWorkflowButton?.addEventListener("click", loadWorkflowData);
-refreshSettingsButton?.addEventListener("click", loadSettings);
-
-let searchTimeout = null;
-searchInput.addEventListener("input", () => {
-    clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(async () => {
-        currentPage = 1;
-        await loadBookings();
-    }, 400); // Wait 400ms after user stops typing
-});
-
-dateInput.addEventListener("change", async () => {
-    currentPage = 1;
-    await loadBookings();
-});
-
-tenantFilter.addEventListener("change", async () => {
-    currentPage = 1;
-    await loadBookings();
-});
-
-document.querySelectorAll(".pill").forEach((pill) => {
-    pill.addEventListener("click", async () => {
-        currentFilter = pill.dataset.filter;
-        currentPage = 1;
-        document.querySelectorAll(".pill").forEach((item) => item.classList.toggle("active", item === pill));
-        await loadBookings();
-    });
-});
-
-document.querySelectorAll(".stat-card").forEach((card) => {
-    card.addEventListener("click", async () => {
-        currentRange = card.dataset.range || "all";
-        currentFilter = "all";
-        dateInput.value = "";
-        if (dateInput.type === "date") {
-            dateInput.type = "text"; 
-        }
-        document.querySelectorAll(".pill").forEach((item) => item.classList.toggle("active", item.dataset.filter === "all"));
-        
-        setActiveScreen("bookingsScreen");
-        currentPage = 1;
-        await loadBookings();
-    });
-});
-
-document.getElementById("clearButton").addEventListener("click", async () => {
-    searchInput.value = "";
-    dateInput.value = "";
-    if (portalData.scope === "global") {
-        tenantFilter.value = "";
-    }
-    currentFilter = "all";
-    currentRange = "all";
-    currentPage = 1;
-    document.querySelectorAll(".pill").forEach((item) => item.classList.toggle("active", item.dataset.filter === "all"));
-    await loadBookings();
-});
-
-// // Use event delegation for stat cards to handle dynamically created elements
-document.body.addEventListener("click", async (event) => {
-    const card = event.target.closest('.stat-card');
-    if (!card) return;
-
-    let changed = false;
-
-    // Handle range filter (global view)
-    if (card.dataset.range) {
-        currentRange = card.dataset.range;
-        currentFilter = "all";
-        dateInput.value = "";
-        if (dateInput.type === "date") {
-            dateInput.type = "text";
-        }
-        changed = true;
-    }
-
-    // Handle status filter (tenant view)
-    if (card.dataset.filter) {
-        currentFilter = card.dataset.filter;
-        changed = true;
-    }
-
-    if (!changed) return;
-
-    // Trigger navigation and filter update
-    document.querySelectorAll(".pill").forEach((item) => {
-        item.classList.toggle("active", item.dataset.filter === currentFilter);
-    });
-
-    setActiveScreen("bookingsScreen");
-    currentPage = 1;
-    await loadBookings();
-});
-
-prevPageButton.addEventListener("click", async () => {
-    if (currentPage > 1) {
-        currentPage -= 1;
-        await loadBookings();
-    }
-});
-
-nextPageButton.addEventListener("click", async () => {
-    const totalPages = Math.max(1, Math.ceil((bookingsResponse.total || 0) / bookingsResponse.pageSize));
-    if (currentPage < totalPages) {
-        currentPage += 1;
-        await loadBookings();
-    }
-});
-
-bookingsTableBody.addEventListener("click", async (event) => {
-    const actionButton = event.target.closest("[data-action]");
-
-    if (!actionButton) {
-        return;
-    }
-
-    const action = actionButton.dataset.action;
-    const bookingId = actionButton.dataset.id;
-    const tenantId = actionButton.dataset.tenantId;
-
-    if (action === "close") {
-        const booking = (bookingsResponse.items || []).find((item) => String(item.id) === String(bookingId));
-        if (booking) {
-            openCloseModal(booking);
-        }
-        return;
-    }
-
-    // Disable button to prevent double-clicks
-    actionButton.disabled = true;
-    const originalHtml = actionButton.innerHTML;
-    actionButton.innerHTML = `<svg class="spin" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"></path></svg>`;
-
+async function loadMessages() {
     try {
-        await updateBookingStatus(bookingId, action, { tenantId });
-    } finally {
-        actionButton.disabled = false;
-        actionButton.innerHTML = originalHtml;
-    }
-});
-
-closeModalDismiss.addEventListener("click", closeCloseModal);
-closeModal.addEventListener("click", (event) => {
-    if (event.target === closeModal) {
-        closeCloseModal();
-    }
-});
-
-closeForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-
-    if (!closeBookingMeta) {
-        return;
-    }
-
-    await updateBookingStatus(closeBookingMeta.id, "close", {
-        tenantId: closeBookingMeta.tenant_id,
-        remarks: closeRemarks.value.trim()
-    });
-});
-
-// ==========================================
-// 11. INITIALIZATION
-// ==========================================
-initSettingsEvents();
-tenantInput.value = localStorage.getItem("adminToken") || "";
-setActiveScreen(currentScreen);
-
-if (tenantInput.value.trim()) {
-    saveToken(tenantInput.value.trim());
-    loginStatus.textContent = "Restoring your session...";
-    refreshPortal();
-} else {
-    showLogin();
+        const tenant = getSelectedTenant();
+        if (!tenant) return;
+        const data = await fetchJson(`/admin/messages?tenantId=${tenant.id}`);
+        const tbody = document.getElementById("messagesTableBody");
+        if (!tbody) return;
+        if (!Array.isArray(data) || !data.length) {
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:32px;color:var(--text-muted);font-size:0.8rem">No messages on record yet.</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = data.map(m => `
+            <tr>
+                <td><span class="status-badge ${m.type || 'info'}">${m.type || 'broadcast'}</span></td>
+                <td class="truncate" style="max-width:220px" title="${escHtml(m.preview || '')}">${escHtml(m.preview || '—')}</td>
+                <td class="cell-sub">${m.sent_at ? new Date(m.sent_at).toLocaleString() : '—'}</td>
+                <td><span class="status-badge ${m.status === 'sent' ? 'confirmed' : 'pending'}">${m.status || 'pending'}</span></td>
+            </tr>
+        `).join("");
+    } catch {}
 }
+
+// ── Boot ──
+document.addEventListener("DOMContentLoaded", initApp);

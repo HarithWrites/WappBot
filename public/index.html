@@ -3,924 +3,678 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WappBot Control Center</title>
+    <title>WappBot — Command Center</title>
+    <meta name="description" content="WappBot enterprise WhatsApp automation command center. Manage bookings, workflows, communications and analytics.">
     <link rel="stylesheet" href="/style.css">
-    
-    <!-- Theme Initializer: Runs instantly to prevent flash of wrong theme -->
-    <script>
-        const savedTheme = localStorage.getItem("workspaceTheme");
-        if (savedTheme === "dark") {
-            document.documentElement.setAttribute("data-theme", "dark");
-        }
-    </script>
+    <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/5968/5968841.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
-<body>
-    <div class="app-shell">
-        <section id="loginScreen" class="login-screen">
-            <div class="login-card">
-                <p class="eyebrow">Unified Admin Portal</p>
-                <h1>WappBot Control Center</h1>
-                <p class="hero-copy">
-                    Sign in with a tenant admin token or your master admin token to manage bookings, workflows, tenants, and provider visibility from one place.
-                </p>
+<body class="admin-portal">
+<div id="app">
 
-                <form id="loginForm" class="login-form">
-                    <label>
-                        <span>Admin token</span>
-                        <input type="password" id="tenantId" placeholder="Enter admin token" autocomplete="current-password">
-                    </label>
-                    <button id="loginButton" class="primary" type="submit">Open portal</button>
-                </form>
-
-                <p id="loginStatus" class="status-note">Your token stays saved on this browser until you sign out.</p>
+    <!-- ════════════════════════════════════════════════
+         1.  LOGIN SCREEN
+     ═══════════════════════════════════════════════════ -->
+    <section id="loginScreen" class="workspace-screen">
+        <div class="login-auth-layout">
+            <div class="login-brand">
+                <div class="logo-circle">W</div>
+                <h1>WappBot Admin</h1>
+                <p class="tagline">Enterprise-grade WhatsApp automation command center.</p>
             </div>
-        </section>
-
-        <div id="dashboardShell" class="dashboard-shell hidden">
-            <header class="top-nav-header">
-                <div class="nav-top-row">
-                    <h1 id="tenantName">WappBot Control Center</h1>
-                        <div class="header-main-actions">
-                            <div class="connection-pill">
-                                <span id="connectionStatusDot" class="status-dot"></span>
-                                <span id="connectionStatusText">Disconnected</span>
-                            </div>
-                            <button id="refreshGlobalButton" class="icon-button" title="Refresh Portal">
-                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"></path></svg>
+            <div class="login-panel panel-card">
+                <div class="panel-header">
+                    <h3>Secure Authentication</h3>
+                </div>
+                <form id="loginForm" class="login-form">
+                    <div class="form-group">
+                        <label for="tenantId">Master Admin Token</label>
+                        <div class="password-field-wrap">
+                            <input type="password" id="tenantId" class="form-input" placeholder="Enter your admin token" autocomplete="current-password" required>
+                            <button type="button" id="loginShowToken" class="password-reveal-btn" title="Toggle visibility">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                             </button>
-                            <button id="logoutButton" class="icon-button logout" title="Sign Out">
-                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"></path></svg>
+                        </div>
+                    </div>
+                    <p id="loginStatus" class="status-note">Access is restricted to authorized administrative personnel.</p>
+                    <button id="loginButton" class="primary full-width" type="submit">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                        Unlock Portal
+                    </button>
+                </form>
+            </div>
+            <footer class="login-footer"><p>© 2026 WappBot Command Center v3.0 · Midnight Edition</p></footer>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════
+         2.  DASHBOARD SHELL
+     ═══════════════════════════════════════════════════ -->
+    <div id="dashboardShell" class="dashboard-shell hidden">
+
+        <!-- Top Bar -->
+        <header class="dashboard-header top-bar">
+            <div class="header-branding">
+                <div class="mini-logo">W</div>
+                <div class="title-meta">
+                    <h2 id="tenantName">WappBot Portal</h2>
+                    <div class="connection-pill">
+                        <span id="connectionStatusDot" class="status-dot"></span>
+                        <span id="connectionStatusText">Connecting...</span>
+                    </div>
+                </div>
+            </div>
+
+            <nav class="nav-tabs">
+                <button class="nav-tab active" data-screen-target="overviewScreen">
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-2px;margin-right:4px"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                    Overview
+                </button>
+                <button class="nav-tab" data-screen-target="analyticsScreen">
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-2px;margin-right:4px"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                    Analytics
+                </button>
+                <button class="nav-tab" data-screen-target="bookingsScreen">
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-2px;margin-right:4px"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    Bookings
+                </button>
+                <button class="nav-tab" data-screen-target="communicationsScreen">
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-2px;margin-right:4px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    Messages
+                </button>
+                <button class="nav-tab workflow-nav-btn" data-screen-target="workflowScreen">
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-2px;margin-right:4px"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                    Workflow
+                </button>
+                <button class="nav-tab" data-screen-target="settingsScreen">
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-2px;margin-right:4px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                    Settings
+                </button>
+            </nav>
+
+            <div class="header-actions">
+                <button id="refreshGlobalButton" class="icon-button" title="Sync All Data">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                </button>
+                <button id="logoutButton" class="outline-btn compact">Sign Out</button>
+            </div>
+        </header>
+
+        <!-- Main Workspace -->
+        <main class="workspace-viewport">
+
+            <!-- ─── SCREEN: OVERVIEW ─── -->
+            <section id="overviewScreen" class="workspace-screen">
+                <div class="screen-hero">
+                    <p class="hero-label">Command Center</p>
+                    <h1>Business Overview</h1>
+                    <p class="hero-sub">Real-time metrics across all your business operations.</p>
+                </div>
+
+                <div class="stats-grid-premium">
+                    <article class="stat-widget">
+                        <div class="widget-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        </div>
+                        <span class="widget-label">Today's Bookings</span>
+                        <h3 class="widget-value" id="statToday">—</h3>
+                        <p class="widget-trend positive" id="trendToday">Loading...</p>
+                    </article>
+                    <article class="stat-widget">
+                        <div class="widget-icon" style="background:rgba(52,211,153,0.08);color:var(--mint-400);border-color:rgba(52,211,153,0.15)">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                        </div>
+                        <span class="widget-label">This Week</span>
+                        <h3 class="widget-value" id="statThisWeek">—</h3>
+                        <p class="widget-trend" id="trendWeek" style="color:var(--text-faint)">Weekly velocity</p>
+                    </article>
+                    <article class="stat-widget">
+                        <div class="widget-icon" style="background:rgba(96,165,250,0.08);color:var(--sky-400);border-color:rgba(96,165,250,0.15)">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                        </div>
+                        <span class="widget-label">This Month</span>
+                        <h3 class="widget-value" id="statThisMonth">—</h3>
+                        <p class="widget-trend" id="trendMonth" style="color:var(--text-faint)">Monthly volume</p>
+                    </article>
+                    <article class="stat-widget">
+                        <div class="widget-icon" style="background:rgba(167,139,250,0.08);color:var(--violet-400);border-color:rgba(167,139,250,0.15)">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                        </div>
+                        <span class="widget-label">Total Lifetime</span>
+                        <h3 class="widget-value" id="statTotal">—</h3>
+                        <p class="widget-trend" style="color:var(--text-faint)">All time bookings</p>
+                    </article>
+                </div>
+
+                <div class="overview-details">
+                    <div class="panel-card tenant-directory-main">
+                        <div class="panel-header">
+                            <h3>Business Accounts</h3>
+                            <div class="badge-pill" id="overviewTenantCount">0 Active</div>
+                        </div>
+                        <div id="tenantOverviewList" class="tenant-cards-container">
+                            <!-- Injected -->
+                        </div>
+                        <div class="panel-footer">
+                            <p id="overviewStatus" class="status-note italic">Syncing...</p>
+                            <button id="refreshOverviewButton" class="secondary compact">Refresh</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ─── SCREEN: ANALYTICS ─── -->
+            <section id="analyticsScreen" class="workspace-screen hidden">
+                <header class="section-title-bar">
+                    <div>
+                        <p class="breadcrumb">Insights</p>
+                        <h2>Business Analytics</h2>
+                        <p class="hero-copy">Performance metrics and engagement trends for your operations.</p>
+                    </div>
+                    <button id="refreshAnalyticsButton" class="primary compact">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                        Refresh Data
+                    </button>
+                </header>
+
+                <div class="analytics-dashboard">
+                    <div class="metrics-grid" id="analyticsMetricsGrid">
+                        <div class="metric-card">
+                            <h4>Total Conversations</h4>
+                            <p id="metricConversations">—</p>
+                        </div>
+                        <div class="metric-card">
+                            <h4>Total Bookings</h4>
+                            <p id="metricBookings">—</p>
+                        </div>
+                        <div class="metric-card">
+                            <h4>Conversion Rate</h4>
+                            <p id="metricConversion">—</p>
+                            <p class="metric-sub">chat→booking</p>
+                        </div>
+                        <div class="metric-card">
+                            <h4>Popular Service</h4>
+                            <p id="metricPopular" style="font-size:0.95rem">—</p>
+                        </div>
+                        <div class="metric-card">
+                            <h4>Messages Sent</h4>
+                            <p id="metricMsgSent">—</p>
+                        </div>
+                        <div class="metric-card">
+                            <h4>Avg Response</h4>
+                            <p id="metricAvgResponse">—</p>
+                            <p class="metric-sub">seconds</p>
+                        </div>
+                    </div>
+
+                    <div class="panel-card chart-container-large">
+                        <div class="panel-header">
+                            <h3>Weekly Engagement Trend</h3>
+                        </div>
+                        <div class="bar-chart-wrap">
+                            <div class="bar-chart" id="engagementBarChart">
+                                <div class="placeholder-visual">
+                                    <span class="loader-ring"></span>
+                                    <p>Loading chart data...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="metrics-row-small" style="margin-top:16px">
+                        <div class="stat-card-mini"><h4>Avg Response</h4><p id="statAvgResponse">2.5s</p></div>
+                        <div class="stat-card-mini"><h4>Success Rate</h4><p id="statSuccessRate">99.4%</p></div>
+                        <div class="stat-card-mini"><h4>Active Sessions</h4><p id="statActiveSessions">—</p></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ─── SCREEN: BOOKINGS ─── -->
+            <section id="bookingsScreen" class="workspace-screen hidden">
+                <header class="section-title-bar">
+                    <div>
+                        <p class="breadcrumb">Operations</p>
+                        <h2>Booking Management</h2>
+                        <p class="hero-copy">Review, filter and action every customer booking request.</p>
+                    </div>
+                    <div class="header-actions">
+                        <button id="refreshBookingsButton" class="secondary compact">
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                            Sync
+                        </button>
+                    </div>
+                </header>
+
+                <!-- Filter Bar -->
+                <div class="advanced-filter-bar panel-card">
+                    <div class="filter-segments">
+                        <button class="pill active" data-filter="all">All</button>
+                        <button class="pill" data-filter="pending">Pending</button>
+                        <button class="pill" data-filter="waiting">Waiting</button>
+                        <button class="pill" data-filter="confirmed">Confirmed</button>
+                        <button class="pill" data-filter="rejected">Rejected</button>
+                        <button class="pill" data-filter="closed">Closed</button>
+                    </div>
+                    <div class="search-toolbar">
+                        <div class="input-with-icon" style="flex:1;min-width:160px">
+                            <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                            <input type="search" id="searchInput" class="form-input" placeholder="Search name, phone, service...">
+                        </div>
+                        <div class="dual-inputs">
+                            <select id="tenantFilter" class="form-input tenant-dropdown"></select>
+                            <input type="date" id="dateFilter" class="form-input date-picker">
+                            <button id="clearButton" class="icon-button" title="Clear Filters">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                             </button>
                         </div>
                     </div>
                 </div>
 
-                <nav class="nav-tabs">
-                    <button class="nav-tab active" data-screen-target="overviewScreen">Overview</button>
-                    <button class="nav-tab" data-screen-target="analyticsScreen">Analytics</button>
-                    <button class="nav-tab" data-screen-target="bookingsScreen">Bookings</button>
-                    <button class="nav-tab" data-screen-target="communicationsScreen">Communications</button>
-                    <button class="nav-tab" data-screen-target="workflowScreen">Workflow</button>
-                    <button class="nav-tab" data-screen-target="settingsScreen">Settings</button>
-                </nav>
-            </header>
-
-            <main class="workspace">
-                <section id="overviewScreen" class="workspace-screen">
-                    <header class="workspace-header">
-                        <div>
-                            <p class="section-label">Dashboard</p>
-                            <h2>Business Overview</h2>
-                            <p class="hero-copy">Monitor your business performance and tenant activity at a glance.</p>
-                        </div>
-                        <div class="header-actions">
-                            <button class="secondary" id="refreshOverviewButton" type="button">Refresh</button>
-                        </div>
-                    </header>
-
-                    <div class="overview-stats-container">
-                        <div class="stats-grid interactive-stats">
-                            <article class="stat-card enhanced" data-range="today">
-                                <div class="stat-icon">
-                                    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <circle cx="12" cy="12" r="10"></circle>
-                                        <polyline points="12,6 12,12 16,14"></polyline>
-                                    </svg>
-                                </div>
-                                <div class="stat-content">
-                                    <span id="statToday" class="stat-value">0</span>
-                                    <label class="stat-label">Today</label>
-                                    <span class="stat-change positive">+12%</span>
-                                </div>
-                            </article>
-                            <article class="stat-card enhanced" data-range="this_week">
-                                <div class="stat-icon">
-                                    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                                        <line x1="16" y1="2" x2="16" y2="6"></line>
-                                        <line x1="8" y1="2" x2="8" y2="6"></line>
-                                        <line x1="3" y1="10" x2="21" y2="10"></line>
-                                    </svg>
-                                </div>
-                                <div class="stat-content">
-                                    <span id="statThisWeek" class="stat-value">0</span>
-                                    <label class="stat-label">This Week</label>
-                                    <span class="stat-change positive">+8%</span>
-                                </div>
-                            </article>
-                            <article class="stat-card enhanced" data-range="this_month">
-                                <div class="stat-icon">
-                                    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                                        <line x1="16" y1="2" x2="16" y2="6"></line>
-                                        <line x1="8" y1="2" x2="8" y2="6"></line>
-                                        <line x1="3" y1="10" x2="21" y2="10"></line>
-                                        <line x1="3" y1="14" x2="21" y2="14"></line>
-                                    </svg>
-                                </div>
-                                <div class="stat-content">
-                                    <span id="statThisMonth" class="stat-value">0</span>
-                                    <label class="stat-label">This Month</label>
-                                    <span class="stat-change positive">+15%</span>
-                                </div>
-                            </article>
-                            <article class="stat-card enhanced" data-range="all">
-                                <div class="stat-icon">
-                                    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
-                                    </svg>
-                                </div>
-                                <div class="stat-content">
-                                    <span id="statTotal" class="stat-value">0</span>
-                                    <label class="stat-label">Total</label>
-                                    <span class="stat-change neutral">--</span>
-                                </div>
-                            </article>
+                <!-- Table -->
+                <div class="table-card">
+                    <div class="table-header-meta">
+                        <p id="bookingsStatus" class="status-msg">Ready to load...</p>
+                        <nav class="pagination-stack">
+                            <button id="prevPageButton" class="secondary nav-btn" disabled>
+                                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+                            </button>
+                            <span id="pageLabel" class="page-indicator">Page 1</span>
+                            <button id="nextPageButton" class="secondary nav-btn" disabled>
+                                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                            </button>
+                        </nav>
+                    </div>
+                    <div class="viewport-shell">
+                        <table class="premium-table">
+                            <thead>
+                                <tr>
+                                    <th class="col-tenant">Business</th>
+                                    <th class="col-service">Service</th>
+                                    <th class="col-contact">Customer</th>
+                                    <th class="col-name">Name</th>
+                                    <th class="col-schedule">Schedule</th>
+                                    <th class="col-status">Status</th>
+                                    <th class="col-actions">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bookingsTableBody"></tbody>
+                        </table>
+                        <div id="dashboardEmpty" class="empty-state-visual hidden">
+                            <div class="empty-icon">📋</div>
+                            <h4>No Bookings Found</h4>
+                            <p>No records match your current filters. Try adjusting the search criteria.</p>
                         </div>
                     </div>
+                </div>
+            </section>
 
-                    <div class="overview-grid">
-                        <article class="panel-card enhanced">
-                            <div class="panel-header">
-                                <div class="panel-title">
-                                    <div class="panel-icon">
-                                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                                            <circle cx="9" cy="7" r="4"></circle>
-                                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                                        </svg>
-                                    </div>
-                                    <div>
-                                        <p class="section-label">Tenants</p>
-                                        <h3 id="overviewTenantCount">0 tenants</h3>
-                                    </div>
-                                </div>
-                                <div class="panel-actions">
-                                    <button class="icon-button small" title="View Details">
-                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                                            <path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"></path>
-                                            <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                                        </svg>
-                                    </button>
-                                </div>
-                            </div>
-                            <div id="tenantOverviewList" class="tenant-overview-list enhanced"></div>
-                        </article>
-
-                        <article class="panel-card enhanced">
-                            <div class="panel-header">
-                                <div class="panel-title">
-                                    <div class="panel-icon">
-                                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                                            <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
-                                        </svg>
-                                    </div>
-                                    <div>
-                                        <p class="section-label">Live Activity</p>
-                                        <h3 id="homeConnectionLabel">Connected</h3>
-                                    </div>
-                                </div>
-                                <div class="panel-actions">
-                                    <span id="connectionStatusDot" class="status-dot"></span>
-                                </div>
-                            </div>
-                            <div class="activity-feed">
-                                <div class="activity-item">
-                                    <div class="activity-icon">
-                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                                        </svg>
-                                    </div>
-                                    <div class="activity-content">
-                                        <p class="activity-text">New conversation started</p>
-                                        <span class="activity-time">2 minutes ago</span>
-                                    </div>
-                                </div>
-                                <div class="activity-item">
-                                    <div class="activity-icon">
-                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                                            <line x1="16" y1="2" x2="16" y2="6"></line>
-                                            <line x1="8" y1="2" x2="8" y2="6"></line>
-                                            <line x1="3" y1="10" x2="21" y2="10"></line>
-                                        </svg>
-                                    </div>
-                                    <div class="activity-content">
-                                        <p class="activity-text">Booking confirmed</p>
-                                        <span class="activity-time">5 minutes ago</span>
-                                    </div>
-                                </div>
-                                <div class="activity-item">
-                                    <div class="activity-icon">
-                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                                            <circle cx="12" cy="12" r="10"></circle>
-                                            <polyline points="12,6 12,12 16,14"></polyline>
-                                        </svg>
-                                    </div>
-                                    <div class="activity-content">
-                                        <p class="activity-text">System health check passed</p>
-                                        <span class="activity-time">1 hour ago</span>
-                                    </div>
-                            </div>
-                            <p id="overviewStatus" class="status-note">Loading portal data.</p>
-                        </article>
+            <!-- ─── SCREEN: COMMUNICATIONS ─── -->
+            <section id="communicationsScreen" class="workspace-screen hidden">
+                <header class="section-title-bar">
+                    <div>
+                        <p class="breadcrumb">Engagement</p>
+                        <h2>Communications</h2>
+                        <p class="hero-copy">Send broadcasts and review message history.</p>
                     </div>
-                </section>
+                    <button id="refreshCommunicationsButton" class="secondary compact">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                        Refresh
+                    </button>
+                </header>
 
-                <section id="analyticsScreen" class="workspace-screen hidden">
-                    <header class="workspace-header">
-                        <div>
-                            <p class="section-label">Analytics</p>
-                            <h2>Business Insights</h2>
-                            <p class="hero-copy">Track performance metrics, user engagement, and booking trends.</p>
-                        </div>
-                        <div class="header-actions">
-                            <button class="secondary" id="refreshAnalyticsButton" type="button">Refresh</button>
-                        </div>
-                    </header>
-
-                    <div class="analytics-grid">
-                        <div class="analytics-cards">
-                            <article class="metric-card">
-                                <div class="metric-header">
-                                    <h3>Total Conversations</h3>
-                                    <span class="metric-trend positive">+12%</span>
-                                </div>
-                                <div class="metric-value" id="totalConversations">0</div>
-                                <p class="metric-description">Active user interactions this month</p>
-                            </article>
-
-                            <article class="metric-card">
-                                <div class="metric-header">
-                                    <h3>Booking Conversion</h3>
-                                    <span class="metric-trend positive">+8%</span>
-                                </div>
-                                <div class="metric-value" id="conversionRate">0%</div>
-                                <p class="metric-description">Conversations that result in bookings</p>
-                            </article>
-
-                            <article class="metric-card">
-                                <div class="metric-header">
-                                    <h3>Average Response Time</h3>
-                                    <span class="metric-trend negative">-5%</span>
-                                </div>
-                                <div class="metric-value" id="avgResponseTime">0s</div>
-                                <p class="metric-description">Time to first bot response</p>
-                            </article>
-
-                            <article class="metric-card">
-                                <div class="metric-header">
-                                    <h3>Popular Services</h3>
-                                    <span class="metric-trend neutral">--</span>
-                                </div>
-                                <div class="metric-value" id="popularService">N/A</div>
-                                <p class="metric-description">Most requested service this month</p>
-                            </article>
-                        </div>
-
-                        <div class="analytics-charts">
-                            <article class="chart-card">
-                                <div class="chart-header">
-                                    <h3>Bookings Over Time</h3>
-                                    <select id="timeRangeSelect" class="chart-filter">
-                                        <option value="7d">Last 7 days</option>
-                                        <option value="30d" selected>Last 30 days</option>
-                                        <option value="90d">Last 90 days</option>
-                                    </select>
-                                </div>
-                                <div class="chart-container">
-                                    <canvas id="bookingsChart"></canvas>
-                                </div>
-                            </article>
-
-                            <article class="chart-card">
-                                <div class="chart-header">
-                                    <h3>Service Popularity</h3>
-                                </div>
-                                <div class="chart-container">
-                                    <canvas id="servicesChart"></canvas>
-                                </div>
-                            </article>
-                        </div>
-
-                        <div class="analytics-tables">
-                            <article class="table-card">
-                                <div class="table-header">
-                                    <h3>Top Performing Providers</h3>
-                                </div>
-                                <div class="table-shell">
-                                    <table class="analytics-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Provider</th>
-                                                <th>Bookings</th>
-                                                <th>Revenue</th>
-                                                <th>Rating</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="providersAnalyticsTable"></tbody>
-                                    </table>
-                                </div>
-                            </article>
-
-                            <article class="table-card">
-                                <div class="table-header">
-                                    <h3>User Engagement</h3>
-                                </div>
-                                <div class="table-shell">
-                                    <table class="analytics-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Metric</th>
-                                                <th>Value</th>
-                                                <th>Change</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="engagementTable">
-                                            <tr>
-                                                <td>Messages Sent</td>
-                                                <td id="messagesSent">0</td>
-                                                <td><span class="trend positive">+15%</span></td>
-                                            </tr>
-                                            <tr>
-                                                <td>Messages Received</td>
-                                                <td id="messagesReceived">0</td>
-                                                <td><span class="trend positive">+12%</span></td>
-                                            </tr>
-                                            <tr>
-                                                <td>Active Users</td>
-                                                <td id="activeUsers">0</td>
-                                                <td><span class="trend neutral">--</span></td>
-                                            </tr>
-                                            <tr>
-                                                <td>Session Duration</td>
-                                                <td id="avgSessionDuration">0m</td>
-                                                <td><span class="trend negative">-3%</span></td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </article>
-                        </div>
-                    </div>
-                </section>
-
-                <section id="communicationsScreen" class="workspace-screen hidden">
-                    <header class="workspace-header">
-                        <div>
-                            <p class="section-label">Communications</p>
-                            <h2>Bulk Messaging</h2>
-                            <p class="hero-copy">Send messages to all users or target specific groups.</p>
-                        </div>
-                        <div class="header-actions">
-                            <button class="primary" id="newMessageButton" type="button">New Message</button>
-                        </div>
-                    </header>
-
-                    <div class="communications-grid">
-                        <article class="panel-card message-composer">
-                            <div class="panel-header">
-                                <h3>Compose Message</h3>
+                <div class="comm-workspace">
+                    <aside class="panel-card sidebar-composer">
+                        <div class="panel-header"><h3>Broadcast Composer</h3></div>
+                        <form id="messageForm" class="message-form-compact">
+                            <div class="field-block">
+                                <label>Tenant / Business</label>
+                                <select id="commTenantSelect" class="form-input"></select>
                             </div>
-                            <form id="messageForm" class="message-form">
-                                <div class="form-group">
-                                    <label for="messageType">Message Type</label>
-                                    <select id="messageType" class="form-control">
-                                        <option value="broadcast">Broadcast to All</option>
-                                        <option value="segment">Target Segment</option>
-                                        <option value="individual">Individual Users</option>
-                                    </select>
-                                </div>
-
-                                <div class="form-group" id="segmentGroup" style="display: none;">
-                                    <label for="userSegment">Target Segment</label>
-                                    <select id="userSegment" class="form-control">
-                                        <option value="all">All Users</option>
-                                        <option value="active">Active Users (last 30 days)</option>
-                                        <option value="inactive">Inactive Users</option>
-                                        <option value="booked">Users with Bookings</option>
-                                    </select>
-                                </div>
-
-                                <div class="form-group" id="individualGroup" style="display: none;">
-                                    <label for="individualUsers">Select Users</label>
-                                    <select id="individualUsers" class="form-control" multiple size="5">
-                                        <!-- Users will be populated here -->
-                                    </select>
-                                </div>
-
-                                <div class="form-group">
-                                    <label for="messageContent">Message Content</label>
-                                    <textarea id="messageContent" class="form-control" rows="6" placeholder="Enter your message..."></textarea>
-                                </div>
-
-                                <div class="form-group">
-                                    <label for="scheduleTime">Schedule (Optional)</label>
-                                    <input type="datetime-local" id="scheduleTime" class="form-control">
-                                </div>
-
-                                <div class="form-actions">
-                                    <button type="button" class="secondary" id="previewButton">Preview</button>
-                                    <button type="submit" class="primary">Send Message</button>
-                                </div>
-                            </form>
-                        </article>
-
-                        <article class="panel-card message-history">
-                            <div class="panel-header">
-                                <h3>Message History</h3>
-                                <div class="header-actions">
-                                    <button class="secondary compact-btn" id="refreshMessagesButton">Refresh</button>
-                                </div>
+                            <div class="field-block">
+                                <label>Message Scope</label>
+                                <select id="messageType" class="form-input">
+                                    <option value="broadcast">Global Broadcast</option>
+                                    <option value="target">Targeted Customer</option>
+                                </select>
                             </div>
-                            <div class="table-shell">
-                                <table class="message-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Type</th>
-                                            <th>Content</th>
-                                            <th>Recipients</th>
-                                            <th>Sent</th>
-                                            <th>Status</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="messagesTableBody">
-                                        <tr>
-                                            <td colspan="6" class="empty-state">No messages sent yet.</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
+                            <div class="field-block" id="targetPhoneWrap" style="display:none">
+                                <label>Customer Phone</label>
+                                <input type="tel" id="targetPhone" class="form-input" placeholder="+91 98765 43210">
                             </div>
-                        </article>
-                    </div>
-                </section>
-
-                <section id="bookingsScreen" class="workspace-screen hidden">
-                    <header class="workspace-header">
-                        <div>
-                            <p class="section-label">Bookings</p>
-                            <h2>Booking operations</h2>
-                            <p class="hero-copy">Compact, paginated tables for high-volume booking operations across statuses and tenants.</p>
-                        </div>
-                        <div class="header-actions">
-                            <button class="secondary" id="refreshBookingsButton" type="button">Refresh</button>
-                        </div>
-                    </header>
-
-                    <div class="dashboard-controls-row" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 20px;">
-                        <div class="left-controls">
-                            <div class="status-tabs" style="margin-bottom: 0;">
-                                <button class="pill active" data-filter="all" type="button">All</button>
-                                <button class="pill" data-filter="pending" type="button">Pending</button>
-                                <button class="pill" data-filter="waiting" type="button">Waiting</button>
-                                <button class="pill" data-filter="confirmed" type="button">Confirmed</button>
-                                <button class="pill" data-filter="rejected" type="button">Rejected</button>
-                                <button class="pill" data-filter="closed" type="button">Closed</button>
+                            <div class="field-block">
+                                <label>Message</label>
+                                <textarea id="messageContent" rows="6" class="form-input" placeholder="Type your WhatsApp message here...&#10;&#10;Use {{name}} for customer name."></textarea>
                             </div>
-                        </div>
+                            <button type="submit" class="primary full-width">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                                Send Message
+                            </button>
+                        </form>
+                    </aside>
 
-                        <div class="right-controls toolbar compact-toolbar controls-bar" style="margin-bottom: 0; width: auto; display: flex; align-items: center; justify-content: flex-end; border: none; padding: 0; background: transparent; box-shadow: none;">
-                            <div class="search-wrap compact-search" style="margin-right: 15px;">
-                                <input type="search" id="searchInput" placeholder="Search bookings...">
-                            </div>
-                            <div class="toolbar-actions compact-actions">
-                                <select id="tenantFilter"></select>
-                                <input type="text" id="dateFilter" placeholder="Select date..." onfocus="(this.type='date')" onblur="(this.type=this.value?'date':'text')">
-                                <button id="clearButton" class="secondary compact-btn" type="button">Clear</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="table-card">
-                        <div class="table-header">
-                            <p id="bookingsStatus" class="status-note">Loading bookings.</p>
-                            <div class="pagination-controls">
-                                <button id="prevPageButton" class="secondary" type="button">Previous</button>
-                                <span id="pageLabel" class="page-label">Page 1</span>
-                                <button id="nextPageButton" class="secondary" type="button">Next</button>
-                            </div>
-                        </div>
-
-                        <div class="table-shell">
-                            <table class="booking-table dense">
-                                <thead>
-                                    <tr>
-                                        <th>Tenant</th>
-                                        <th>Service</th>
-                                        <th>Provider</th>
-                                        <th>Phone</th>
-                                        <th>Date</th>
-                                        <th>Time</th>
-                                        <th>Status</th>
-                                        <th>Workflow Answers</th>
-                                        <th>Remarks</th>
-                                        <th>Created</th>
-                                        <th>Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="bookingsTableBody"></tbody>
+                    <div class="panel-card history-viewer">
+                        <div class="panel-header"><h3>Transmission History</h3></div>
+                        <div class="viewport-shell">
+                            <table class="history-table">
+                                <thead><tr><th>Type</th><th>Preview</th><th>Sent</th><th>Status</th></tr></thead>
+                                <tbody id="messagesTableBody">
+                                    <tr><td colspan="4" style="text-align:center;padding:32px;color:var(--text-muted);font-size:0.8rem">No messages on record yet.</td></tr>
+                                </tbody>
                             </table>
                         </div>
-
-                        <div id="dashboardEmpty" class="empty-state hidden">No bookings found for the current status and filters.</div>
                     </div>
-                </section>
-
-                <section id="workflowScreen" class="workspace-screen hidden">
-                    <header class="workspace-header">
-                        <div>
-                            <p class="section-label">Workflow</p>
-                            <h2>Chatbot Logic Management</h2>
-                            <p class="hero-copy">Manage conversation flows, questions, and responses in a structured table format.</p>
-                        </div>
-                        <div class="header-actions">
-                            <button class="primary" id="addWorkflowStepButton" type="button">+ Add Step</button>
-                            <button class="secondary" id="refreshWorkflowButton" type="button">Refresh</button>
-                        </div>
-                    </header>
-
-                    <div class="workflow-controls">
-                        <div class="tenant-selector">
-                            <label for="workflowTenantSelect">Select Tenant:</label>
-                            <select id="workflowTenantSelect" class="form-control">
-                                <option value="">Choose a tenant...</option>
-                            </select>
-                        </div>
-                        <div class="workflow-filters">
-                            <div class="search-box">
-                                <input type="text" id="workflowSearch" placeholder="Search steps..." class="form-control">
-                            </div>
-                            <select id="stepTypeFilter" class="form-control">
-                                <option value="all">All Types</option>
-                                <option value="question">Questions</option>
-                                <option value="response">Responses</option>
-                                <option value="action">Actions</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="workflow-table-container">
-                        <div class="table-card enhanced">
-                            <div class="table-header">
-                                <h3 id="workflowTableTitle">Workflow Steps</h3>
-                                <div class="table-actions">
-                                    <button class="secondary compact-btn" id="exportWorkflowButton">Export</button>
-                                    <button class="secondary compact-btn" id="importWorkflowButton">Import</button>
-                                </div>
-                            </div>
-                            <div class="table-shell">
-                                <table class="workflow-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Order</th>
-                                            <th>Type</th>
-                                            <th>Question/Message</th>
-                                            <th>Options/Response</th>
-                                            <th>Next Step</th>
-                                            <th>Status</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="workflowTableBody">
-                                        <tr>
-                                            <td colspan="7" class="empty-state">
-                                                <div class="empty-state-content">
-                                                    <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1">
-                                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                                                        <polyline points="14,2 14,8 20,8"></polyline>
-                                                        <line x1="16" y1="13" x2="8" y2="13"></line>
-                                                        <line x1="16" y1="17" x2="8" y2="17"></line>
-                                                        <polyline points="10,9 9,9 8,9"></polyline>
-                                                    </svg>
-                                                    <p>Select a tenant to view workflow steps</p>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div class="table-footer">
-                                <div class="pagination-info">
-                                    <span id="workflowPaginationInfo">Showing 0 of 0 steps</span>
-                                </div>
-                                <div class="pagination-controls">
-                                    <button id="workflowPrevPage" class="secondary compact-btn" disabled>Previous</button>
-                                    <span id="workflowPageInfo">Page 1</span>
-                                    <button id="workflowNextPage" class="secondary compact-btn" disabled>Next</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Workflow Step Modal -->
-                    <div id="workflowModal" class="modal hidden">
-                        <div class="modal-card large">
-                            <div class="modal-header">
-                                <div>
-                                    <p class="section-label">Workflow Step</p>
-                                    <h2 id="workflowModalTitle">Add/Edit Step</h2>
-                                </div>
-                                <button id="workflowModalClose" class="secondary" type="button">×</button>
-                            </div>
-
-                            <form id="workflowStepForm" class="workflow-form">
-                                <div class="form-grid">
-                                    <div class="form-group">
-                                        <label for="stepOrder">Step Order</label>
-                                        <input type="number" id="stepOrder" class="form-control" min="1" required>
-                                    </div>
-
-                                    <div class="form-group">
-                                        <label for="stepType">Step Type</label>
-                                        <select id="stepType" class="form-control" required>
-                                            <option value="question">Question</option>
-                                            <option value="response">Response</option>
-                                            <option value="action">Action</option>
-                                        </select>
-                                    </div>
-
-                                    <div class="form-group full-width">
-                                        <label for="stepMessage">Message/Question</label>
-                                        <textarea id="stepMessage" class="form-control" rows="3" placeholder="Enter the message or question..." required></textarea>
-                                    </div>
-
-                                    <div class="form-group" id="optionsGroup">
-                                        <label for="stepOptions">Options (one per line)</label>
-                                        <textarea id="stepOptions" class="form-control" rows="4" placeholder="Option 1&#10;Option 2&#10;Option 3"></textarea>
-                                    </div>
-
-                                    <div class="form-group">
-                                        <label for="nextStep">Next Step</label>
-                                        <select id="nextStep" class="form-control">
-                                            <option value="">End Conversation</option>
-                                            <!-- Dynamic options will be populated -->
-                                        </select>
-                                    </div>
-
-                                    <div class="form-group">
-                                        <label for="stepStatus">Status</label>
-                                        <select id="stepStatus" class="form-control">
-                                            <option value="active">Active</option>
-                                            <option value="inactive">Inactive</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div class="form-actions">
-                                    <button type="button" class="secondary" id="workflowCancelButton">Cancel</button>
-                                    <button type="submit" class="primary" id="workflowSaveButton">Save Step</button>
-                                </div>
-                            </form>
-                        </div>
-                    <header class="workspace-header">
-                        <div>
-                            <p class="section-label">Settings</p>
-                            <h2>Business Configuration</h2>
-                            <p class="hero-copy">Configure business settings, services, providers, and operational parameters.</p>
-                        </div>
-                        <div class="header-actions">
-                            <button class="primary" id="saveAllSettingsButton" type="button">Save All Changes</button>
-                            <button class="secondary" id="refreshSettingsButton" type="button">Refresh</button>
-                        </div>
-                    </header>
-
-                    <div class="tenant-controls-layout">
-                        <aside class="tenant-directory panel-card">
-                            <div class="panel-header">
-                                <div>
-                                    <p class="section-label">Tenants</p>
-                                    <h3>Directory</h3>
-                                </div>
-                            </div>
-                            <div id="tenantListSettings" class="tenant-list"></div>
-                        </aside>
-
-                        <section class="tenant-editor panel-card">
-                            <div class="panel-header">
-                                <div class="settings-tabs">
-                                    <button class="pill active" data-tab="general">General</button>
-                                    <button class="pill" data-tab="schedule">Schedule & Holidays</button>
-                                    <button class="pill" data-tab="services">Services & Providers</button>
-                                </div>
-                            </div>
-
-                            <div id="settingsContainer" class="settings-content">
-                                <!-- TAB: GENERAL -->
-                                <div id="tab-general" class="settings-tab-pane">
-                                    <form id="generalSettingsForm" class="settings-form">
-                                        <div class="form-grid">
-                                            <label>
-                                                <span>Business Name (Read Only)</span>
-                                                <input type="text" id="businessNameInput" readonly class="readonly-input">
-                                            </label>
-                                            <label>
-                                                <span>Timezone</span>
-                                                <input type="text" id="timezoneInput" placeholder="Asia/Kolkata">
-                                            </label>
-                                                                                        <label>
-                                                <span>Max Parallel Appointments</span>
-                                                <input type="number" id="parallelInput" min="1" step="1">
-                                            </label>
-                                        </div>
-
-                                        <div class="settings-section mt-24">
-                                            <h4 style="margin-bottom: 12px; font-weight: 600;">WhatsApp Integration</h4>
-                                            <div class="form-grid">
-                                                <label>
-                                                    <span>Phone Number ID</span>
-                                                    <input type="text" id="phoneNumberIdInput" placeholder="Enter ID from Meta Portal">
-                                                </label>
-                                                <label>
-                                                    <span>Access Token</span>
-                                                    <input type="password" id="whatsappTokenInput" placeholder="EAANZ...">
-                                                </label>
-                                                <label>
-                                                    <span>App Secret</span>
-                                                    <input type="password" id="appSecretInput" placeholder="Enter App Secret">
-                                                </label>
-                                                <label>
-                                                    <span>Webhook Verify Token</span>
-                                                    <input type="text" id="verifyTokenInput" placeholder="Enter Verify Token">
-                                                </label>
-                                            </div>
-                                        </div>
-                                        <div class="form-actions">
-                                            <button type="submit" class="primary">Save General Settings</button>
-                                        </div>
-                                    </form>
-                                </div>
-
-                                <!-- TAB: SCHEDULE -->
-                                <div id="tab-schedule" class="settings-tab-pane hidden">
-                                    <form id="scheduleSettingsForm" class="settings-form">
-                                        <div class="form-grid">
-                                            <label>
-                                                <span>Opening Hour (0-23)</span>
-                                                <input type="number" id="openingHourInput" min="0" max="23">
-                                            </label>
-                                            <label>
-                                                <span>Closing Hour (0-23)</span>
-                                                <input type="number" id="closingHourInput" min="0" max="23">
-                                            </label>
-                                            <label>
-                                                <span>Slot Duration (minutes)</span>
-                                                <input type="number" id="slotDurationInput" min="5" step="5">
-                                            </label>
-                                        </div>
-
-                                        <div class="settings-section">
-                                            <h4>Week Offs</h4>
-                                            <div class="week-offs-grid" id="weekOffsContainer">
-                                                <label><input type="checkbox" value="0"> Sunday</label>
-                                                <label><input type="checkbox" value="1"> Monday</label>
-                                                <label><input type="checkbox" value="2"> Tuesday</label>
-                                                <label><input type="checkbox" value="3"> Wednesday</label>
-                                                <label><input type="checkbox" value="4"> Thursday</label>
-                                                <label><input type="checkbox" value="5"> Friday</label>
-                                                <label><input type="checkbox" value="6"> Saturday</label>
-                                            </div>
-                                        </div>
-
-                                        <div class="settings-section">
-                                            <h4>Business Holidays</h4>
-                                            <div class="holiday-manager">
-                                                <div class="add-row">
-                                                    <input type="date" id="newHolidayInput">
-                                                    <button type="button" id="addHolidayBtn" class="secondary">Add Holiday</button>
-                                                </div>
-                                                <ul id="holidayList" class="tag-list"></ul>
-                                            </div>
-                                        </div>
-
-                                        <div class="form-actions">
-                                            <button type="submit" class="primary">Save Schedule Settings</button>
-                                        </div>
-                                    </form>
-                                </div>
-
-                                <!-- TAB: SERVICES -->
-                                <div id="tab-services" class="settings-tab-pane hidden">
-                                    <div class="mini-panel">
-                                        <div class="mini-panel-header">
-                                            <h4>Services</h4>
-                                            <button type="button" id="addNewServiceBtn" class="primary compact-btn">+ Add Service</button>
-                                        </div>
-                                        <div class="table-shell">
-                                            <table class="booking-table dense">
-                                                <thead>
-                                                    <tr>
-                                                        <th>ID</th>
-                                                        <th>Name</th>
-                                                        <th>Status</th>
-                                                        <th>Action</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody id="servicesSettingsTableBody"></tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-
-                                    <div class="mini-panel" style="margin-top: 24px;">
-                                        <div class="mini-panel-header">
-                                            <h4>Service Providers</h4>
-                                            <button type="button" id="addNewProviderBtn" class="primary compact-btn">+ Add Provider</button>
-                                        </div>
-                                        <div class="table-shell">
-                                            <table class="booking-table dense">
-                                                <thead>
-                                                    <tr>
-                                                        <th>ID</th>
-                                                        <th>Name</th>
-                                                        <th>Assigned Service</th>
-                                                        <th>Status</th>
-                                                        <th>Action</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody id="providersSettingsTableBody"></tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div id="workflowStepsList" class="workflow-steps-list">
-                                    <!-- Dynamic step cards will be injected here -->
-                                    <div class="empty-state">
-                                        <p>No steps configured. Click "Add New Step" to begin.</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="form-actions mt-32">
-                                <p class="status-note">Note: Changes to steps are saved individually per card.</p>
-                            </div>
-                                </div>
-                            </form>
-
-                            <p id="settingsStatus" class="status-note">Select a tenant to manage workflow questions and answers.</p>
-                        </section>
-                    </div>
-                </section>
-            </main>
-        </div>
-    </div>
-
-    <div id="closeModal" class="modal hidden">
-        <div class="modal-card">
-            <div class="modal-header">
-                <div>
-                    <p class="section-label">Close booking</p>
-                    <h2>Archive booking</h2>
                 </div>
-                <button id="closeModalDismiss" class="secondary" type="button">Cancel</button>
+            </section>
+
+            <!-- ─── SCREEN: WORKFLOW ─── -->
+            <section id="workflowScreen" class="workspace-screen hidden">
+                <header class="section-title-bar">
+                    <div>
+                        <p class="breadcrumb">Automation</p>
+                        <h2>Workflow Designer</h2>
+                        <p class="hero-copy">Configure your chatbot conversation flow and logic nodes.</p>
+                    </div>
+                    <div class="header-actions">
+                        <button id="addNewStepButton" class="primary compact">
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Add Node
+                        </button>
+                        <button id="refreshWorkflowButton" class="secondary compact">
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                            Refresh
+                        </button>
+                    </div>
+                </header>
+
+                <div class="workflow-grid-layout">
+                    <aside class="tenant-sidebar panel-card">
+                        <div class="panel-header"><h3>Businesses</h3></div>
+                        <nav id="tenantListWorkflow" class="v-list"></nav>
+                    </aside>
+                    <main class="editor-workspace panel-card">
+                        <div class="editor-header">
+                            <h2 id="workflowEditorTitle">Select a business from the left to edit its workflow</h2>
+                        </div>
+                        <div id="workflowStepsList" class="workflow-cards-flow">
+                            <div class="editor-empty">
+                                <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 12px;color:var(--text-faint)"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                                <p>Select a business tenant to load its conversation workflow.</p>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            </section>
+
+            <!-- ─── SCREEN: SETTINGS ─── -->
+            <section id="settingsScreen" class="workspace-screen hidden">
+                <header class="section-title-bar">
+                    <div>
+                        <p class="breadcrumb">Configuration</p>
+                        <h2>Business Settings</h2>
+                        <p class="hero-copy">Manage timezone, hours, services and providers for each account.</p>
+                    </div>
+                    <button id="refreshSettingsButton" class="secondary compact">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                        Sync
+                    </button>
+                </header>
+
+                <div class="settings-engine-layout">
+                    <aside class="tenant-sidebar panel-card" style="max-height:calc(100vh - 220px);overflow-y:auto">
+                        <div class="panel-header"><h3>Businesses</h3></div>
+                        <nav id="tenantListSettings" class="v-list"></nav>
+                    </aside>
+
+                    <div class="settings-main panel-card">
+                        <nav class="settings-nav-pills">
+                            <button class="pill active" data-tab="general">General</button>
+                            <button class="pill" data-tab="schedule">Schedule</button>
+                            <button class="pill" data-tab="services">Services</button>
+                            <button class="pill" data-tab="providers">Providers</button>
+                        </nav>
+
+                        <div class="settings-content-viewport">
+
+                            <!-- GENERAL PANE -->
+                            <div id="generalSettingsPane" class="settings-pane">
+                                <div class="form-section">
+                                    <h4>
+                                        <span class="section-icon">
+                                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                        </span>
+                                        Regional Configuration
+                                    </h4>
+                                    <div class="form-grid-dual">
+                                        <div class="field-wrap">
+                                            <label>Timezone</label>
+                                            <input type="text" id="timezoneInput" class="form-input" placeholder="e.g. Asia/Kolkata">
+                                        </div>
+                                        <div class="field-wrap">
+                                            <label>Slot Duration (minutes)</label>
+                                            <input type="number" id="slotDurationInput" class="form-input" min="5" max="240" placeholder="30">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="form-section mt-24">
+                                    <h4>
+                                        <span class="section-icon">
+                                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                                        </span>
+                                        WhatsApp Integration
+                                    </h4>
+                                    <div class="form-grid-dual">
+                                        <div class="field-wrap">
+                                            <label>Phone Number ID</label>
+                                            <input type="text" id="phoneNumberIdInput" class="form-input font-mono" placeholder="Meta Phone Number ID">
+                                        </div>
+                                        <div class="field-wrap">
+                                            <label>App Secret</label>
+                                            <div class="password-field-wrap">
+                                                <input type="password" id="appSecretInput" class="form-input font-mono" placeholder="WhatsApp App Secret">
+                                                <button type="button" class="password-reveal-btn" id="toggleAppSecret" title="Show/hide">
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button class="primary save-btn" id="saveGeneralSettings">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                                    Save General Settings
+                                </button>
+                            </div>
+
+                            <!-- SCHEDULE PANE -->
+                            <div id="scheduleSettingsPane" class="settings-pane hidden">
+                                <div class="form-section">
+                                    <h4>
+                                        <span class="section-icon">
+                                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                        </span>
+                                        Business Hours
+                                    </h4>
+                                    <div class="form-grid-dual">
+                                        <div class="field-wrap">
+                                            <label>Opening Hour (0–23)</label>
+                                            <input type="number" id="openingHourInput" min="0" max="23" class="form-input" placeholder="9">
+                                        </div>
+                                        <div class="field-wrap">
+                                            <label>Closing Hour (0–23)</label>
+                                            <input type="number" id="closingHourInput" min="0" max="23" class="form-input" placeholder="21">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="form-section mt-24">
+                                    <h4>
+                                        <span class="section-icon">
+                                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                                        </span>
+                                        Weekly Days Off
+                                    </h4>
+                                    <div id="weekOffsContainer" class="day-pills-row"></div>
+                                </div>
+                                <div class="form-section mt-24">
+                                    <h4>
+                                        <span class="section-icon">
+                                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                                        </span>
+                                        Holiday Exclusions
+                                    </h4>
+                                    <p class="status-note mb-12">Dates when the bot will be unavailable.</p>
+                                    <div class="inline-add-row">
+                                        <input type="date" id="holidayInput" class="form-input">
+                                        <button id="addHolidayBtn" class="secondary compact">+ Add Date</button>
+                                    </div>
+                                    <ul id="holidayList" class="exclusion-tags mt-16"></ul>
+                                </div>
+                                <button class="primary save-btn" id="saveScheduleSettings">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                                    Save Schedule Settings
+                                </button>
+                            </div>
+
+                            <!-- SERVICES PANE -->
+                            <div id="servicesSettingsPane" class="settings-pane hidden">
+                                <div class="pane-header">
+                                    <h4>Active Services</h4>
+                                    <button class="secondary compact" id="addNewServiceBtn">
+                                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                        Add Service
+                                    </button>
+                                </div>
+                                <div class="table-viewport">
+                                    <table class="data-table-compact">
+                                        <thead><tr><th>ID</th><th>Service Name</th><th>Status</th><th>Action</th></tr></thead>
+                                        <tbody id="servicesSettingsTableBody"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- PROVIDERS PANE -->
+                            <div id="providersSettingsPane" class="settings-pane hidden">
+                                <div class="pane-header">
+                                    <h4>Service Providers</h4>
+                                    <button class="secondary compact" id="addNewProviderBtn">
+                                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                        Add Provider
+                                    </button>
+                                </div>
+                                <div class="table-viewport">
+                                    <table class="data-table-compact">
+                                        <thead><tr><th>ID</th><th>Name</th><th>Service</th><th>Status</th><th>Action</th></tr></thead>
+                                        <tbody id="providersSettingsTableBody"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                        </div><!-- /.settings-content-viewport -->
+                    </div><!-- /.settings-main -->
+                </div><!-- /.settings-engine-layout -->
+            </section>
+
+        </main>
+    </div><!-- /#dashboardShell -->
+</div><!-- /#app -->
+
+<!-- ════════════════════════════════════════════════
+     3.  UNIVERSAL ACTION MODAL
+ ═══════════════════════════════════════════════════ -->
+<div id="actionModal" class="modal-overlay hidden">
+    <div class="modal-surface panel-card" id="actionModalSurface">
+        <div class="modal-header-premium">
+            <div class="header-content">
+                <p class="section-label" id="actionModalLabel">Action</p>
+                <h3 id="actionModalTitle">Confirm Action</h3>
             </div>
-
-            <p id="closeModalSummary" class="status-note">Add remarks before closing this booking.</p>
-
-            <form id="closeForm" class="settings-form">
-                <label>
-                    <span>Remarks</span>
-                    <textarea id="closeRemarks" rows="5" placeholder="Add the closure note"></textarea>
-                </label>
-                <button id="closeSubmitButton" class="primary" type="submit">Close booking</button>
+            <button id="actionModalDismiss" class="close-btn">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body-content">
+            <!-- WhatsApp notification badge -->
+            <div class="notify-badge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2.18L6.6 2a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.7 9.91a16 16 0 0 0 6.29 6.29l1.08-1.08a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                WhatsApp notification will be sent to customer
+            </div>
+            <!-- Booking Summary -->
+            <div class="booking-summary-card" id="actionModalSummary">
+                <div class="summary-row"><span class="summary-label">Customer:</span><span class="summary-value" id="summaryPhone">—</span></div>
+                <div class="summary-row"><span class="summary-label">Name:</span><span class="summary-value" id="summaryName">—</span></div>
+                <div class="summary-row"><span class="summary-label">Service:</span><span class="summary-value" id="summaryService">—</span></div>
+                <div class="summary-row"><span class="summary-label">Date:</span><span class="summary-value" id="summaryDate">—</span></div>
+                <div class="summary-row"><span class="summary-label">Time:</span><span class="summary-value" id="summaryTime">—</span></div>
+                <div class="summary-row"><span class="summary-label">Provider:</span><span class="summary-value" id="summaryProvider">—</span></div>
+            </div>
+            <!-- Remarks Form -->
+            <form id="actionForm">
+                <div id="remarksWrap">
+                    <label class="block mb-8 font-medium" style="font-size:0.76rem;color:var(--text-muted);font-family:var(--font-display);letter-spacing:0.04em;text-transform:uppercase" id="remarksLabel">Remarks / Notes</label>
+                    <textarea id="actionRemarks" class="form-input w-full" rows="3" placeholder="Add any notes for this action..."></textarea>
+                </div>
+                <div class="form-actions-row">
+                    <button type="button" class="secondary" id="actionModalCancel">Cancel</button>
+                    <button type="submit" class="primary" id="actionSubmitButton">Confirm</button>
+                </div>
             </form>
         </div>
     </div>
+</div>
 
-    <div id="toastContainer" class="toast-container"></div>
+<!-- ════════════════════════════════════════════════
+     4.  SETTINGS CONFIRMATION DIALOG
+ ═══════════════════════════════════════════════════ -->
+<div id="confirmDialog" class="confirm-dialog-overlay hidden">
+    <div class="confirm-dialog-surface">
+        <div class="confirm-dialog-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        </div>
+        <h3 id="confirmDialogTitle">Save Changes?</h3>
+        <p id="confirmDialogMsg">This will update the settings for the selected business. Are you sure?</p>
+        <div class="confirm-actions">
+            <button class="secondary" id="confirmDialogCancel">Cancel</button>
+            <button class="primary" id="confirmDialogOk">Yes, Save</button>
+        </div>
+    </div>
+</div>
 
-    <!-- Theme Toggle Button -->
-    <button id="themeToggle" class="theme-toggle" title="Toggle Dark Mode">
-        <span id="themeIcon">🌙</span>
-    </button>
+<!-- ════════════════════════════════════════════════
+     5.  TOAST CONTAINER
+ ═══════════════════════════════════════════════════ -->
+<div id="toastContainer" class="toast-stack"></div>
 
-    <script src="/app.js"></script>
-    <script>
-        // Inline Theme Handler
-        const themeToggle = document.getElementById("themeToggle");
-        const themeIcon = document.getElementById("themeIcon");
-        
-        function updateThemeIcon(theme) {
-            themeIcon.textContent = theme === "dark" ? "☀️" : "🌙";
-        }
-        
-        updateThemeIcon(document.documentElement.getAttribute("data-theme") || "light");
-        
-        themeToggle.addEventListener("click", () => {
-            const isDark = document.documentElement.getAttribute("data-theme") === "dark";
-            const newTheme = isDark ? "light" : "dark";
-            
-            if (newTheme === "dark") {
-                document.documentElement.setAttribute("data-theme", "dark");
-            } else {
-                document.documentElement.removeAttribute("data-theme");
-            }
-            
-            localStorage.setItem("workspaceTheme", newTheme);
-            updateThemeIcon(newTheme);
-        });
-    </script>
+<!-- ════════════════════════════════════════════════
+     6.  THEME TOGGLE
+ ═══════════════════════════════════════════════════ -->
+<!-- ════════════════════════════════════════════════
+     6.  THEME PICKER
+ ═══════════════════════════════════════════════════ -->
+<div class="theme-picker-wrap" id="themePickerWrap">
+    <div class="theme-palette hidden" id="themePalette">
+        <button class="theme-swatch active" data-theme="midnight-amber" id="swatchMidnight">
+            <span class="swatch-dot" style="background:linear-gradient(135deg,#1a1a1f,#d4a039)"></span>
+            <span>Midnight Amber</span>
+        </button>
+        <button class="theme-swatch" data-theme="daylight" id="swatchDaylight">
+            <span class="swatch-dot" style="background:linear-gradient(135deg,#f8f7f4,#c07920)"></span>
+            <span>Daylight</span>
+        </button>
+        <button class="theme-swatch" data-theme="aurora" id="swatchAurora">
+            <span class="swatch-dot" style="background:linear-gradient(135deg,#080b14,#34d399)"></span>
+            <span>Aurora</span>
+        </button>
+        <button class="theme-swatch" data-theme="sunset" id="swatchSunset">
+            <span class="swatch-dot" style="background:linear-gradient(135deg,#090c18,#fb923c)"></span>
+            <span>Sunset</span>
+        </button>
+    </div>
+    <button class="theme-toggle-btn" id="themeToggleBtn" title="Change theme">🎨</button>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     7.  APPLICATION SCRIPT
+ ═══════════════════════════════════════════════════ -->
+<script src="/app.js"></script>
 </body>
 </html>
-

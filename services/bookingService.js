@@ -39,7 +39,8 @@ async function createBooking({
     booking_time,
     workflow_answers = {},
     provider_id = null,
-    provider_name = null
+    provider_name = null,
+    customer_name = null
 }) {
     const client = await db.connect();
     const slotKey = `${tenant_id}:${booking_date}:${booking_time}`;
@@ -67,8 +68,8 @@ async function createBooking({
 
         const res = await client.query(
             `INSERT INTO bookings
-            (tenant_id, phone, service_name, booking_date, booking_time, status, workflow_answers, provider_id, provider_name)
-            VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7, $8)
+            (tenant_id, phone, service_name, booking_date, booking_time, status, workflow_answers, provider_id, provider_name, customer_name)
+            VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7, $8, $9)
             RETURNING *`,
             [
                 tenant_id,
@@ -78,7 +79,8 @@ async function createBooking({
                 booking_time,
                 JSON.stringify(workflow_answers || {}),
                 provider_id,
-                provider_name
+                provider_name,
+                customer_name || null
             ]
         );
 
@@ -160,6 +162,7 @@ async function getAllBookings(tenant_id, filters = {}) {
             OR LOWER(COALESCE(b.status, '')) LIKE $${values.length}
             OR LOWER(COALESCE(b.provider_name, '')) LIKE $${values.length}
             OR LOWER(COALESCE(b.close_remarks, '')) LIKE $${values.length}
+            OR LOWER(COALESCE(b.customer_name, '')) LIKE $${values.length}
         )`;
     }
 

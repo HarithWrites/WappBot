@@ -13,6 +13,7 @@ const {
 const { getServices } = require("./serviceService");
 const { getProvidersByTenantAndService } = require("./providerService");
 const { getWorkflowDefinition } = require("./workflowService");
+const { getWeekOffs, getHolidays } = require("./tenantService");
 const {
     addDays,
     formatDisplayDate,
@@ -34,8 +35,8 @@ async function setState(phone, tenantId, data = {}) {
 
     await db.query(
         `INSERT INTO conversation_state
-        (phone, tenant_id, state, workflow_step, workflow_context, service_name, date, time)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        (phone, tenant_id, state, workflow_step, workflow_context, service_name, date, time, customer_name)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
         ON CONFLICT (phone, tenant_id)
         DO UPDATE SET
             state = $3,
@@ -43,7 +44,8 @@ async function setState(phone, tenantId, data = {}) {
             workflow_context = $5,
             service_name = $6,
             date = $7,
-            time = $8
+            time = $8,
+            customer_name = COALESCE($9, conversation_state.customer_name)
         `,
         [
             phone,
@@ -53,7 +55,8 @@ async function setState(phone, tenantId, data = {}) {
             JSON.stringify(context),
             context.service_name || null,
             context.date || null,
-            context.time || null
+            context.time || null,
+            data.customerName || context.customer_name || null
         ]
     );
 }
@@ -114,10 +117,10 @@ async function getAvailableTimeSlots(tenant, bookingDate) {
     });
 }
 
-function getRelativeDateOptions(tenant, offsets = [1, 2, 3, 4, 5, 6, 7]) {
+function getRelativeDateOptions(tenant, offsets = [1, 2, 3, 4, 5, 6, 7], weekOffs = [], holidays = []) {
     const timeZone = tenant?.timezone;
-    const holidays = Array.isArray(tenant.business_holidays) ? tenant.business_holidays : [];
-    const weekOffs = Array.isArray(tenant.week_offs) ? tenant.week_offs : [];
+    const holidayList = holidays.length ? holidays : (Array.isArray(tenant.business_holidays) ? tenant.business_holidays : []);
+    const weekOffList = weekOffs.length ? weekOffs : (Array.isArray(tenant.week_offs) ? tenant.week_offs : []);
 
     const options = [];
     for (const offset of offsets) {
@@ -125,8 +128,8 @@ function getRelativeDateOptions(tenant, offsets = [1, 2, 3, 4, 5, 6, 7]) {
         const dateStr = toDateOnlyString(date);
         const dayOfWeek = date.getDay();
 
-        const isHoliday = holidays.includes(dateStr);
-        const isWeekOff = weekOffs.includes(dayOfWeek);
+        const isHoliday = holidayList.includes(dateStr);
+        const isWeekOff = weekOffList.includes(dayOfWeek);
 
         if (!isHoliday && !isWeekOff) {
             const display = toDisplayDate(date);
@@ -561,7 +564,8 @@ async function completeBooking({ tenant, phone, tenantId, workflow, context }) {
                 booking_time: context.time,
                 workflow_answers: context.custom_answers || {},
                 provider_id: context.provider_id || null,
-                provider_name: context.provider_name || null
+                provider_name: context.provider_name || null,
+                customer_name: context.customer_name || null
             });
     } catch (err) {
         if (err instanceof SlotAlreadyBookedError) {
@@ -607,13 +611,47 @@ async function processMessage({ tenant, phone, text, payload }) {
 
     console.log("INPUT:", { phone, text: normalizedText, payload: normalizedPayload, input });
 
+    // ── Auto name collection: if customer has no name on record, ask before anything else ──
+    const existingState = await getState(phone, tenantId);
+    if (!existingState?.customer_name) {
+        // Check if this message IS a name response (we're in pending_name state)
+        if (existingState?.workflow_step === "__collecting_name__") {
+            const rawText = (text || "").trim();
+            // Accept any non-trivial non-greeting text as a name
+            const greetingCheck = /^(hi|hello|hey|start|restart)$/i.test(rawText);
+            if (!greetingCheck && rawText.length >= 2) {
+                // Save the customer name
+                await db.query(
+                    `UPDATE conversation_state SET customer_name=$1, workflow_step=NULL, state=NULL WHERE phone=$2 AND tenant_id=$3`,
+                    [rawText, phone, tenantId]
+                );
+                // Now start the main workflow
+                return startWorkflow({ tenant, phone, tenantId, workflow });
+            }
+        } else {
+            // No name on record — prompt for name first
+            // If it was a greeting, we can be more polite
+            const isGreeting = greetingRegex.test(normalizedText); 
+            const welcomeMsg = isGreeting ? "Welcome! 👋 " : "";
+            
+            await db.query(
+                 `INSERT INTO conversation_state (phone, tenant_id, state, workflow_step)
+                  VALUES ($1,$2,'__collecting_name__','__collecting_name__')
+                  ON CONFLICT (phone, tenant_id) DO UPDATE SET state='__collecting_name__', workflow_step='__collecting_name__'`,
+                 [phone, tenantId]
+            );
+            await sendMessage({ tenant, to: phone, text: `${welcomeMsg}Before we begin, may I know your name?` });
+            return;
+        }
+    }
+
     const greetingRegex = /^(hi|hello|hey|start|restart)\b/;
     if (greetingRegex.test(normalizedText) || greetingRegex.test(normalizedPayload)) {
         return startWorkflow({ tenant, phone, tenantId, workflow });
     }
 
-    const stateData = await getState(phone, tenantId);
-    const currentStepId = stateData?.workflow_step || stateData?.state || workflow.start_step;
+    const stateData = existingState;
+    const currentStepId = (stateData?.workflow_step === "__collecting_name__" ? null : stateData?.workflow_step) || stateData?.state || workflow.start_step;
     const context = {
         service_name: stateData?.workflow_context?.service_name || stateData?.service_name || null,
         service_id: stateData?.workflow_context?.service_id || null,
@@ -623,7 +661,8 @@ async function processMessage({ tenant, phone, text, payload }) {
         provider_name: stateData?.workflow_context?.provider_name || null,
         custom_answers: stateData?.workflow_context?.custom_answers || {},
         period_id: stateData?.workflow_context?.period_id || null,
-        period_title: stateData?.workflow_context?.period_title || null
+        period_title: stateData?.workflow_context?.period_title || null,
+        customer_name: stateData?.customer_name || null
     };
     const step = getStepById(workflow, currentStepId);
 

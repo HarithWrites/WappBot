@@ -58,6 +58,20 @@ router.post("/waiting", controller.setWaitingBooking);
 router.post("/close", controller.closeBooking);
 router.post("/reject", controller.rejectBooking);
 
+// Analytics & Communications
+router.get("/analytics", controller.getAnalytics);
+router.get("/messages", controller.getMessages);
+router.get("/users", controller.getUsers);
+
+// Workflow Management
+router.get("/workflow", controller.getWorkflow);
+router.get("/workflow/:tenantId", controller.getWorkflow);
+router.post("/workflow/step", controller.upsertWorkflowStep);
+router.delete("/workflow/step", controller.deleteWorkflowStep);
+router.post("/workflow/reorder", controller.reorderWorkflowSteps);
+router.post("/workflow/option", controller.upsertWorkflowOption);
+router.delete("/workflow/option", controller.deleteWorkflowOption);
+
 router.get("/approve", (req, res) => res.status(405).send("Use POST method for approve"));
 router.get("/reject", (req, res) => res.status(405).send("Use POST method for reject"));
 
